@@ -184,6 +184,12 @@ ExprPtr parse_expr(value val) {
     Return(Range, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)));
   case 29:
     Return(KeywordStar, parse_expr(t));
+    case 30:
+      Return(ExSlice, parse_optional(Field(t, 0), parse_expr),
+             parse_optional(Field(t, 1), parse_expr),
+             parse_optional(Field(t, 2), parse_expr),
+             parse_optional(Field(t, 3), parse_expr));
+
   default:
     seq::compilationError("[internal] tag variant mismatch ...");
     return nullptr;
@@ -313,6 +319,10 @@ StmtPtr parse_stmt(value val) {
            parse_stmt_list(Field(t, 1)));
   case 22:
     Return(Custom, parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)));
+  case 23:
+    Return(Custom, std::make_unique<IdExpr>("pt_build"), parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)));
+  case 24:
+    Return(Leaf, parse_list(t, parse_expr));
   default:
     seq::compilationError("[internal] tag variant mismatch ...");
     return nullptr;

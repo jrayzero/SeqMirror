@@ -41,6 +41,7 @@ type texpr =
   | AssignExpr of (texpr ann * texpr ann)
   | Range of (texpr ann * texpr ann)
   | KwStar of texpr ann
+  | ExSlice of (texpr ann option * texpr ann option * texpr ann option * texpr ann option)
 
 and tcomprehension =
   { var : texpr ann
@@ -79,6 +80,9 @@ type tstmt =
   | YieldFrom of texpr ann
   | With of ((texpr ann * string option) list * tstmt ann list)
   | Custom of (texpr ann * tstmt ann list)
+  (*Cola*)
+  | PTreeBuild of (texpr ann * tstmt ann list)
+  | Leaf of texpr ann list
 
 and import =
   { imp_from: texpr ann

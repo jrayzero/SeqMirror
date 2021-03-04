@@ -39,6 +39,9 @@ protected:
   /// Stack of blocks and their corresponding identifiers. Top of the stack is the
   /// current block.
   std::deque<vector<string>> stack;
+  // COLA
+  /// stack of vars representing ptree creation blocks. Used for transforming pt calls
+  std::vector<std::string> pt_begin_vars;
 
 private:
   /// Set of current context flags.
@@ -131,6 +134,15 @@ public:
 
   /// Pretty-prints the current context state.
   virtual void dump() {}
+
+  // COLA
+  void pushPtb(std::string ptb) { pt_begin_vars.push_back(ptb); }
+
+  std::string ptbPop() { std::string ptb = pt_begin_vars.back(); pt_begin_vars.pop_back(); return ptb; }
+
+  std::string ptbPeekBack() { return !ptbEmpty() ? pt_begin_vars.back() : ""; }
+
+  bool ptbEmpty() const { return pt_begin_vars.empty(); }
 
 private:
   /// Removed an identifier from the map only.

@@ -109,6 +109,7 @@ void TypecheckVisitor::visit(IdExpr *expr) {
   else if (startswith(expr->value, TYPE_CALLABLE))
     generateCallableStub(std::stoi(expr->value.substr(10)));
   auto val = ctx->find(expr->value);
+
   seqassert(val, "cannot find IdExpr '{}'", expr->value);
   if (val->isStatic()) {
     // Evaluate the static expression.
@@ -519,6 +520,18 @@ void TypecheckVisitor::visit(StmtExpr *expr) {
   expr->expr = transform(expr->expr, false, allowVoidExpr);
   unify(expr->type, expr->expr->type);
   expr->done &= expr->expr->done;
+}
+
+void TypecheckVisitor::visit(ExSliceExpr *expr) {
+  expr->done = true;
+  expr->start = transform(expr->start);
+  expr->done &= expr->start->done;
+  expr->stop = transform(expr->stop);
+  expr->done &= expr->stop->done;
+  expr->take = transform(expr->take);
+  expr->done &= expr->take->done;
+  expr->skip = transform(expr->skip);
+  expr->done &= expr->skip->done;
 }
 
 /**************************************************************************************/

@@ -33,9 +33,9 @@ class TypecheckVisitor : public CallbackASTVisitor<ExprPtr, StmtPtr> {
   StmtPtr resultStmt;
 
 public:
-  static StmtPtr apply(shared_ptr<Cache> cache, StmtPtr stmts,
-                       const unordered_map<string, pair<string, seq_int_t>> &defines =
-                           unordered_map<string, pair<string, seq_int_t>>());
+  static StmtPtr
+  apply(shared_ptr<Cache> cache, StmtPtr stmts,
+        const unordered_map<string, pair<string, seq_int_t>> &defines = {});
 
 public:
   explicit TypecheckVisitor(shared_ptr<TypeContext> ctx,
@@ -120,6 +120,8 @@ public:
   void visit(YieldExpr *) override;
   /// Use type of an inner expression.
   void visit(StmtExpr *) override;
+  // COLA
+  void visit(ExSliceExpr *) override;
 
   void visit(SuiteStmt *) override;
   void visit(PassStmt *) override;

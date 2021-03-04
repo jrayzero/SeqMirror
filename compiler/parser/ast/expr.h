@@ -455,7 +455,7 @@ struct CallExpr : public Expr {
   CallExpr(ExprPtr expr, vector<Arg> &&a);
   /// One-argument unnamed call constructor (expr(arg1)).
   explicit CallExpr(ExprPtr expr, ExprPtr arg1 = nullptr, ExprPtr arg2 = nullptr,
-                    ExprPtr arg3 = nullptr);
+                    ExprPtr arg3 = nullptr, ExprPtr arg4 = nullptr);
   /// Multi-argument unnamed call constructor (expr(exprArgs...)).
   CallExpr(ExprPtr expr, vector<ExprPtr> &&exprArgs);
   CallExpr(const CallExpr &expr);
@@ -484,7 +484,6 @@ struct DotExpr : public Expr {
 /// Slice expression (st:stop:step).
 /// @example 1:10:3
 /// @example s::-1
-/// @example :::
 struct SliceExpr : public Expr {
   /// Any of these can be nullptr to account for partial slices.
   ExprPtr start, stop, step;
@@ -640,6 +639,21 @@ struct StackAllocExpr : Expr {
 
   StackAllocExpr(ExprPtr typeExpr, ExprPtr expr);
   StackAllocExpr(const StackAllocExpr &expr);
+
+  string toString() const override;
+  ACCEPT(ASTVisitor);
+};
+
+// COLA
+/// Extended slice expression (st:stop:step).
+/// @example :::
+/// @example 0::4:2
+struct ExSliceExpr : public Expr {
+  /// Any of these can be nullptr to account for partial slices.
+  ExprPtr start, stop, take, skip;
+
+  ExSliceExpr(ExprPtr start, ExprPtr stop, ExprPtr take, ExprPtr skip);
+  ExSliceExpr(const ExSliceExpr &expr);
 
   string toString() const override;
   ACCEPT(ASTVisitor);

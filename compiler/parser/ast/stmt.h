@@ -513,13 +513,29 @@ struct WithStmt : public Stmt {
 /// @example: pt_tree: pass
 struct CustomStmt : public Stmt {
   ExprPtr head;
+  // COLA
+  ExprPtr arg;
   StmtPtr suite;
 
   CustomStmt(ExprPtr head, StmtPtr suite);
+  // COLA
+  CustomStmt(ExprPtr head, ExprPtr arg, StmtPtr suite);
   CustomStmt(const CustomStmt &stmt);
 
   string toString() const override;
   ACCEPT(ASTVisitor);
+};
+
+// Cola
+struct LeafStmt : public Stmt {
+  vector<ExprPtr> leaves;
+
+  explicit LeafStmt(vector<ExprPtr> leaves);
+  LeafStmt(const LeafStmt &stmt);
+
+  string toString() const override;
+  ACCEPT(ASTVisitor);
+
 };
 
 /// The following nodes are created after the simplify stage.

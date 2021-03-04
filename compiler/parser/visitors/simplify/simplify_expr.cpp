@@ -462,6 +462,15 @@ void SimplifyVisitor::visit(CallExpr *expr) {
     resultExpr = N<CallExpr>(clone(expr->expr), move(s));
     return;
   }
+  // 7. COLA things
+//  if (expr->expr->isId("pt_leaf")) {
+//    // sanity check
+//    seqassert(!ctx->ptbEmpty(), "ptb context is empty");
+//    std::string ptb = ctx->ptbPeekBack();
+//    auto arg = transform(expr->args[0].value);
+//    resultExpr = N<CallExpr>(N<IdExpr>("internal_pt_leaf"), move(arg), N<IdExpr>(move(ptb)));
+//    return;
+//  }
   vector<CallExpr::Arg> args;
   bool namesStarted = false;
   for (auto &i : expr->args) {
@@ -542,6 +551,15 @@ void SimplifyVisitor::visit(DotExpr *expr) {
 void SimplifyVisitor::visit(SliceExpr *expr) {
   resultExpr = N<SliceExpr>(transform(expr->start), transform(expr->stop),
                             transform(expr->step));
+}
+
+void SimplifyVisitor::visit(ExSliceExpr *expr) {
+  ExprPtr none = N<CallExpr>(N<DotExpr>(N<IdExpr>("Optional"), "__new__"));
+  resultExpr = transform(N<CallExpr>(N<IdExpr>("ExSlice"),
+                                     expr->start ? move(expr->start) : clone(none),
+                                     expr->stop ? move(expr->stop) : clone(none),
+                                     expr->take ? move(expr->take) : clone(none),
+                                     expr->skip ? move(expr->skip) : clone(none)));
 }
 
 void SimplifyVisitor::visit(EllipsisExpr *expr) {

@@ -62,6 +62,8 @@ public:
   virtual void visit(StackAllocExpr *);
   virtual void visit(InstantiateExpr *);
   virtual void visit(StmtExpr *);
+  // COLA
+  virtual void visit(ExSliceExpr *);
 
   virtual void visit(AssignMemberStmt *);
   virtual void visit(UpdateStmt *);
@@ -89,6 +91,8 @@ public:
   virtual void visit(YieldFromStmt *);
   virtual void visit(WithStmt *);
   virtual void visit(CustomStmt *);
+  // COLA
+  virtual void visit(LeafStmt *);
 };
 
 template <typename TE, typename TS>

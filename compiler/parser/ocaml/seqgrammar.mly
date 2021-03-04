@@ -27,6 +27,8 @@
 %token<string> AND OR NOT IS ISNOT IN NOTIN EEQ NEQ LESS LEQ GREAT
 %token<string> PIPE PPIPE SPIPE B_AND B_OR B_XOR B_NOT B_LSH B_RSH
 %token<string> LSHEQ RSHEQ ANDEQ OREQ XOREQ
+/* COLA custom */
+%token PTREE_BUILD LEAF
 /* operator precedence */
 %left B_OR
 %left B_XOR
@@ -161,6 +163,7 @@ index_term:
   | expr { $1 }
   | expr? COLON expr? { $loc, Slice ($1, $3, None) }
   | expr? COLON expr? COLON expr? { $loc, Slice ($1, $3, $5) }
+  | expr? COLON expr? COLON expr? COLON expr? { $loc, ExSlice ($1, $3, $5, $7) }
 walrus:
   | ID WALRUS expr { $loc, AssignExpr (($loc($1), Id $1), $3) }
 
@@ -177,6 +180,7 @@ small_statement:
   | ASSERT expr COMMA STRING { [$loc, Assert ($2, Some ($loc($4), String $4))] }
   | GLOBAL FLNE(COMMA, ID) { List.map (fun e -> $loc, Global e) $2 }
   | PRINT FL_HAS(COMMA, expr) { [$loc, Print (fst $2, snd $2)] }
+  | LEAF FLNE(COMMA, expr) { [$loc, Leaf ($2)] }
   | import_statement { $1 }
   | assign_statement { $1 }
 small_single_statement:
@@ -203,6 +207,8 @@ single_statement:
   | MATCH expr COLON NL INDENT case+ DEDENT { $loc, Match ($2, $6) }
   | try_statement | with_statement | class_statement { $1 }
   | ID COLON NL INDENT statement+ DEDENT { $loc, Custom (($loc($1), Id $1), List.concat $5) }
+  | PTREE_BUILD expr COLON NL INDENT statement+ DEDENT { $loc, PTreeBuild ($2, List.concat $6) }
+
 suite:
   | FLNE(SEMICOLON, small_statement) NL { List.concat $1 }
   | NL INDENT statement+ DEDENT { List.concat $3 }

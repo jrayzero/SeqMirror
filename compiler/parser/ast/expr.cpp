@@ -252,7 +252,8 @@ CallExpr::CallExpr(ExprPtr expr, vector<ExprPtr> &&exprArgs)
     args.push_back(CallExpr::Arg{"", move(i)});
   }
 }
-CallExpr::CallExpr(ExprPtr expr, ExprPtr arg1, ExprPtr arg2, ExprPtr arg3)
+
+CallExpr::CallExpr(ExprPtr expr, ExprPtr arg1, ExprPtr arg2, ExprPtr arg3, ExprPtr arg4)
     : Expr(), expr(move(expr)), ordered(false) {
   if (arg1)
     args.push_back(CallExpr::Arg{"", move(arg1)});
@@ -260,6 +261,8 @@ CallExpr::CallExpr(ExprPtr expr, ExprPtr arg1, ExprPtr arg2, ExprPtr arg3)
     args.push_back(CallExpr::Arg{"", move(arg2)});
   if (arg3)
     args.push_back(CallExpr::Arg{"", move(arg3)});
+  if (arg4)
+    args.push_back(CallExpr::Arg{"", move(arg4)});
 }
 string CallExpr::toString() const {
   string s;
@@ -294,6 +297,22 @@ string SliceExpr::toString() const {
                          step ? format(" #:step {}", step->toString()) : ""));
 }
 ACCEPT_IMPL(SliceExpr, ASTVisitor);
+
+ExSliceExpr::ExSliceExpr(seq::ast::ExprPtr start, seq::ast::ExprPtr stop, seq::ast::ExprPtr take,
+                         seq::ast::ExprPtr skip) : Expr(), start(move(start)), stop(move(stop)),
+                                                   take(move(take)), skip(move(skip)) { }
+ExSliceExpr::ExSliceExpr(const seq::ast::ExSliceExpr &expr) :
+  Expr(expr), start(ast::clone(expr.start)), stop(ast::clone(expr.stop)), take(ast::clone(expr.take)),
+  skip(ast::clone(expr.skip)) { }
+
+string ExSliceExpr::toString() const {
+    return wrapType(format("exslice{}{}{}{}",
+                           start ? format(" #:start {}", start->toString()) : "",
+                           stop ? format(" #:end {}", stop->toString()) : "",
+                           take ? format(" #:take {}", take->toString()) : "",
+                           skip ? format(" #:skip {}", skip->toString()) : ""));
+}
+ACCEPT_IMPL(ExSliceExpr, ASTVisitor);
 
 EllipsisExpr::EllipsisExpr(bool isPipeArg) : Expr(), isPipeArg(isPipeArg) {}
 string EllipsisExpr::toString() const { return wrapType("ellipsis"); }

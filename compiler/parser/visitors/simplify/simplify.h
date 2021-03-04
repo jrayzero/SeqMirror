@@ -226,6 +226,17 @@ public:
   /// Disallow ranges except in match statements.
   void visit(RangeExpr *) override;
 
+  //COLA
+  /// Transform an exslice start:stop:take:skip to:
+  ///   ExSlice(start, stop, take, skip).
+  /// Start, stop and step parameters can be nullptr; in that case, just use
+  /// Optional.__new__() in place of a corresponding parameter.
+  void visit(ExSliceExpr *) override;
+
+  // Cola
+  // replace with call to internal_pt_leaf
+  void visit(LeafStmt *) override;
+
   /// Transform all statements in a suite and flatten them (unless a suite is a variable
   /// scope).
   void visit(SuiteStmt *) override;

@@ -354,12 +354,19 @@ ACCEPT_IMPL(WithStmt, ASTVisitor);
 
 CustomStmt::CustomStmt(ExprPtr head, StmtPtr suite)
     : Stmt(), head(move(head)), suite(move(suite)) {}
+CustomStmt::CustomStmt(ExprPtr head, ExprPtr arg, StmtPtr suite)
+  : Stmt(), head(move(head)), arg(move(arg)), suite(move(suite)) {}
 CustomStmt::CustomStmt(const CustomStmt &stmt)
-    : Stmt(stmt), head(ast::clone(stmt.head)), suite(ast::clone(stmt.suite)) {}
+    : Stmt(stmt), head(ast::clone(stmt.head)), arg(ast::clone(stmt.arg)), suite(ast::clone(stmt.suite)) {}
 string CustomStmt::toString() const {
-  return format("(custom {} {})", head->toString(), suite->toString());
+  return format("(custom {} {} {})", head->toString(), arg->toString(), suite->toString());
 }
 ACCEPT_IMPL(CustomStmt, ASTVisitor);
+
+LeafStmt::LeafStmt(vector<ExprPtr> leaves) : Stmt(), leaves(move(leaves)) { }
+LeafStmt::LeafStmt(const seq::ast::LeafStmt &stmt) : Stmt(stmt), leaves(ast::clone(stmt.leaves)) { }
+string LeafStmt::toString() const { return format("(leaf {})", combine(leaves)); }
+ACCEPT_IMPL(LeafStmt, ASTVisitor);
 
 AssignMemberStmt::AssignMemberStmt(ExprPtr lhs, string member, ExprPtr rhs)
     : Stmt(), lhs(move(lhs)), member(move(member)), rhs(move(rhs)) {}

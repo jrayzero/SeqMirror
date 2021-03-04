@@ -48,6 +48,7 @@ void ASTVisitor::visit(AssignExpr *expr) { defaultVisit(expr); }
 void ASTVisitor::visit(RangeExpr *expr) { defaultVisit(expr); }
 void ASTVisitor::visit(InstantiateExpr *expr) { defaultVisit(expr); }
 void ASTVisitor::visit(StmtExpr *expr) { defaultVisit(expr); }
+void ASTVisitor::visit(ExSliceExpr *expr) { defaultVisit(expr); }
 
 void ASTVisitor::visit(SuiteStmt *stmt) { defaultVisit(stmt); }
 void ASTVisitor::visit(PassStmt *stmt) { defaultVisit(stmt); }
@@ -75,6 +76,7 @@ void ASTVisitor::visit(ClassStmt *stmt) { defaultVisit(stmt); }
 void ASTVisitor::visit(YieldFromStmt *stmt) { defaultVisit(stmt); }
 void ASTVisitor::visit(WithStmt *stmt) { defaultVisit(stmt); }
 void ASTVisitor::visit(CustomStmt *stmt) { defaultVisit(stmt); }
+void ASTVisitor::visit(LeafStmt *stmt) { defaultVisit(stmt); }
 
 } // namespace ast
 } // namespace seq

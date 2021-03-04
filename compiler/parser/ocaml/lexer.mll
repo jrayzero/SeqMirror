@@ -204,6 +204,8 @@ and read state = parse
       | "or"       -> [P.OR "||"]
       | "and"      -> [P.AND "&&"]
       | "not"      -> [P.NOT "!"]
+      | "pt_build" -> [P.PTREE_BUILD]
+      | "pt_leaf"  -> [P.LEAF]
       | _          -> [P.ID id]
     }
 

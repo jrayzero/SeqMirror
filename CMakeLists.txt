@@ -76,14 +76,7 @@ endif ()
 # Seq runtime library
 set(SEQRT_FILES runtime/lib.h
         runtime/lib.cpp
-        runtime/exc.cpp
-        runtime/sw/ksw2.h
-        runtime/sw/ksw2_extd2_sse.cpp
-        runtime/sw/ksw2_exts2_sse.cpp
-        runtime/sw/ksw2_extz2_sse.cpp
-        runtime/sw/ksw2_gg2_sse.cpp
-        runtime/sw/intersw.h
-        runtime/sw/intersw.cpp)
+        runtime/exc.cpp)
 add_library(seqrt SHARED ${SEQRT_FILES})
 target_include_directories(seqrt PRIVATE ${SEQ_DEP}/include runtime)
 if (APPLE)

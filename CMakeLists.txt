@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.9)
-project(Seq)
+project(CoLa)
 include(ExternalProject)
 
 set(CMAKE_CXX_STANDARD 14)
@@ -11,6 +11,7 @@ include_directories(compiler)
 
 #set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
 #set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
+set(SEQ_DEP $ENV{SEQ_DEP})
 
 if (NOT DEFINED SEQ_DEP)
     message(FATAL_ERROR "You must set SEQ_DEP environment variable")

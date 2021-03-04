@@ -272,14 +272,13 @@ INSTANTIATE_TEST_SUITE_P(
     getTestNameFromParam);
 
 INSTANTIATE_TEST_SUITE_P(
-    PipelineTests, SeqTest,
+    ColaTests, SeqTest,
     testing::Combine(
       testing::Values(
-        "pipeline/parallel.seq",
-        "pipeline/prefetch.seq",
-        "pipeline/revcomp_opt.seq",
-        "pipeline/canonical_opt.seq",
-        "pipeline/interalign.seq"
+        "cola/blocks_and_views.seq"
+//        "cola/hilbert.seq",
+//        "cola/trees.seq",
+//        "cola/zigzag.seq"
       ),
       testing::Values(true, false),
       testing::Values(""),

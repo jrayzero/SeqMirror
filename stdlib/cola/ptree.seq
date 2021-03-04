@@ -1,0 +1,411 @@
+#from block import View, Block
+
+# this is basically just a collection of leaf nodes
+class AndPTree[T]:
+
+  # if filled in, it's a leaf
+  leaf: Optional[View[T]]
+
+  # if filled in, it's a root
+  root: Optional[View[T]]
+
+  # filled in if !leaf and !root
+  children: list[AndPTree[T]]
+
+  def __init__(self, root: Block[T]):
+    self.children = []
+    self.root = View(root)
+
+  def __init__(self, root: View[T]):
+    self.children = []
+    self.root = root
+
+  def __init__(self):
+    self.children = []
+
+  def set_leaf(self, leaf: Block[T]):
+    self.leaf = View(leaf)
+
+  def set_leaf(self, leaf: View[T]):
+    self.leaf = leaf
+
+  def add_child(self, child: AndPTree[T]):
+    assert not self.leaf
+    if self.root:
+      assert len(self.children) == 0
+      assert not child.leaf
+    if child.root:
+      self.children.append(child.children[0])
+    else:
+      # don't merge and nodes here b/c it just makes it completely flat (maybe that's fine though?)
+      self.children.append(child)
+
+  def reset_child(self, idx: int, child: AndPTree[T]):
+    assert idx < len(self.children)
+    self.children[idx] = child
+
+  def _iterate_leaves(self):
+    if self.leaf:
+      yield ~self.leaf
+    else:
+      for child in self.children:
+        yield from child._iterate_leaves()
+
+  def __iter__(self):
+    return self._iterate_leaves()
+
+  def _inner_str(self, indent) -> str:
+    s = ''
+    if self.leaf:
+      s += ' ' * indent + 'LEAF @' + str(self.leaf.base.abs_origin()) + '\n'
+    elif self.root:
+      s += ' ' * indent + 'ROOT\n'
+      for child in self.children:
+        s += child._inner_str(indent+2)
+    else:
+      s += ' ' * indent + 'AND\n'
+      for child in self.children:
+        s += child._inner_str(indent+2)
+    return s
+
+  def __str__(self):
+    return self._inner_str(0)
+
+  def clone(self):
+    if self.leaf:
+      cloned = AndPTree()
+      cloned.set_leaf(self.leaf)
+      return cloned
+    elif self.root:
+      cloned = AndPTree(self.root)
+      for child in self.children:
+        cloned.add_child(child.clone())
+      return cloned
+    else:
+      cloned = AndPTree()
+      for child in self.children:
+        cloned.add_child(child.clone())
+      return cloned
+
+  # compare the leaves to see if they have the same size and global origin
+  def leaves_equal(self, leaves: list[Tuple[list[int], list[int]]]): # list[Tuple[list[dim], list[origin]]]
+    for idx,leaf in enumerate(self):
+      if idx >= len(leaves):
+        return False
+      ref_leaf = leaves[idx]
+      ref_dims = ref_leaf[0]
+      ref_origin = ref_leaf[1]
+      this_dims = leaf.base.dims
+      this_origin = leaf.base.abs_origin()
+      if len(ref_dims) != len(this_dims):
+        return False
+      if len(ref_origin) != len(this_origin):
+        return False
+      for r,t in zip(ref_dims, this_dims):
+        if r != t:
+          return False
+      for r,t, in zip(ref_origin, this_origin):
+        if r != t:
+          return False
+    return True
+
+# each PTree is also a tree node
+# this tree is a little different than how I've done it before. 
+class PTree[T]:
+    
+  # leaf nodes have no children
+  # root nodes have only one child (and/or node)
+  # and/or nodes have and/or or leaf nodes as children. If a root node is attempted to be added, the child is grabbed instead    
+#  ptree_type: bool # true == and, false == or
+  is_and_node: bool
+
+  is_or_node: bool
+
+  nandtrees: int
+
+  # if filled in, it's a leaf
+  leaf: Optional[View[T]]
+
+  # if filled in, it's a root
+  root: Optional[View[T]]
+
+  # filled in if !leaf and !root
+  children: list[PTree[T]]
+
+  def __init__(self):
+    self.children = []
+    self.nandtrees = 0
+    self.is_and_node = False
+    self.is_or_node = False
+
+  def __init__(self, root: Block[T]):
+    self.children = []
+    self.root = View(root)
+    self.nandtrees = 0
+    self.is_and_node = False
+    self.is_or_node = False
+
+  def __init__(self, root: View[T]):
+    self.children = []
+    self.root = root
+    self.nandtrees = 0
+    self.is_and_node = False
+    self.is_or_node = False
+
+  def __init__(self, is_and_node: bool):
+    self.is_and_node = is_and_node
+    self.is_or_node = not is_and_node
+#    self.ptree_type = ptree_type
+    self.children = []
+    self.nandtrees = 0
+
+#  def is_and_node(self):
+#    return not self.leaf and not self.root and self.ptree_type
+
+#  def is_or_node(self):
+#    return not self.leaf and not self.root and not self.ptree_type
+
+  def set_leaf(self, leaf: Block[T]):
+    self.leaf = View(leaf)
+
+  def set_leaf(self, leaf: View[T]):
+    self.leaf = leaf
+
+  # this basically adds a subtree as a "leaf". You can do this with And/Or nodes
+  # it's the same method so that we can use pt_leaf still (lets you merge ptrees together)
+  def set_leaf(self, leafish: PTree[T]):
+    assert self.is_and_node or self.is_or_node
+    self.add_child(leafish)
+
+  def add_child(self, child): # Block or View
+    pt = PTree(child)
+    assert pt.root
+    self.add_child(pt)    
+
+  def add_child(self, child: PTree[T]):
+    assert not self.leaf
+    if self.root:
+      assert len(self.children) == 0
+    if child.root:
+      # if this has no children, it becomes a leaf node
+      if len(child.children) == 0:
+        pt = PTree[T]()
+        pt.set_leaf(~child.root)
+        self.children.append(pt)
+      else:
+        # this has some children. Rip of the root and directly add the children
+        self.children.append(child.children[0])
+#      pt = PTree[T](True)
+#      pt.add_child(child)
+#      self.children.append(child)
+#      if len(child.children) == 1:
+#        self.children.append(child.children[0])
+#      self.children.append(child)
+
+    else:
+      if (self.is_and_node and child.is_and_node) or (self.is_or_node and child.is_or_node):
+        for cc in child.children: # merge
+          self.children.append(cc)
+      else:
+        self.children.append(child)   
+
+  def _compute_nandtrees(self):
+    if self.leaf:
+      self.nandtrees = 1
+    else:
+      for child in self.children:
+        child._compute_nandtrees()
+        child_nandtrees = child.nandtrees
+        if self.root:
+          self.nandtrees = child_nandtrees
+        elif self.is_and_node:
+          if self.nandtrees == 0:
+            self.nandtrees = 1
+          self.nandtrees *= child_nandtrees
+        else: # or
+          self.nandtrees += child_nandtrees
+
+  def _reset_nandtrees(self):
+    self.nandtrees = 0
+    for child in self.children:
+      child._reset_nandtrees()
+
+  def __iter__(self):
+    self._reset_nandtrees()
+    self._compute_nandtrees()
+    return self._generate_andtrees()
+
+  def _generate_and_subtree(self, cur_depth, andn):
+    child = self.children[cur_depth]
+    gen = child._generate_andtrees() #generators[cur_depth]    
+    for i in range(child.nandtrees):
+      node = next(gen)
+      if len(andn.children) < len(self.children):
+        # an initial pass, so append
+        andn.add_child(node)
+      else:
+        andn.reset_child(cur_depth, node)
+      if cur_depth == len(self.children) - 1:
+        # last iteration, so we have completed an and tree
+        yield 1 # dummy value
+      else:
+        yield from self._generate_and_subtree(cur_depth+1, andn)
+      
+  def _generate_andtrees(self):
+    if self.root:
+      if len(self.children) == 1:
+        gen = self.children[0]._generate_andtrees()
+        for i in range(self.nandtrees):
+          apt = AndPTree(~self.root)
+          n = next(gen)
+          apt.add_child(n)
+          yield apt
+      else: # no children
+        apt = AndPTree(~self.root)
+        yield apt
+    elif self.leaf:
+      apt = AndPTree()
+      apt.set_leaf(~self.leaf)
+      yield apt
+    elif self.is_and_node:
+      andn = AndPTree[T]() # this tree gets continually modified every time gen is called
+      gen = self._generate_and_subtree(0, andn)
+      idx = 0
+      for i in range(self.nandtrees):
+        # this fills the andtree
+        next(gen)
+        yield andn.clone()
+    else:
+      # or node 
+      for child in self.children:
+        gen = child._generate_andtrees()
+        # this does like a depth-first separation
+        idx = 0
+        for i in range(child.nandtrees):
+          idx += 1
+          andn = AndPTree()          
+          n = next(gen)
+          andn.add_child(n)
+          yield andn
+
+  def _inner_str(self, indent):
+    s = ''
+    if self.leaf:
+      s += ' ' * indent + 'LEAF ' + str(self.nandtrees) + ' ' + str(self.leaf.dims()) + '@' + str(self.leaf.base.abs_origin()) + '\n'
+    elif self.root:
+      s += ' ' * indent + 'ROOT ' + str(self.nandtrees) + ' ' + str(self.root.dims()) + '@' + str(self.root.base.abs_origin()) + '\n'
+      for child in self.children:
+        s += child._inner_str(indent+2)
+    elif self.is_and_node:
+      s += ' ' * indent + 'AND ' + str(self.nandtrees) + '\n'
+      for child in self.children:
+        s += child._inner_str(indent+2)
+    else:
+      s += ' ' * indent + 'OR ' + str(self.nandtrees) + '\n'
+      for child in self.children:
+        s += child._inner_str(indent+2)
+    return s
+
+  def __str__(self):
+    self._reset_nandtrees()
+    self._compute_nandtrees()
+    return self._inner_str(0)
+
+  # compare the leaves to see if they have the same size and global origin
+  # this compares the individual andtrees that result
+  def andtrees_equal(self, leaves: list[list[Tuple[list[int], list[int]]]]): # list of andtree leaves
+    for idx,andtree in enumerate(self):
+      if not andtree.leaves_equal(leaves[idx]):
+        return False
+    return True
+
+  def permute(self, *new_order) -> PTree[T]:
+    if self.leaf:
+      return self # can't permute this
+    # if this is a root, go down one level and permute those children, otherwise, directly permute
+    if self.root:
+      child = self.children[0]
+      assert len(child.children) == len(new_order)
+      new_child = PTree[T](child.is_and_node)
+      for i in new_order:
+        new_child.add_child(child.children[i])
+      new_root = PTree[T](self.root)
+      new_root.add_child(new_child)
+      return new_root
+    else:
+      assert len(self.children) == len(new_order)
+      new_tree = PTree[T](self.is_and_node)
+      for i in new_order:
+        new_tree.add_child(self.children[i])
+      return new_tree      
+
+class PTreeBuilder[T]:
+
+  ptree: PTree[T]
+
+  ptree_stack: list[PTree[T]]
+
+  def __init__(self, ptree: PTree[T]):
+    self.ptree = ptree
+    self.ptree_stack = []
+
+# these are stubs replaced with calls to internal_pt_leaf by the compiler, hence the lack of bodies
+#def pt_leaf(lf):
+#  raise StubError()
+
+# called by compiler
+def internal_pt_build_begin[T](ptree: PTree[T]):
+  ptb = PTreeBuilder[T](ptree)
+  ptb.ptree_stack.append(ptb.ptree)
+  assert ptb.ptree_stack[-1].root
+  return ptb
+
+def internal_pt_build_end[T](ptb: PTreeBuilder[T]):
+  ptb.ptree_stack.pop()
+
+# called by compiler (you should use pt_leaf(view))
+def internal_pt_leaves[T](ptb: PTreeBuilder[T], *leaves):
+#  child = PTree(True)
+#  child.set_leaf(lf)
+  for lf in leaves:
+    ptb.ptree_stack[-1].add_child(lf)
+
+# called by compiler (or you could manually call it, but use pt_and/pt_or instead)
+def internal_pt_and_begin[T](ptb: PTreeBuilder[T]):
+  and_tree = PTree(True)
+  ptb.ptree_stack[-1].add_child(and_tree)
+  ptb.ptree_stack.append(and_tree)
+
+def internal_pt_or_begin[T](ptb: PTreeBuilder[T]):
+  or_tree = PTree(False)
+  ptb.ptree_stack[-1].add_child(or_tree)
+  ptb.ptree_stack.append(or_tree)
+
+def internal_pt_and_end[T](ptb: PTreeBuilder[T]):
+  assert ptb.ptree_stack[-1].is_and_node
+  ptb.ptree_stack.pop()
+
+def internal_pt_or_end[T](ptb: PTreeBuilder[T]):
+  assert ptb.ptree_stack[-1].is_or_node
+  ptb.ptree_stack.pop()
+
+# a little helper for calling a custom generator on a node during ptree creation
+class splitter[T]:
+
+  node: Optional[View[T]]
+  split_func: Function[Generator[View[T]], View[T]]
+
+  def __init__(self, node: Block[T], split_func):
+    self.node = View(node)
+    self.split_func = split_func
+
+  def __init__(self, node: View[T], split_func):
+    self.node = node
+    self.split_func = split_func
+    
+  def _do_split(self):
+    gen = self.split_func(self.node)
+    yield from gen
+
+  def __iter__(self):
+    return self._do_split()

@@ -1,0 +1,13 @@
+# error caused when a stub function is executed (meaning it wasn't lowered by the compiler)
+class StubError:
+    _hdr: ExcHeader
+
+    def __init__(self):
+        self._hdr = ('StubError', '', '', '', 0, 0)
+
+    def __init__(self, message: str):
+        self._hdr = ('StubError', message, '', '', 0, 0)
+
+    @property
+    def message(self):
+        return self._hdr.msg

@@ -1,0 +1,145 @@
+from multidim import Multidim
+from exslice import ExSlice
+# TODO best way to preinitialize a list in codon? or is there a better array type or something?
+
+# TODO can we just forward declare? Should we even have to do that?
+class View[T]:
+  base: Multidim[T]
+
+# TODO appropriate base data type for buffer (is it a list)?
+class Block[T]:
+
+  base: Multidim[T]
+  
+  def __init__(self, base: Multidim[T]):
+    self.base = base
+
+  def __init__(self, *dims):
+    self.base = Multidim[T](list(dims))
+
+  # init dims and fill immediately
+  def __init__(self, dims, data: list[T]):
+    # assuming a tuple
+    self.base = Multidim[T](list(dims), data)
+
+  def __init__(self, view: View[T]):
+    self.base = Multidim[T](view.base, True)
+
+  def __init__(self, block: Block[T]):
+    self.base = Multidim[T](block.base, True)
+
+  def shorthand(self):
+    return self.base.shorthand()
+
+  def dims(self):
+    return self.base.dims
+
+  def __setitem__(self, idxs, items: Block[T]):
+    self.base[idxs] = items.base
+
+  def __setitem__(self, idxs, items: View[T]):
+    self.base[idxs] = items.base
+
+  def __setitem__(self, idxs, items):
+    self.base[idxs] = items
+
+  # does a slice
+  def __getitem__(self, idxs):
+    return View[T](self.base.__getitem__(idxs))
+  
+  # gets a realized (concrete) value
+  def __call__(self, idxs):    
+    return self.base.__call__(idxs)
+
+  def reshape(self, *dims):
+    return View[T](self.base.reshape(list(dims)))
+
+  def __str__(self):
+    return str(self.base)
+
+  def buffer_equals(self, that: View[T], compare_ndims=False):
+    return self.base.buffer_equals(that.base, compare_ndims)
+
+  def buffer_equals(self, that: Block[T], compare_ndims=False):
+    return self.base.buffer_equals(that.base, compare_ndims)
+
+  def buffer_equals(self, that):
+    return self.base.buffer_equals(that)
+
+  # broadcast arithmetic
+  def __add__(self, other: T) -> Block[T]:
+    return Block(self.base + other)
+
+  def __radd__(self, other: T) -> Block[T]:
+    return Block(self.base.__radd__(other))
+
+  # elementwise arithmetic
+  def __add__(self, other: View[T]) -> Block[T]:
+    return Block(self.base + other.base)
+
+  def __add__(self, other: Block[T]) -> Block[T]:
+    return Block(self.base + other.base)
+
+@extend
+class View[T]:
+
+  def __init__(self, base: Multidim[T]):
+    self.base = base
+
+  def __init__(self, view: View[T]):
+    self.base = Multidim[T](view.base, False)
+
+  def __init__(self, block: Block[T]):
+    self.base = Multidim[T](block.base, False)
+
+  def shorthand(self):
+    return self.base.shorthand()
+
+  def dims(self):
+    return self.base.dims
+  
+  # does a slice
+  def __getitem__(self, idxs):
+    return View[T](self.base.__getitem__(idxs))  
+
+  def __setitem__(self, idxs, items: Block[T]):
+    self.base[idxs] = items.base
+
+  def __setitem__(self, idxs, items: View[T]):
+    self.base[idxs] = items.base
+
+  def __setitem__(self, idxs, items):
+    self.base[idxs] = items
+
+  # gets a realized (concrete) value
+  def __call__(self, idxs):    
+    return self.base.__call__(idxs)
+
+  def reshape(self, *dims):
+    return View[T](self.base.reshape(list(dims)))
+  
+  def __str__(self):
+    return str(self.base)
+    
+  def buffer_equals(self, that: View[T], compare_ndims=False):
+    return self.base.buffer_equals(that.base, compare_ndims)
+
+  def buffer_equals(self, that: Block[T], compare_ndims=False):
+    return self.base.buffer_equals(that.base, compare_ndims)
+
+  def buffer_equals(self, that):
+    return self.base.buffer_equals(that)    
+
+  # broadcast arithmetic
+  def __add__(self, other: T) -> Block[T]:
+    return Block(self.base + other)
+
+  def __radd__(self, other: T) -> Block[T]:
+    return Block(self.base.__radd__(other))
+
+  # elementwise arithmetic
+  def __add__(self, other: View[T]) -> Block[T]:
+    return Block(self.base + other.base)
+
+  def __add__(self, other: Block[T]) -> Block[T]:
+    return Block(self.base + other.base)

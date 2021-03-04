@@ -227,8 +227,8 @@ else ()
 endif ()
 
 # Seq command-line tool
-add_executable(seqc runtime/main.cpp)
-target_link_libraries(seqc ${STATIC_LIBCPP} seq Threads::Threads)
+add_executable(colac runtime/main.cpp)
+target_link_libraries(colac ${STATIC_LIBCPP} seq Threads::Threads)
 
 # Seq test
 # Download and unpack googletest at configure time

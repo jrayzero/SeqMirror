@@ -259,12 +259,8 @@ INSTANTIATE_TEST_SUITE_P(
         "core/bltin.seq",
         "core/arguments.seq",
         "core/match.seq",
-        "core/kmers.seq",
         "core/formats.seq",
-        "core/proteins.seq",
-        "core/align.seq",
         "core/serialization.seq",
-        "core/bwtsa.seq",
         "core/empty.seq"
       ),
       testing::Values(true, false),

@@ -49,6 +49,7 @@ Thumbs.db
 .idea
 .mypy_cache
 .vscode
+cmake-build-debug/
 
 # Doxygen #
 ###########

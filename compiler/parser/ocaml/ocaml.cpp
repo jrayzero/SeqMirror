@@ -94,105 +94,105 @@ ExprPtr parse_expr(value val) {
   int tv = Tag_val(v);
   t = Field(v, 0);
   switch (tv) {
-  case 0:
-    Return(None, );
-  case 1:
-    Return(Bool, Bool_val(t));
-  case 2:
-    Return(Int, parse_string(Field(t, 0)), parse_string(Field(t, 1)));
-  case 3:
-    Return(Float, Double_val(Field(t, 0)), parse_string(Field(t, 1)));
-  case 4:
-    Return(String, parse_string(Field(t, 1)), parse_string(Field(t, 0)));
-  case 5:
-    Return(Id, parse_string(t));
-  case 6:
-    Return(Star, parse_expr(t));
-  case 7:
-    Return(Tuple, parse_list(t, parse_expr));
-  case 8:
-    Return(List, parse_list(t, parse_expr));
-  case 9:
-    Return(Set, parse_list(t, parse_expr));
-  case 10:
-    Return(Dict, parse_list(t, [](value in) {
-             CAMLparam1(in);
-             OcamlReturn((DictExpr::DictItem{parse_expr(Field(in, 0)),
-                                             parse_expr(Field(in, 1))}));
-           }));
-  case 11:
-  case 12:
-  case 13:
-  case 14: {
-    f0 = Field(t, 0);
-    f1 = Field(t, 1);
-    vector<GeneratorBody> loops;
-    while (true) {
-      f1 = Field(f1, 1); // ignore position here for now
-      loops.push_back({parse_expr(Field(f1, 0)), parse_expr(Field(f1, 1)),
-                       parse_list(Field(f1, 2), parse_expr)});
-      if (Field(f1, 3) == Val_int(0))
-        break;
-      f1 = Field(Field(f1, 3), 0);
+    case 0:
+      Return(None, );
+    case 1:
+      Return(Bool, Bool_val(t));
+    case 2:
+      Return(Int, parse_string(Field(t, 0)), parse_string(Field(t, 1)));
+    case 3:
+      Return(Float, Double_val(Field(t, 0)), parse_string(Field(t, 1)));
+    case 4:
+      Return(String, parse_string(Field(t, 1)), parse_string(Field(t, 0)));
+    case 5:
+      Return(Id, parse_string(t));
+    case 6:
+      Return(Star, parse_expr(t));
+    case 7:
+      Return(Tuple, parse_list(t, parse_expr));
+    case 8:
+      Return(List, parse_list(t, parse_expr));
+    case 9:
+      Return(Set, parse_list(t, parse_expr));
+    case 10:
+      Return(Dict, parse_list(t, [](value in) {
+        CAMLparam1(in);
+        OcamlReturn((DictExpr::DictItem{parse_expr(Field(in, 0)),
+                                        parse_expr(Field(in, 1))}));
+      }));
+    case 11:
+    case 12:
+    case 13:
+    case 14: {
+      f0 = Field(t, 0);
+      f1 = Field(t, 1);
+      vector<GeneratorBody> loops;
+      while (true) {
+        f1 = Field(f1, 1); // ignore position here for now
+        loops.push_back({parse_expr(Field(f1, 0)), parse_expr(Field(f1, 1)),
+                         parse_list(Field(f1, 2), parse_expr)});
+        if (Field(f1, 3) == Val_int(0))
+          break;
+        f1 = Field(Field(f1, 3), 0);
+      }
+      if (tv < 14)
+        Return(Generator, static_cast<GeneratorExpr::GeneratorKind>(tv - 11),
+               parse_expr(f0), move(loops));
+      else
+        Return(DictGenerator, parse_expr(Field(f0, 0)), parse_expr(Field(f0, 1)),
+               move(loops));
     }
-    if (tv < 14)
-      Return(Generator, static_cast<GeneratorExpr::GeneratorKind>(tv - 11),
-             parse_expr(f0), move(loops));
-    else
-      Return(DictGenerator, parse_expr(Field(f0, 0)), parse_expr(Field(f0, 1)),
-             move(loops));
-  }
-  case 15:
-    Return(If, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)),
-           parse_expr(Field(t, 2)));
-  case 16:
-    Return(Unary, parse_string(Field(t, 0)), parse_expr(Field(t, 1)));
-  case 17:
-    Return(Binary, parse_expr(Field(t, 0)), parse_string(Field(t, 1)),
-           parse_expr(Field(t, 2)), Bool_val(Field(t, 3)));
-  case 18:
-    Return(Pipe, parse_list(t, [](value in) {
-             CAMLparam1(in);
-             OcamlReturn((
-                 PipeExpr::Pipe{parse_string(Field(in, 0)), parse_expr(Field(in, 1))}));
-           }));
-  case 19:
-    Return(Index, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)));
-  case 20:
-    Return(Call, parse_expr(Field(t, 0)), parse_list(Field(t, 1), [](value i) {
-             CAMLparam1(i);
-             OcamlReturn((CallExpr::Arg{parse_optional(Field(i, 0), parse_string),
-                                        parse_expr(Field(i, 1))}));
-           }));
-  case 21:
-    Return(Slice, parse_optional(Field(t, 0), parse_expr),
-           parse_optional(Field(t, 1), parse_expr),
-           parse_optional(Field(t, 2), parse_expr));
-  case 22:
-    Return(Dot, parse_expr(Field(t, 0)), parse_string(Field(t, 1)));
-  case 23:
-    Return(Ellipsis, );
-  case 24:
-    Return(TypeOf, parse_expr(t));
-  case 25:
-    Return(Lambda, parse_list(Field(t, 0), parse_string), parse_expr(Field(t, 1)));
-  case 26:
-    Return(Yield, );
-  case 27:
-    Return(Assign, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)));
-  case 28:
-    Return(Range, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)));
-  case 29:
-    Return(KeywordStar, parse_expr(t));
+    case 15:
+      Return(If, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)),
+             parse_expr(Field(t, 2)));
+    case 16:
+      Return(Unary, parse_string(Field(t, 0)), parse_expr(Field(t, 1)));
+    case 17:
+      Return(Binary, parse_expr(Field(t, 0)), parse_string(Field(t, 1)),
+             parse_expr(Field(t, 2)), Bool_val(Field(t, 3)));
+    case 18:
+      Return(Pipe, parse_list(t, [](value in) {
+        CAMLparam1(in);
+        OcamlReturn((
+                      PipeExpr::Pipe{parse_string(Field(in, 0)), parse_expr(Field(in, 1))}));
+      }));
+    case 19:
+      Return(Index, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)));
+    case 20:
+      Return(Call, parse_expr(Field(t, 0)), parse_list(Field(t, 1), [](value i) {
+        CAMLparam1(i);
+        OcamlReturn((CallExpr::Arg{parse_optional(Field(i, 0), parse_string),
+                                   parse_expr(Field(i, 1))}));
+      }));
+    case 21:
+      Return(Slice, parse_optional(Field(t, 0), parse_expr),
+             parse_optional(Field(t, 1), parse_expr),
+             parse_optional(Field(t, 2), parse_expr));
+    case 22:
+      Return(Dot, parse_expr(Field(t, 0)), parse_string(Field(t, 1)));
+    case 23:
+      Return(Ellipsis, );
+    case 24:
+      Return(TypeOf, parse_expr(t));
+    case 25:
+      Return(Lambda, parse_list(Field(t, 0), parse_string), parse_expr(Field(t, 1)));
+    case 26:
+      Return(Yield, );
+    case 27:
+      Return(Assign, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)));
+    case 28:
+      Return(Range, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)));
+    case 29:
+      Return(KeywordStar, parse_expr(t));
     case 30:
       Return(ExSlice, parse_optional(Field(t, 0), parse_expr),
              parse_optional(Field(t, 1), parse_expr),
              parse_optional(Field(t, 2), parse_expr),
              parse_optional(Field(t, 3), parse_expr));
 
-  default:
-    seq::compilationError("[internal] tag variant mismatch ...");
-    return nullptr;
+    default:
+      seq::compilationError("[internal] tag variant mismatch ...");
+      return nullptr;
   }
 #undef Return
 }
@@ -235,94 +235,94 @@ StmtPtr parse_stmt(value val) {
   int tv = Tag_val(v);
   t = Field(v, 0);
   switch (tv) {
-  case 0:
-    Return(Pass, );
-  case 1:
-    Return(Break, );
-  case 2:
-    Return(Continue, );
-  case 3:
-    Return(Expr, parse_expr(t));
-  case 4:
-    Return(Assign, parse_expr(Field(t, 0)), parse_optional(Field(t, 1), parse_expr),
-           parse_optional(Field(t, 2), parse_expr));
-  case 5:
-    Return(Del, parse_expr(t));
-  case 6:
-    Return(Print, parse_list(Field(t, 0), parse_expr), Bool_val(Field(t, 1)));
-  case 7:
-    Return(Return, parse_optional(t, parse_expr));
-  case 8:
-    Return(Yield, parse_optional(t, parse_expr));
-  case 9:
-    Return(Assert, parse_expr(Field(t, 0)), parse_optional(Field(t, 1), parse_expr));
-  case 10:
-    Return(While, parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)),
-           parse_stmt_list(Field(t, 2)));
-  case 11:
-    Return(For, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)),
-           parse_stmt_list(Field(t, 2)), parse_stmt_list(Field(t, 3)));
-  case 12:
-    Return(If, parse_list(t, [](value i) {
-             return IfStmt::If{parse_optional(Field(i, 0), parse_expr),
-                               parse_stmt_list(Field(i, 1))};
-           }));
-  case 13:
-    Return(Match, parse_expr(Field(t, 0)), parse_list(Field(t, 1), [](value i) {
-             return MatchStmt::MatchCase{parse_expr(Field(i, 0)),
-                                         parse_optional(Field(i, 1), parse_expr),
-                                         parse_stmt_list(Field(i, 2))};
-           }));
-  case 14:
-    Return(Import, parse_expr(Field(t, 0)), parse_optional(Field(t, 1), parse_expr),
-           parse_list(Field(t, 2), parse_param),
-           parse_optional(Field(t, 3), parse_expr),
-           parse_optional(Field(t, 4), parse_string), Int_val(Field(t, 5)));
-  case 15:
-    Return(Try, parse_stmt_list(Field(t, 0)),
-           parse_list(Field(t, 1),
-                      [](value t) {
-                        CAMLparam1(t);
-                        CAMLlocal1(v);
-                        v = Field(t, 1); // ignore position
-                        OcamlReturn(
+    case 0:
+      Return(Pass, );
+    case 1:
+      Return(Break, );
+    case 2:
+      Return(Continue, );
+    case 3:
+      Return(Expr, parse_expr(t));
+    case 4:
+      Return(Assign, parse_expr(Field(t, 0)), parse_optional(Field(t, 1), parse_expr),
+             parse_optional(Field(t, 2), parse_expr));
+    case 5:
+      Return(Del, parse_expr(t));
+    case 6:
+      Return(Print, parse_list(Field(t, 0), parse_expr), Bool_val(Field(t, 1)));
+    case 7:
+      Return(Return, parse_optional(t, parse_expr));
+    case 8:
+      Return(Yield, parse_optional(t, parse_expr));
+    case 9:
+      Return(Assert, parse_expr(Field(t, 0)), parse_optional(Field(t, 1), parse_expr));
+    case 10:
+      Return(While, parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)),
+             parse_stmt_list(Field(t, 2)));
+    case 11:
+      Return(For, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)),
+             parse_stmt_list(Field(t, 2)), parse_stmt_list(Field(t, 3)));
+    case 12:
+      Return(If, parse_list(t, [](value i) {
+        return IfStmt::If{parse_optional(Field(i, 0), parse_expr),
+                          parse_stmt_list(Field(i, 1))};
+      }));
+    case 13:
+      Return(Match, parse_expr(Field(t, 0)), parse_list(Field(t, 1), [](value i) {
+        return MatchStmt::MatchCase{parse_expr(Field(i, 0)),
+                                    parse_optional(Field(i, 1), parse_expr),
+                                    parse_stmt_list(Field(i, 2))};
+      }));
+    case 14:
+      Return(Import, parse_expr(Field(t, 0)), parse_optional(Field(t, 1), parse_expr),
+             parse_list(Field(t, 2), parse_param),
+             parse_optional(Field(t, 3), parse_expr),
+             parse_optional(Field(t, 4), parse_string), Int_val(Field(t, 5)));
+    case 15:
+      Return(Try, parse_stmt_list(Field(t, 0)),
+             parse_list(Field(t, 1),
+                        [](value t) {
+                          CAMLparam1(t);
+                          CAMLlocal1(v);
+                          v = Field(t, 1); // ignore position
+                          OcamlReturn(
                             (TryStmt::Catch{parse_optional(Field(v, 1), parse_string),
                                             parse_optional(Field(v, 0), parse_expr),
                                             parse_stmt_list(Field(v, 2))}));
-                      }),
-           parse_stmt_list(Field(t, 2)));
-  case 16:
-    Return(Global, parse_string(t));
-  case 17:
-    Return(Throw, parse_expr(t));
-  case 18:
-    Return(Function, parse_string(Field(t, 0)), parse_optional(Field(t, 1), parse_expr),
-           parse_list(Field(t, 2), parse_param), parse_list(Field(t, 3), parse_param),
-           parse_stmt_list(Field(t, 4)), parse_list(Field(t, 5), [](value i) {
-             return parse_string(Field(i, 1)); // ignore position for now
-           }));
-  case 19:
-    Return(Class, parse_string(Field(t, 0)), parse_list(Field(t, 1), parse_param),
-           parse_list(Field(t, 2), parse_param), parse_stmt_list(Field(t, 3)),
-           parse_list(Field(t, 4), [](value i) {
-             return parse_string(Field(i, 1)); // ignore position for now
-           }));
-  case 20:
-    Return(YieldFrom, parse_expr(t));
-  case 21:
-    Return(With,
-           parse_list(Field(t, 0),
-                      [](value j) {
-                        return make_pair(parse_expr(Field(j, 0)),
-                                         parse_optional(Field(j, 1), parse_string));
-                      }),
-           parse_stmt_list(Field(t, 1)));
-  case 22:
-    Return(Custom, parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)));
-  case 23:
-    Return(Custom, std::make_unique<IdExpr>("pt_build"), parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)));
-  case 24:
-    Return(Custom, std::make_unique<IdExpr>("pt_leaf"), parse_list(t, parse_expr));
+                        }),
+             parse_stmt_list(Field(t, 2)));
+    case 16:
+      Return(Global, parse_string(t));
+    case 17:
+      Return(Throw, parse_expr(t));
+    case 18:
+      Return(Function, parse_string(Field(t, 0)), parse_optional(Field(t, 1), parse_expr),
+             parse_list(Field(t, 2), parse_param), parse_list(Field(t, 3), parse_param),
+             parse_stmt_list(Field(t, 4)), parse_list(Field(t, 5), [](value i) {
+        return parse_string(Field(i, 1)); // ignore position for now
+      }));
+    case 19:
+      Return(Class, parse_string(Field(t, 0)), parse_list(Field(t, 1), parse_param),
+             parse_list(Field(t, 2), parse_param), parse_stmt_list(Field(t, 3)),
+             parse_list(Field(t, 4), [](value i) {
+               return parse_string(Field(i, 1)); // ignore position for now
+             }));
+    case 20:
+      Return(YieldFrom, parse_expr(t));
+    case 21:
+      Return(With,
+             parse_list(Field(t, 0),
+                        [](value j) {
+                          return make_pair(parse_expr(Field(j, 0)),
+                                           parse_optional(Field(j, 1), parse_string));
+                        }),
+             parse_stmt_list(Field(t, 1)));
+    case 22:
+      Return(Custom, parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)));
+    case 23:
+      Return(Custom, std::make_unique<IdExpr>("pt_build"), parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)));
+    case 24:
+      Return(Custom, std::make_unique<IdExpr>("pt_leaf"), parse_list(t, parse_expr));
     case 25:
       Return(Custom, std::make_unique<IdExpr>("trav_build"), parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)));
     case 26:
@@ -338,8 +338,8 @@ StmtPtr parse_stmt(value val) {
     case 31:
       Return(Custom, std::make_unique<IdExpr>("link"), parse_list(t, parse_expr));
     default:
-    seq::compilationError("[internal] tag variant mismatch ...");
-    return nullptr;
+      seq::compilationError("[internal] tag variant mismatch ...");
+      return nullptr;
   }
 #undef Return
 }
@@ -390,7 +390,7 @@ StmtPtr parseCode(const string &file, const string &code, int line_offset,
     auto t = high_resolution_clock::now();
     initOcaml();
     _ocaml_time +=
-        duration_cast<milliseconds>(high_resolution_clock::now() - t).count();
+      duration_cast<milliseconds>(high_resolution_clock::now() - t).count();
     initialized = true;
   }
   auto t = high_resolution_clock::now();

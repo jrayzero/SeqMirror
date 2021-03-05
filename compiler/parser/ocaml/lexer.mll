@@ -211,7 +211,7 @@ and read state = parse
       | "arot" -> [P.AROT]
       | "rstep" -> [P.RSTEP]
       | "astep" -> [P.ASTEP]
-      | "seek" -> [P.SEEK]
+      | "aseek" -> [P.SEEK]
       | "link" -> [P.LINK]
       | _          -> [P.ID id]
     }

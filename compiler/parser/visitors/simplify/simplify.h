@@ -233,10 +233,6 @@ public:
   /// Optional.__new__() in place of a corresponding parameter.
   void visit(ExSliceExpr *) override;
 
-  // Cola
-  // replace with call to internal_pt_leaf
-  void visit(LeafStmt *) override;
-
   /// Transform all statements in a suite and flatten them (unless a suite is a variable
   /// scope).
   void visit(SuiteStmt *) override;

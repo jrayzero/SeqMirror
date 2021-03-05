@@ -12,7 +12,7 @@ class Movement:
 
   def set_rotation(self, rot: int):
     assert self.is_arot() or self.is_rrot()
-    assert int >= 0
+    assert rot >= 0
     self.rotation = rot
 
   def set_step(self, step: list[int], step_multiplier: int=1):
@@ -49,13 +49,13 @@ class Traversal:
   def add_movement(self, movement: Movement):
     self.movements.append(movement)
 
-  def link(self, traversal: Traversal):
+  def link_in(self, traversal: Traversal):
     for movement in traversal.movements:
       self.add_movement(movement)
 
   # iterating through this
   def __iter__(self):
-
+    pass
 
 class AppliedTraversal[T]:
   

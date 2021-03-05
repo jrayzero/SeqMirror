@@ -355,18 +355,19 @@ ACCEPT_IMPL(WithStmt, ASTVisitor);
 CustomStmt::CustomStmt(ExprPtr head, StmtPtr suite)
     : Stmt(), head(move(head)), suite(move(suite)) {}
 CustomStmt::CustomStmt(ExprPtr head, ExprPtr arg, StmtPtr suite)
-  : Stmt(), head(move(head)), arg(move(arg)), suite(move(suite)) {}
+  : Stmt(), head(move(head)), suite(move(suite)) {
+  this->args.push_back(move(arg));
+}
+CustomStmt::CustomStmt(seq::ast::ExprPtr head, vector<seq::ast::ExprPtr> args, seq::ast::StmtPtr suite) :
+  Stmt(), head(move(head)), args(move(args)), suite(move(suite)) { }
+CustomStmt::CustomStmt(seq::ast::ExprPtr head, vector<seq::ast::ExprPtr> args) :
+  Stmt(), head(move(head)), args(move(args)) { }
 CustomStmt::CustomStmt(const CustomStmt &stmt)
-    : Stmt(stmt), head(ast::clone(stmt.head)), arg(ast::clone(stmt.arg)), suite(ast::clone(stmt.suite)) {}
+    : Stmt(stmt), head(ast::clone(stmt.head)), args(ast::clone(stmt.args)), suite(ast::clone(stmt.suite)) {}
 string CustomStmt::toString() const {
-  return format("(custom {} {} {})", head->toString(), arg->toString(), suite->toString());
+  return format("(custom {} {} {})", head->toString(), combine(args), suite ? suite->toString() : "");
 }
 ACCEPT_IMPL(CustomStmt, ASTVisitor);
-
-LeafStmt::LeafStmt(vector<ExprPtr> leaves) : Stmt(), leaves(move(leaves)) { }
-LeafStmt::LeafStmt(const seq::ast::LeafStmt &stmt) : Stmt(stmt), leaves(ast::clone(stmt.leaves)) { }
-string LeafStmt::toString() const { return format("(leaf {})", combine(leaves)); }
-ACCEPT_IMPL(LeafStmt, ASTVisitor);
 
 AssignMemberStmt::AssignMemberStmt(ExprPtr lhs, string member, ExprPtr rhs)
     : Stmt(), lhs(move(lhs)), member(move(member)), rhs(move(rhs)) {}

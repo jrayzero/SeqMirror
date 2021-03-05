@@ -509,33 +509,23 @@ struct WithStmt : public Stmt {
   ACCEPT(ASTVisitor);
 };
 
-/// Custom block statement (foo: ...).
+/// Custom block statement (foo expr?: ...) or (foo expr expr expr...)
 /// @example: pt_tree: pass
 struct CustomStmt : public Stmt {
   ExprPtr head;
   // COLA
-  ExprPtr arg;
+  vector<ExprPtr> args;
   StmtPtr suite;
 
   CustomStmt(ExprPtr head, StmtPtr suite);
   // COLA
   CustomStmt(ExprPtr head, ExprPtr arg, StmtPtr suite);
+  CustomStmt(ExprPtr head, vector<ExprPtr> args, StmtPtr suite);
+  CustomStmt(ExprPtr head, vector<ExprPtr> args);
   CustomStmt(const CustomStmt &stmt);
 
   string toString() const override;
   ACCEPT(ASTVisitor);
-};
-
-// Cola
-struct LeafStmt : public Stmt {
-  vector<ExprPtr> leaves;
-
-  explicit LeafStmt(vector<ExprPtr> leaves);
-  LeafStmt(const LeafStmt &stmt);
-
-  string toString() const override;
-  ACCEPT(ASTVisitor);
-
 };
 
 /// The following nodes are created after the simplify stage.

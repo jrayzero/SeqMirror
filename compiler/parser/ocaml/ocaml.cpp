@@ -322,7 +322,7 @@ StmtPtr parse_stmt(value val) {
   case 23:
     Return(Custom, std::make_unique<IdExpr>("pt_build"), parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)));
   case 24:
-    Return(Leaf, parse_list(t, parse_expr));
+    Return(Custom, std::make_unique<IdExpr>("pt_leaf"), parse_list(t, parse_expr));
   default:
     seq::compilationError("[internal] tag variant mismatch ...");
     return nullptr;

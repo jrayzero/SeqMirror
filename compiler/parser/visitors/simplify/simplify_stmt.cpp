@@ -724,10 +724,10 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
   // COLA
   if (stmt->head->getId()->value == "pt_build") {
     std::cerr << "Found pt_build" << std::endl;
-    seqassert(stmt->arg, "arg to pt_build is nullptr");
+    seqassert(stmt->args.size() == 1, "arg to pt_build is nullptr (or has multiple args)");
     std::string pt = ctx->cache->getTemporaryVar("pt");
     ctx->pushPtb(pt);
-    StmtPtr pt_assign = N<AssignStmt>(N<IdExpr>(pt), transform(stmt->arg));
+    StmtPtr pt_assign = N<AssignStmt>(N<IdExpr>(pt), transform(stmt->args[0]));
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
     ctx->ptbPop();
     vector<StmtPtr> stmts;
@@ -751,26 +751,21 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
     stmts.push_back(move(node));
     stmts.push_back(move(suite));
     resultStmt = N<SuiteStmt>(move(stmts));
+  } else if (stmt->head->getId()->value == "pt_leaf") {
+    seqassert(!ctx->ptbEmpty(), "not in a ptree build block");
+    std::string parent = ctx->ptbPeekBack();
+    vector<StmtPtr> suite;
+    suite.reserve(stmt->args.size());
+    for (auto &leaf : stmt->args) {
+      // add this as a child of the parent
+      suite.emplace_back(N<ExprStmt>(N<CallExpr>(N<DotExpr>(N<IdExpr>(parent), "add_child"), transform(leaf))));
+    }
+    resultStmt = N<SuiteStmt>(move(suite));
   } else {
-    error("invalid block: {} {}", stmt->head->toString(), stmt->arg ? stmt->arg->toString() : "");
+    error("invalid block: {}", stmt->head->toString());
   }
 }
 
-// Cola
-// TODO I could make this a CustomStmt if I add a vector of args to custom stmt (and just keep the parsing of it separately since
-// this doesn't use a colon)
-void SimplifyVisitor::visit(LeafStmt *stmt) {
-  // sanity check
-  seqassert(!ctx->ptbEmpty(), "ptb context is empty");
-  std::string parent = ctx->ptbPeekBack();
-  vector<StmtPtr> suite;
-  suite.reserve(stmt->leaves.size());
-  for (auto &leaf : stmt->leaves) {
-    // add this as a child of the parent
-    suite.emplace_back(N<ExprStmt>(N<CallExpr>(N<DotExpr>(N<IdExpr>(parent), "add_child"), transform(leaf))));
-  }
-  resultStmt = N<SuiteStmt>(move(suite));
-}
 /**************************************************************************************/
 
 StmtPtr SimplifyVisitor::transformAssignment(const Expr *lhs, const Expr *rhs,

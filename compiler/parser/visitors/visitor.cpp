@@ -76,7 +76,6 @@ void ASTVisitor::visit(ClassStmt *stmt) { defaultVisit(stmt); }
 void ASTVisitor::visit(YieldFromStmt *stmt) { defaultVisit(stmt); }
 void ASTVisitor::visit(WithStmt *stmt) { defaultVisit(stmt); }
 void ASTVisitor::visit(CustomStmt *stmt) { defaultVisit(stmt); }
-void ASTVisitor::visit(LeafStmt *stmt) { defaultVisit(stmt); }
 
 } // namespace ast
 } // namespace seq

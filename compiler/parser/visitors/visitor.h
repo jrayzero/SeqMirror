@@ -91,8 +91,6 @@ public:
   virtual void visit(YieldFromStmt *);
   virtual void visit(WithStmt *);
   virtual void visit(CustomStmt *);
-  // COLA
-  virtual void visit(LeafStmt *);
 };
 
 template <typename TE, typename TS>

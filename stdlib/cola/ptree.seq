@@ -168,13 +168,18 @@ class PTree[T]:
     self.is_and_node = is_and_node
     self.is_or_node = not is_and_node
     self.children = []
-    self.nandtrees = 0
+    self.nandtrees = 0  
 
   # shorthand for creating and trees
   
   def __init__(self, root, node: PTree[T]):
     self.__init__(root)
     self.add_child(node)
+
+  def make_andor_child(self, is_and_child: bool):
+    pt = PTree[T](is_and_child)
+    self.add_child(pt)
+    return pt
 
   def set_leaf(self, leaf: Block[T]):
     self.leaf = View(leaf)
@@ -344,49 +349,49 @@ class PTree[T]:
         new_tree.add_child(self.children[i])
       return new_tree      
 
-class PTreeBuilder[T]:
-
-  ptree: PTree[T]
-
-  ptree_stack: list[PTree[T]]
-
-  def __init__(self, ptree: PTree[T]):
-    self.ptree = ptree
-    self.ptree_stack = []
+#class PTreeBuilder[T]:
+#
+#  ptree: PTree[T]
+#
+#  ptree_stack: list[PTree[T]]
+#
+#  def __init__(self, ptree: PTree[T]):
+#    self.ptree = ptree
+#    self.ptree_stack = []
 
 # called by compiler
-def internal_pt_build_begin[T](ptree: PTree[T]):
-  ptb = PTreeBuilder[T](ptree)
-  ptb.ptree_stack.append(ptb.ptree)
-  assert ptb.ptree_stack[-1].root
-  return ptb
-
-def internal_pt_build_end[T](ptb: PTreeBuilder[T]):
-  ptb.ptree_stack.pop()
-
-# called by compiler (you should use pt_leaf(view))
-def internal_pt_leaves[T](ptb: PTreeBuilder[T], *leaves):
-  for lf in leaves:
-    ptb.ptree_stack[-1].add_child(lf)
-
-# called by compiler (or you could manually call it, but use pt_and/pt_or instead)
-def internal_pt_and_begin[T](ptb: PTreeBuilder[T]):
-  and_tree = PTree(True)
-  ptb.ptree_stack[-1].add_child(and_tree)
-  ptb.ptree_stack.append(and_tree)
-
-def internal_pt_or_begin[T](ptb: PTreeBuilder[T]):
-  or_tree = PTree(False)
-  ptb.ptree_stack[-1].add_child(or_tree)
-  ptb.ptree_stack.append(or_tree)
-
-def internal_pt_and_end[T](ptb: PTreeBuilder[T]):
-  assert ptb.ptree_stack[-1].is_and_node
-  ptb.ptree_stack.pop()
-
-def internal_pt_or_end[T](ptb: PTreeBuilder[T]):
-  assert ptb.ptree_stack[-1].is_or_node
-  ptb.ptree_stack.pop()
+#def internal_pt_build_begin[T](ptree: PTree[T]):
+#  ptb = PTreeBuilder[T](ptree)
+#  ptb.ptree_stack.append(ptb.ptree)
+#  assert ptb.ptree_stack[-1].root
+#  return ptb
+#
+#def internal_pt_build_end[T](ptb: PTreeBuilder[T]):
+#  ptb.ptree_stack.pop()
+#
+## called by compiler (you should use pt_leaf(view))
+#def internal_pt_leaves[T](ptb: PTreeBuilder[T], *leaves):
+#  for lf in leaves:
+#    ptb.ptree_stack[-1].add_child(lf)
+#
+## called by compiler (or you could manually call it, but use pt_and/pt_or instead)
+#def internal_pt_and_begin[T](ptb: PTreeBuilder[T]):
+#  and_tree = PTree(True)
+#  ptb.ptree_stack[-1].add_child(and_tree)
+#  ptb.ptree_stack.append(and_tree)
+#
+#def internal_pt_or_begin[T](ptb: PTreeBuilder[T]):
+#  or_tree = PTree(False)
+#  ptb.ptree_stack[-1].add_child(or_tree)
+#  ptb.ptree_stack.append(or_tree)
+#
+#def internal_pt_and_end[T](ptb: PTreeBuilder[T]):
+#  assert ptb.ptree_stack[-1].is_and_node
+#  ptb.ptree_stack.pop()
+#
+#def internal_pt_or_end[T](ptb: PTreeBuilder[T]):
+#  assert ptb.ptree_stack[-1].is_or_node
+#  ptb.ptree_stack.pop()
 
 # a little helper for calling a custom generator on a node during ptree creation
 class splitter[T]:

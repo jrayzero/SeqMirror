@@ -571,7 +571,7 @@ void SimplifyVisitor::visit(ClassStmt *stmt) {
     make_shared<SimplifyItem>(SimplifyItem::Type, "", "", ctx->isToplevel(), false);
   if (!extension) {
     classItem->canonicalName = canonicalName =
-        ctx->generateCanonicalName(name, !in(stmt->attributes, "internal"));
+      ctx->generateCanonicalName(name, !in(stmt->attributes, "internal"));
     // Reference types are added to the context at this stage.
     // Record types (tuples) are added after parsing class arguments to prevent
     // recursive record types (that are allowed for reference types).
@@ -725,34 +725,31 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
   if (stmt->head->getId()->value == "pt_build") {
     std::cerr << "Found pt_build" << std::endl;
     seqassert(stmt->arg, "arg to pt_build is nullptr");
-    // replace this and wrap with internal_pt_build_begin/end
-    std::string ptb = ctx->cache->getTemporaryVar("ptb");
-    ExprPtr arg = transform(stmt->arg);
-    StmtPtr begin = N<AssignStmt>(N<IdExpr>(ptb), N<CallExpr>(transform(N<IdExpr>("internal_pt_build_begin")), move(arg)));
-    StmtPtr end = N<ExprStmt>(N<CallExpr>(transform(N<IdExpr>("internal_pt_build_end")), N<IdExpr>(ptb)));
-    ctx->pushPtb(ptb);
+    std::string pt = ctx->cache->getTemporaryVar("pt");
+    ctx->pushPtb(pt);
+    StmtPtr pt_assign = N<AssignStmt>(N<IdExpr>(pt), transform(stmt->arg));
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
     ctx->ptbPop();
-    std::vector<StmtPtr> stmts;
-    stmts.reserve(3);
-    stmts.push_back(move(begin));
+    vector<StmtPtr> stmts;
+    stmts.reserve(2);
+    stmts.push_back(move(pt_assign));
     stmts.push_back(move(suite));
-    stmts.push_back(move(end));
     resultStmt = N<SuiteStmt>(move(stmts));
   } else if (stmt->head->getId()->value == "pt_and" || stmt->head->getId()->value == "pt_or") {
     std::string s = stmt->head->getId()->value;
     std::cerr << "Found " << s << std::endl;
-    std::string ptb = ctx->ptbPeekBack();
     seqassert(!ctx->ptbEmpty(), "not in a ptree build block");
-    // replace this and wrap with internal_pt_and_begin/end
-    StmtPtr begin = N<ExprStmt>(N<CallExpr>(transform(N<IdExpr>("internal_" + s + "_begin")), N<IdExpr>(ptb)));
-    StmtPtr end = N<ExprStmt>(N<CallExpr>(transform(N<IdExpr>("internal_" + s + "_end")), N<IdExpr>(ptb)));
+    std::string pt_new = ctx->cache->getTemporaryVar("andor_child");
+    std::string parent = ctx->ptbPeekBack();
+    StmtPtr node = N<AssignStmt>(N<IdExpr>(pt_new), N<CallExpr>(N<DotExpr>(N<IdExpr>(parent), "make_andor_child"),
+                                                                N<BoolExpr>(stmt->head->getId()->value == "pt_and")));
+    ctx->pushPtb(pt_new);
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
-    std::vector<StmtPtr> stmts;
-    stmts.reserve(3);
-    stmts.push_back(move(begin));
+    ctx->ptbPop();
+    vector<StmtPtr> stmts;
+    stmts.reserve(2);
+    stmts.push_back(move(node));
     stmts.push_back(move(suite));
-    stmts.push_back(move(end));
     resultStmt = N<SuiteStmt>(move(stmts));
   } else {
     error("invalid block: {} {}", stmt->head->toString(), stmt->arg ? stmt->arg->toString() : "");
@@ -760,16 +757,19 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
 }
 
 // Cola
+// TODO I could make this a CustomStmt if I add a vector of args to custom stmt (and just keep the parsing of it separately since
+// this doesn't use a colon)
 void SimplifyVisitor::visit(LeafStmt *stmt) {
   // sanity check
   seqassert(!ctx->ptbEmpty(), "ptb context is empty");
-  std::string ptb = ctx->ptbPeekBack();
-  vector<ExprPtr> args;
-  args.emplace_back(N<IdExpr>(move(ptb)));
+  std::string parent = ctx->ptbPeekBack();
+  vector<StmtPtr> suite;
+  suite.reserve(stmt->leaves.size());
   for (auto &leaf : stmt->leaves) {
-    args.emplace_back(transform(leaf));
+    // add this as a child of the parent
+    suite.emplace_back(N<ExprStmt>(N<CallExpr>(N<DotExpr>(N<IdExpr>(parent), "add_child"), transform(leaf))));
   }
-  resultStmt = N<ExprStmt>(N<CallExpr>(transform(N<IdExpr>("internal_pt_leaves")), move(args)));
+  resultStmt = N<SuiteStmt>(move(suite));
 }
 /**************************************************************************************/
 
@@ -1475,9 +1475,9 @@ StmtPtr SimplifyVisitor::codegenMagic(const string &op, const Expr *typExpr,
 
         auto name = typExpr->getIndex() ? typExpr->getIndex()->expr->getId() : nullptr;
         stmts.push_back(N<ExprStmt>(N<CallExpr>(
-            N<DotExpr>(I("n"), "__setitem__"), N<IntExpr>(i),
-            N<StringExpr>(name && !startswith(name->value, TYPE_TUPLE) ? args[i].name
-                                                                       : ""))));
+          N<DotExpr>(I("n"), "__setitem__"), N<IntExpr>(i),
+          N<StringExpr>(name && !startswith(name->value, TYPE_TUPLE) ? args[i].name
+                                                                     : ""))));
       }
       stmts.emplace_back(N<ReturnStmt>(N<CallExpr>(
         N<DotExpr>(I("__internal__"), "tuple_str"), N<DotExpr>(I("a"), "ptr"),

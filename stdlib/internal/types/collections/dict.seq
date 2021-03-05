@@ -136,12 +136,12 @@ class Dict[K,V]:
             return val
         return self._vals[x]
 
-    def increment[T](self, key: K, by: T = 1):
+    def increment[T](self, key: K, incr: T = 1):
         ret, x = self._kh_put(key)
         if ret != 0:  # i.e. key not present
-            self._vals[x] = by
+            self._vals[x] = incr
         else:
-            self._vals[x] += by
+            self._vals[x] += incr
 
     def update(self, other: Dict[K,V]):
         for k,v in other.items():

@@ -726,7 +726,7 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
   std::cerr << "Found " << head << std::endl;
   if (head == "pt_build") {
     seqassert(stmt->args.size() == 1, "arg to pt_build is nullptr (or has multiple args)");
-    std::string pt = ctx->cache->getTemporaryVar("pt");
+    string pt = ctx->cache->getTemporaryVar("pt");
     ctx->pushPTree(pt);
     StmtPtr pt_assign = N<AssignStmt>(N<IdExpr>(pt), transform(stmt->args[0]));
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
@@ -762,7 +762,33 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
     resultStmt = N<SuiteStmt>(move(suite));
   } else if (head == "trav_build") {
     seqassert(stmt->args.size() == 1, "arg to trav_build is nullptr (or has multiple args)");
-
+    string trav = ctx->cache->getTemporaryVar("trav");
+    ctx->pushTrav(trav);
+    StmtPtr trav_assign = N<AssignStmt>(N<IdExpr>(trav), transform(stmt->args[0]));
+    StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
+    ctx->travPop();
+    vector<StmtPtr> stmts;
+    stmts.reserve(2);
+    stmts.push_back(move(trav_assign));
+    stmts.push_back(move(suite));
+    resultStmt = N<SuiteStmt>(move(stmts));
+  } else if (head == "rrot" || head == "arot" || head == "rstep" || head == "astep" || head == "aseek" || head == "link") {
+    seqassert(!ctx->travEmpty(), "not in a traversal build block");
+    string movement = "add_" + head;
+    string trav = ctx->travPeekBack();
+    vector<StmtPtr> suite;
+    suite.reserve(stmt->args.size());
+    for (auto &arg : stmt->args) {
+      // ByExpr can only happen with astep. If we see one, remove it and get its constituent pieces
+      if (head == "astep" && arg->getBy()) {
+        ExprPtr left = transform(arg->getBy()->left);
+        ExprPtr mult = transform(arg->getBy()->multiplier);
+        suite.emplace_back(N<ExprStmt>(N<CallExpr>(N<DotExpr>(N<IdExpr>(trav), movement), move(left), move(mult))));
+      } else {
+        suite.emplace_back(N<ExprStmt>(N<CallExpr>(N<DotExpr>(N<IdExpr>(trav), movement), transform(arg))));
+      }
+    }
+    resultStmt = N<SuiteStmt>(move(suite));
   } else {
     error("invalid block: {}", stmt->head->toString());
   }

@@ -213,6 +213,7 @@ and read state = parse
       | "astep" -> [P.ASTEP]
       | "aseek" -> [P.SEEK]
       | "link" -> [P.LINK]
+      | "by" -> [P.BY]
       | _          -> [P.ID id]
     }
 

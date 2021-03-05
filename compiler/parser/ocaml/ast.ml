@@ -42,6 +42,7 @@ type texpr =
   | Range of (texpr ann * texpr ann)
   | KwStar of texpr ann
   | ExSlice of (texpr ann option * texpr ann option * texpr ann option * texpr ann option)
+  | By of (texpr ann * texpr ann)
 
 and tcomprehension =
   { var : texpr ann

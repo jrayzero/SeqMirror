@@ -117,6 +117,7 @@ let print_token t =
   | ASTEP -> "ASTEP"
   | SEEK -> "SEEK"
   | LINK -> "LINK"
+  | BY -> "BY"
 
 module I = Seqgrammar.MenhirInterpreter
 

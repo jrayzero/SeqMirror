@@ -40,6 +40,7 @@ struct StmtExpr;
 struct StringExpr;
 struct TupleExpr;
 struct UnaryExpr;
+struct ByExpr;
 struct Stmt;
 
 /**
@@ -115,6 +116,7 @@ public:
   virtual const StringExpr *getString() const { return nullptr; }
   virtual const TupleExpr *getTuple() const { return nullptr; }
   virtual const UnaryExpr *getUnary() const { return nullptr; }
+  virtual const ByExpr *getBy() const { return nullptr; }
 
 protected:
   /// Add a type to S-expression string.
@@ -657,6 +659,20 @@ struct ExSliceExpr : public Expr {
 
   string toString() const override;
   ACCEPT(ASTVisitor);
+};
+
+struct ByExpr : public Expr {
+  ExprPtr left;
+  ExprPtr multiplier;
+
+  ByExpr(ExprPtr left, ExprPtr multiplier);
+  ByExpr(const ByExpr &expr);
+
+  string toString() const override;
+  ACCEPT(ASTVisitor);
+
+  const ByExpr *getBy() const override { return this; }
+
 };
 
 #undef ACCEPT

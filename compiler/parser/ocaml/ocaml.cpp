@@ -189,7 +189,8 @@ ExprPtr parse_expr(value val) {
              parse_optional(Field(t, 1), parse_expr),
              parse_optional(Field(t, 2), parse_expr),
              parse_optional(Field(t, 3), parse_expr));
-
+    case 31:
+      Return(By, parse_expr(Field(t,0)), parse_expr(Field(t,1)));
     default:
       seq::compilationError("[internal] tag variant mismatch ...");
       return nullptr;
@@ -334,7 +335,7 @@ StmtPtr parse_stmt(value val) {
     case 29:
       Return(Custom, std::make_unique<IdExpr>("astep"), parse_list(t, parse_expr));
     case 30:
-      Return(Custom, std::make_unique<IdExpr>("seek"), parse_list(t, parse_expr));
+      Return(Custom, std::make_unique<IdExpr>("aseek"), parse_list(t, parse_expr));
     case 31:
       Return(Custom, std::make_unique<IdExpr>("link"), parse_list(t, parse_expr));
     default:

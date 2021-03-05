@@ -1,4 +1,3 @@
-
 # zigzag
 
 def zz_upper(i):
@@ -8,7 +7,7 @@ def zz_upper(i):
       astep (0,0)
     else:
       link zz_upper(i-2)
-      astep (0,1) (1,-1) by i-1 (1,0) (-1,1) by i
+      astep (0,1), (1,-1) by i-1, (1,0), (-1,1) by i
   return trav
 
 def zz_lower(i):
@@ -17,7 +16,7 @@ def zz_lower(i):
     if i == 0:
       astep (0,0)
     else:
-      astep (-1,1) by i (1,0) (-1,1) by i-1 (0,1) 
+      astep (-1,1) by i, (1,0), (-1,1) by i-1, (0,1) 
       link zz_lower(i-2)
   return trav
 
@@ -25,47 +24,37 @@ def zigzag(N):
   trav = Traversal()
   trav_build trav:
     link zz_upper(N-2)
-    astep (0,1) (1,-1) by N-1 (0,1)
+    astep (0,1), (1,-1) by N-1, (0,1)
     link zz_lower(N-2)
   return trav
 
 N = 8
 block = Block[int](N,N)
-for zz in zigzag(N)(block):
-  pass
+zigzag(N)
+#for zz in zigzag(N)(block):
+#  pass
 
 # hilbert
-
-def hilbertA(i,N):
+def hilbert(i,N,which):
   trav = Traversal()
-  trav_build trav:
+  trav_build trav: 
     if i == N:
       astep (0,0)
     else:
-      rrot 90
-      link hilbertB(i+1)
+      rrot 90 if which else 270
+      link hilbert(i+1, N, not which)
       rstep 1
-      rrot 270
-      rstep hilbertA(i+1) 1 hilbertA(i+1)
-      rrot 270
-      rstep 1 hilbertB(i+1)
-      rrot 90
+      rrot 270 if which else 90
+      link hilbert(i+1, N, which) 
+      rstep 1 
+      link hilbert(i+1, N, which)
+      rrot 270 if which else 90
+      rstep 1 
+      link hilbert(i+1, N, not which)
+      rrot 90 if which else 270
   return trav
 
-def hilbertB(i,N):
-  trav = Traversal()
-  trav_build trav:
-    if i == N:
-      astep (0,0)
-    else:
-      rrot 270
-      astep hilbertA(i+1) 1
-      rrot 90
-      astep hilbertB(i+1) 1 hilbertB(i+1)
-      rrot 90
-      rstep 1 hilbertA(i+1)
-      rrot 270
-  return trav
+
 
 # diagonal
 #def diag_upper(i):

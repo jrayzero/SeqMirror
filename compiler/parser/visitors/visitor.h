@@ -64,6 +64,7 @@ public:
   virtual void visit(StmtExpr *);
   // COLA
   virtual void visit(ExSliceExpr *);
+  virtual void visit(ByExpr *);
 
   virtual void visit(AssignMemberStmt *);
   virtual void visit(UpdateStmt *);

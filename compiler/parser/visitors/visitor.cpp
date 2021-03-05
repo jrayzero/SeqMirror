@@ -49,6 +49,7 @@ void ASTVisitor::visit(RangeExpr *expr) { defaultVisit(expr); }
 void ASTVisitor::visit(InstantiateExpr *expr) { defaultVisit(expr); }
 void ASTVisitor::visit(StmtExpr *expr) { defaultVisit(expr); }
 void ASTVisitor::visit(ExSliceExpr *expr) { defaultVisit(expr); }
+void ASTVisitor::visit(ByExpr *expr) { defaultVisit(expr); }
 
 void ASTVisitor::visit(SuiteStmt *stmt) { defaultVisit(stmt); }
 void ASTVisitor::visit(PassStmt *stmt) { defaultVisit(stmt); }

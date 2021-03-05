@@ -314,6 +314,15 @@ string ExSliceExpr::toString() const {
 }
 ACCEPT_IMPL(ExSliceExpr, ASTVisitor);
 
+ByExpr::ByExpr(seq::ast::ExprPtr left, seq::ast::ExprPtr multiplier) :
+  Expr(), left(move(left)), multiplier(move(multiplier)) { }
+ByExpr::ByExpr(const seq::ast::ByExpr &expr) :
+  Expr(expr), left(ast::clone(expr.left)), multiplier(ast::clone(expr.multiplier)) { }
+string ByExpr::toString() const {
+  return wrapType(format("{} by {}", left->toString(), multiplier->toString()));
+}
+ACCEPT_IMPL(ByExpr, ASTVisitor);
+
 EllipsisExpr::EllipsisExpr(bool isPipeArg) : Expr(), isPipeArg(isPipeArg) {}
 string EllipsisExpr::toString() const { return wrapType("ellipsis"); }
 ACCEPT_IMPL(EllipsisExpr, ASTVisitor);

@@ -28,7 +28,7 @@
 %token<string> PIPE PPIPE SPIPE B_AND B_OR B_XOR B_NOT B_LSH B_RSH
 %token<string> LSHEQ RSHEQ ANDEQ OREQ XOREQ
 /* COLA custom */
-%token PTREE_BUILD LEAF TRAV_BUILD RROT AROT RSTEP ASTEP SEEK LINK
+%token PTREE_BUILD LEAF TRAV_BUILD RROT AROT RSTEP ASTEP SEEK LINK BY
 /* operator precedence */
 %left B_OR
 %left B_XOR
@@ -127,6 +127,9 @@ cond_expr:
   | arith_expr cond_op cond_expr { $loc, CondBinary ($1, $2, $3) }
 %inline cond_op:
   LESS | LEQ | GREAT | GEQ | EEQ | NEQ | IS | ISNOT | IN | NOTIN { $1 }
+by_expr:
+  | expr { $1 }
+  | expr BY expr { $loc, By ($1, $3) }
 
 arith_expr:
   | arith_term { $1 }
@@ -184,7 +187,7 @@ small_statement:
   | RROT FLNE(COMMA, expr) { [$loc, RRot ($2)] }
   | AROT FLNE(COMMA, expr) { [$loc, ARot ($2)] }
   | RSTEP FLNE(COMMA, expr) { [$loc, RStep ($2)] }
-  | ASTEP FLNE(COMMA, expr) { [$loc, AStep ($2)] }
+  | ASTEP FLNE(COMMA, by_expr) { [$loc, AStep ($2)] }
   | SEEK FLNE(COMMA, expr) { [$loc, Seek ($2)] }
   | LINK FLNE(COMMA, expr) { [$loc, Link ($2)] }
   | import_statement { $1 }

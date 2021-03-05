@@ -1,6 +1,3 @@
-CTU = Block[int](32,32)
-pt = PTree[int](CTU)
-
 def quadtree_split(node):
   I = node.dims()[0]
   I2 = I // 2
@@ -9,6 +6,9 @@ def quadtree_split(node):
   for i in range(0,I,I2):
     for j in range(0,J,J2):
       yield node[i:i+I2,j:j+J2]
+
+CTU = Block[int](32,32)
+pt = PTree[int](CTU)
 
 pt_build pt:
   pt_or:
@@ -22,7 +22,6 @@ pt_build pt:
             for quadrant2 in splitter(quadrant, quadtree_split):
               pt_leaf quadrant2
 
-print(pt)
 
 andtree_refs = [
   [([32,32],[0,0])],
@@ -92,9 +91,31 @@ andtree_refs = [
    ([8,8],[16,16]), ([8,8],[16,24]), ([8,8],[24,16]), ([8,8],[24,24])]
 ]
 
-assert pt.andtrees_equal(andtree_refs)
+@test
+def t0():
+  assert pt.andtrees_equal(andtree_refs)
+t0()
 
-for idx,andtree in enumerate(pt):
-  print(andtree)
-  for leaf in andtree:
-    print(leaf.shorthand())
+@test
+def t1():
+  assert PTree(CTU, Or[int]([PTree(CTU), And[int]([Or[int]([PTree(q), And[int]([q2 for q2 in splitter(q, quadtree_split)])]) for q in splitter(CTU, quadtree_split)])])).andtrees_equal(andtree_refs)
+t1()
+
+#for idx,andtree in enumerate(pt):
+#  print(andtree)
+#  for leaf in andtree:
+#    print(leaf.shorthand())
+
+# mix and match notations to some degree
+def t3():
+  pt = PTree[int](CTU)
+  pt_build pt:
+    pt_or:
+      pt_leaf CTU
+      pt_and:
+        for quadrant in splitter(CTU, quadtree_split):
+          pt_or:
+            pt_leaf quadrant
+            pt_leaf And[int]([quad2 for quad2 in splitter(quadrant, quadtree_split)])
+  assert pt.andtrees_equal(andtree_refs)
+t3()

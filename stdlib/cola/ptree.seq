@@ -1,5 +1,3 @@
-#from block import View, Block
-
 # this is basically just a collection of leaf nodes
 class AndPTree[T]:
 
@@ -109,14 +107,8 @@ class AndPTree[T]:
           return False
     return True
 
-# each PTree is also a tree node
-# this tree is a little different than how I've done it before. 
 class PTree[T]:
-    
-  # leaf nodes have no children
-  # root nodes have only one child (and/or node)
-  # and/or nodes have and/or or leaf nodes as children. If a root node is attempted to be added, the child is grabbed instead    
-#  ptree_type: bool # true == and, false == or
+
   is_and_node: bool
 
   is_or_node: bool
@@ -132,6 +124,26 @@ class PTree[T]:
   # filled in if !leaf and !root
   children: list[PTree[T]]
 
+def And[T](nodes):
+  pt = PTree[T](True)
+  for node in nodes:
+    pt.add_child(node)
+  return pt
+
+def Or[T](nodes):
+  pt = PTree[T](False)
+  for node in nodes:
+    pt.add_child(node)
+  return pt
+
+# each PTree is also a tree node
+# this tree is a little different than how I've done it before. 
+@extend
+class PTree[T]:
+    
+  # leaf nodes have no children
+  # root nodes have only one child (and/or node)
+  # and/or nodes have and/or or leaf nodes as children. If a root node is attempted to be added, the child is grabbed instead    
   def __init__(self):
     self.children = []
     self.nandtrees = 0
@@ -155,15 +167,14 @@ class PTree[T]:
   def __init__(self, is_and_node: bool):
     self.is_and_node = is_and_node
     self.is_or_node = not is_and_node
-#    self.ptree_type = ptree_type
     self.children = []
     self.nandtrees = 0
 
-#  def is_and_node(self):
-#    return not self.leaf and not self.root and self.ptree_type
-
-#  def is_or_node(self):
-#    return not self.leaf and not self.root and not self.ptree_type
+  # shorthand for creating and trees
+  
+  def __init__(self, root, node: PTree[T]):
+    self.__init__(root)
+    self.add_child(node)
 
   def set_leaf(self, leaf: Block[T]):
     self.leaf = View(leaf)
@@ -195,12 +206,6 @@ class PTree[T]:
       else:
         # this has some children. Rip of the root and directly add the children
         self.children.append(child.children[0])
-#      pt = PTree[T](True)
-#      pt.add_child(child)
-#      self.children.append(child)
-#      if len(child.children) == 1:
-#        self.children.append(child.children[0])
-#      self.children.append(child)
 
     else:
       if (self.is_and_node and child.is_and_node) or (self.is_or_node and child.is_or_node):
@@ -349,10 +354,6 @@ class PTreeBuilder[T]:
     self.ptree = ptree
     self.ptree_stack = []
 
-# these are stubs replaced with calls to internal_pt_leaf by the compiler, hence the lack of bodies
-#def pt_leaf(lf):
-#  raise StubError()
-
 # called by compiler
 def internal_pt_build_begin[T](ptree: PTree[T]):
   ptb = PTreeBuilder[T](ptree)
@@ -365,8 +366,6 @@ def internal_pt_build_end[T](ptb: PTreeBuilder[T]):
 
 # called by compiler (you should use pt_leaf(view))
 def internal_pt_leaves[T](ptb: PTreeBuilder[T], *leaves):
-#  child = PTree(True)
-#  child.set_leaf(lf)
   for lf in leaves:
     ptb.ptree_stack[-1].add_child(lf)
 

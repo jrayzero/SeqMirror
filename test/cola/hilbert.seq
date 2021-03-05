@@ -31,11 +31,15 @@ def build(node, parent_perm=[0,1,2,3]):
     pd = build(quadrants[2], parent_perm)
     pb = build(quadrants[3], right_perm)
 
-    pt = PTree[int](node)
-    pt_build pt:
-      pt_and:
-        pt_leaf pa, pc, pd, pb
-    return pt          
+#    pt = PTree[int](node)
+    # alternative shorthand notation
+    return PTree(node, And[int]([pa, pc, pd, pb]))
+#    pt_build pt:
+#      pt_and:
+#        pt_leaf pa, pc, pd, pb
+#    return pt          
+
+
 
 print(build(Block[int](1,1)))
 print(build(Block[int](2,2)))

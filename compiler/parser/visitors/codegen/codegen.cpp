@@ -3,6 +3,7 @@
 #include <sstream>
 #include <stack>
 #include <string>
+#include <sys/stat.h>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
@@ -146,6 +147,10 @@ CodegenVisitor::initializeContext(shared_ptr<CodegenContext> ctx) {
 IRModule *CodegenVisitor::apply(shared_ptr<Cache> cache, StmtPtr stmts) {
   auto *module = cache->module;
   auto *main = cast<BodiedFunc>(module->getMainFunc());
+
+  char buf[PATH_MAX + 1];
+  realpath(cache->module0.c_str(), buf);
+  main->setSrcInfo({std::string(buf), 0, 0, 0, 0});
 
   auto *block = module->Nr<SeriesFlow>("body");
   main->setBody(block);

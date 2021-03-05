@@ -1,0 +1,86 @@
+
+# zigzag
+
+def zz_upper(i):
+  trav = Traversal()
+  trav_build trav:
+    if i == 0:
+      astep (0,0)
+    else:
+      link zz_upper(i-2)
+      astep (0,1) (1,-1) by i-1 (1,0) (-1,1) by i
+  return trav
+
+def zz_lower(i):
+  trav = Traversal()
+  trav_build trav:
+    if i == 0:
+      astep (0,0)
+    else:
+      astep (-1,1) by i (1,0) (-1,1) by i-1 (0,1) 
+      link zz_lower(i-2)
+  return trav
+
+def zigzag(N):
+  trav = Traversal()
+  trav_build trav:
+    link zz_upper(N-2)
+    astep (0,1) (1,-1) by N-1 (0,1)
+    link zz_lower(N-2)
+  return trav
+
+N = 8
+block = Block[int](N,N)
+for zz in zigzag(N)(block):
+  pass
+
+# hilbert
+
+def hilbertA(i,N):
+  trav = Traversal()
+  trav_build trav:
+    if i == N:
+      astep (0,0)
+    else:
+      rrot 90
+      link hilbertB(i+1)
+      rstep 1
+      rrot 270
+      rstep hilbertA(i+1) 1 hilbertA(i+1)
+      rrot 270
+      rstep 1 hilbertB(i+1)
+      rrot 90
+  return trav
+
+def hilbertB(i,N):
+  trav = Traversal()
+  trav_build trav:
+    if i == N:
+      astep (0,0)
+    else:
+      rrot 270
+      astep hilbertA(i+1) 1
+      rrot 90
+      astep hilbertB(i+1) 1 hilbertB(i+1)
+      rrot 90
+      rstep 1 hilbertA(i+1)
+      rrot 270
+  return trav
+
+# diagonal
+#def diag_upper(i):
+#  trav = Traversal()
+#  trav_build trav:
+#    if i == 0:
+#      astep (1,0)
+#    else:
+#      astep diag_upper(i-1)
+#      astep (i+1,-i)
+#      astep (-1,1) by i
+
+
+#diagonal.axiom([90,ST,A(1,N-1),135,ST])
+#diagonal.rule(A(i,j),[225,ST*i,B(i+1,j)],i<N)
+#diagonal.rule(B(i,j),[225,SK*(i-1),270,SK*i,A(i,j)],i<N)
+#diagonal.rule(A(i,j),[225,ST*(j-1),B(i,j-1)],(i==N)&(j>1))
+#diagonal.rule(B(i,j),[225,SK*(j-1),270,SK*j,A(i,j)],(i==N)&(j>1)

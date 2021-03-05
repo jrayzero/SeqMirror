@@ -10,6 +10,7 @@ def quadtree_split(node):
 CTU = Block[int](32,32)
 pt = PTree[int](CTU)
 
+# TODO if you use a random view from a different block, then you get an invalid tree that may be hard to debug
 pt_build pt:
   pt_or:
     # The keyword is pt_leaf rather than leaf since I want to actually be able to use the leaf as an identifier

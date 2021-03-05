@@ -722,38 +722,37 @@ void SimplifyVisitor::visit(ClassStmt *stmt) {
 
 void SimplifyVisitor::visit(CustomStmt *stmt) {
   // COLA
-  if (stmt->head->getId()->value == "pt_build") {
-    std::cerr << "Found pt_build" << std::endl;
+  string head = stmt->head->getId()->value;
+  std::cerr << "Found " << head << std::endl;
+  if (head == "pt_build") {
     seqassert(stmt->args.size() == 1, "arg to pt_build is nullptr (or has multiple args)");
     std::string pt = ctx->cache->getTemporaryVar("pt");
-    ctx->pushPtb(pt);
+    ctx->pushPTree(pt);
     StmtPtr pt_assign = N<AssignStmt>(N<IdExpr>(pt), transform(stmt->args[0]));
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
-    ctx->ptbPop();
+    ctx->ptreePop();
     vector<StmtPtr> stmts;
     stmts.reserve(2);
     stmts.push_back(move(pt_assign));
     stmts.push_back(move(suite));
     resultStmt = N<SuiteStmt>(move(stmts));
-  } else if (stmt->head->getId()->value == "pt_and" || stmt->head->getId()->value == "pt_or") {
-    std::string s = stmt->head->getId()->value;
-    std::cerr << "Found " << s << std::endl;
-    seqassert(!ctx->ptbEmpty(), "not in a ptree build block");
+  } else if (head == "pt_and" || head == "pt_or") {
+    seqassert(!ctx->ptreeEmpty(), "not in a ptree build block");
     std::string pt_new = ctx->cache->getTemporaryVar("andor_child");
-    std::string parent = ctx->ptbPeekBack();
+    std::string parent = ctx->ptreePeekBack();
     StmtPtr node = N<AssignStmt>(N<IdExpr>(pt_new), N<CallExpr>(N<DotExpr>(N<IdExpr>(parent), "make_andor_child"),
                                                                 N<BoolExpr>(stmt->head->getId()->value == "pt_and")));
-    ctx->pushPtb(pt_new);
+    ctx->pushPTree(pt_new);
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
-    ctx->ptbPop();
+    ctx->ptreePop();
     vector<StmtPtr> stmts;
     stmts.reserve(2);
     stmts.push_back(move(node));
     stmts.push_back(move(suite));
     resultStmt = N<SuiteStmt>(move(stmts));
-  } else if (stmt->head->getId()->value == "pt_leaf") {
-    seqassert(!ctx->ptbEmpty(), "not in a ptree build block");
-    std::string parent = ctx->ptbPeekBack();
+  } else if (head == "pt_leaf") {
+    seqassert(!ctx->ptreeEmpty(), "not in a ptree build block");
+    std::string parent = ctx->ptreePeekBack();
     vector<StmtPtr> suite;
     suite.reserve(stmt->args.size());
     for (auto &leaf : stmt->args) {
@@ -761,6 +760,9 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
       suite.emplace_back(N<ExprStmt>(N<CallExpr>(N<DotExpr>(N<IdExpr>(parent), "add_child"), transform(leaf))));
     }
     resultStmt = N<SuiteStmt>(move(suite));
+  } else if (head == "trav_build") {
+    seqassert(stmt->args.size() == 1, "arg to trav_build is nullptr (or has multiple args)");
+
   } else {
     error("invalid block: {}", stmt->head->toString());
   }

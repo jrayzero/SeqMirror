@@ -40,8 +40,10 @@ protected:
   /// current block.
   std::deque<vector<string>> stack;
   // COLA
-  /// stack of vars representing ptree creation blocks. Used for transforming pt calls
-  std::vector<std::string> pt_begin_vars;
+  /// stack of vars representing ptree creation blocks.
+  vector<string> ptree_stack;
+  /// stack of vars representing traversal creation blocks.
+  vector<string> trav_stack;
 
 private:
   /// Set of current context flags.
@@ -136,13 +138,21 @@ public:
   virtual void dump() {}
 
   // COLA
-  void pushPtb(std::string ptb) { pt_begin_vars.push_back(ptb); }
+  void pushPTree(string ptree) { ptree_stack.push_back(ptree); }
 
-  std::string ptbPop() { std::string ptb = pt_begin_vars.back(); pt_begin_vars.pop_back(); return ptb; }
+  string ptreePop() { string pt = ptree_stack.back(); ptree_stack.pop_back(); return pt; }
 
-  std::string ptbPeekBack() { return !ptbEmpty() ? pt_begin_vars.back() : ""; }
+  string ptreePeekBack() const { return !ptreeEmpty() ? ptree_stack.back() : ""; }
 
-  bool ptbEmpty() const { return pt_begin_vars.empty(); }
+  bool ptreeEmpty() const { return ptree_stack.empty(); }
+
+  void pushTrav(string trav) { trav_stack.push_back(trav); }
+
+  string travPop() { string trav = trav_stack.back(); trav_stack.pop_back(); return trav; }
+
+  string travPeekBack() const { return !travEmpty() ? trav_stack.back() : ""; }
+
+  bool travEmpty() const { return trav_stack.empty(); }
 
 private:
   /// Removed an identifier from the map only.

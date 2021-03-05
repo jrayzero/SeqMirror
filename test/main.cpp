@@ -227,57 +227,57 @@ auto getTypeTests(const vector<string> &files) {
   return cases;
 }
 
-// clang-format off
-INSTANTIATE_TEST_SUITE_P(
-    TypeTests, SeqTest,
-    testing::ValuesIn(getTypeTests({
-      "parser/simplify_expr.seq",
-      "parser/simplify_stmt.seq",
-      "parser/typecheck_expr.seq",
-      "parser/typecheck_stmt.seq",
-      "parser/statements.seq",
-      "parser/types.seq",
-      "parser/llvm.seq"
-    })),
-    getTypeTestNameFromParam);
+//// clang-format off
+//INSTANTIATE_TEST_SUITE_P(
+//    TypeTests, SeqTest,
+//    testing::ValuesIn(getTypeTests({
+//      "parser/simplify_expr.seq",
+//      "parser/simplify_stmt.seq",
+//      "parser/typecheck_expr.seq",
+//      "parser/typecheck_stmt.seq",
+//      "parser/statements.seq",
+//      "parser/types.seq",
+//      "parser/llvm.seq"
+//    })),
+//    getTypeTestNameFromParam);
 
-INSTANTIATE_TEST_SUITE_P(
-    CoreTests, SeqTest,
-    testing::Combine(
-      testing::Values(
-        "core/helloworld.seq",
-        // "core/llvmops.seq",
-        "core/arithmetic.seq",
-        "core/parser.seq",
-        "core/generics.seq",
-        "core/generators.seq",
-        "core/exceptions.seq",
-        "core/big.seq",
-        "core/containers.seq",
-        "core/trees.seq",
-        "core/range.seq",
-        "core/bltin.seq",
-        "core/arguments.seq",
-        "core/match.seq",
-        "core/formats.seq",
-        "core/serialization.seq",
-        "core/empty.seq"
-      ),
-      testing::Values(true, false),
-      testing::Values(""),
-      testing::Values(""),
-      testing::Values(0),
-      testing::Values(false)
-    ),
-    getTestNameFromParam);
+//INSTANTIATE_TEST_SUITE_P(
+//    CoreTests, SeqTest,
+//    testing::Combine(
+//      testing::Values(
+//        "core/helloworld.seq",
+//        // "core/llvmops.seq",
+//        "core/arithmetic.seq",
+//        "core/parser.seq",
+//        "core/generics.seq",
+//        "core/generators.seq",
+//        "core/exceptions.seq",
+//        "core/big.seq",
+//        "core/containers.seq",
+//        "core/trees.seq",
+//        "core/range.seq",
+//        "core/bltin.seq",
+//        "core/arguments.seq",
+//        "core/match.seq",
+//        "core/formats.seq",
+//        "core/serialization.seq",
+//        "core/empty.seq"
+//      ),
+//      testing::Values(true, false),
+//      testing::Values(""),
+//      testing::Values(""),
+//      testing::Values(0),
+//      testing::Values(false)
+//    ),
+//    getTestNameFromParam);
 
 INSTANTIATE_TEST_SUITE_P(
     ColaTests, SeqTest,
     testing::Combine(
       testing::Values(
-        "cola/blocks_and_views.seq"
+        "cola/blocks_and_views.seq",
 //        "cola/hilbert.seq",
-//        "cola/trees.seq",
+        "cola/trees.seq"
 //        "cola/zigzag.seq"
       ),
       testing::Values(true, false),
@@ -288,28 +288,28 @@ INSTANTIATE_TEST_SUITE_P(
     ),
     getTestNameFromParam);
 
-INSTANTIATE_TEST_SUITE_P(
-    StdlibTests, SeqTest,
-    testing::Combine(
-      testing::Values(
-        "stdlib/str_test.seq",
-        "stdlib/math_test.seq",
-        "stdlib/itertools_test.seq",
-        "stdlib/bisect_test.seq",
-        "stdlib/random_test.seq",
-        "stdlib/statistics_test.seq",
-        "stdlib/sort_test.seq",
-        "stdlib/heapq_test.seq",
-        "python/pybridge.seq"
-      ),
-      testing::Values(true, false),
-      testing::Values(""),
-      testing::Values(""),
-      testing::Values(0),
-      testing::Values(false)
-    ),
-    getTestNameFromParam);
-// clang-format on
+//INSTANTIATE_TEST_SUITE_P(
+//    StdlibTests, SeqTest,
+//    testing::Combine(
+//      testing::Values(
+//        "stdlib/str_test.seq",
+//        "stdlib/math_test.seq",
+//        "stdlib/itertools_test.seq",
+//        "stdlib/bisect_test.seq",
+//        "stdlib/random_test.seq",
+//        "stdlib/statistics_test.seq",
+//        "stdlib/sort_test.seq",
+//        "stdlib/heapq_test.seq",
+//        "python/pybridge.seq"
+//      ),
+//      testing::Values(true, false),
+//      testing::Values(""),
+//      testing::Values(""),
+//      testing::Values(0),
+//      testing::Values(false)
+//    ),
+//    getTestNameFromParam);
+//// clang-format on
 
 int main(int argc, char *argv[]) {
   argv0 = ast::executable_path(argv[0]);

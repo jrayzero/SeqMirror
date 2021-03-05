@@ -1,0 +1,75 @@
+class Movement:
+
+  # seek = 0, astep = 1, rstep = 2, arot = 3, rrot = 4
+  mtype: int
+  rotation: Optional[int]
+  step: list[int]
+  step_multiplier: Optional[int]
+
+  def __init__(self, mtype: int):
+    assert mtype == 0 or mtype == 1 or mtype == 2 or mtype == 3 or mtype == 4
+    self.mtype = mtype
+
+  def set_rotation(self, rot: int):
+    assert self.is_arot() or self.is_rrot()
+    assert int >= 0
+    self.rotation = rot
+
+  def set_step(self, step: list[int], step_multiplier: int=1):
+    assert self.is_seek() or self.is_astep() or self.is_rstep()
+    if self.is_seek():
+      assert step_multiplier == 1
+      for i in step:
+        assert i >= 0 # doesn't make sense to seek to a negative position
+    self.step = step
+    self.step_multiplier = step_multiplier
+
+  def is_seek(self):
+    return self.mtype == 0
+
+  def is_astep(self):
+    return self.mtype == 1
+
+  def is_rstep(self):
+    return self.mtype == 2
+
+  def is_arot(self):
+    return self.mtype == 3
+
+  def is_rrot(self):
+    return self.mtype == 4
+
+class Traversal:
+
+  movements: list[Movement]
+
+  def __init__(self):
+    self.movements = []
+
+  def add_movement(self, movement: Movement):
+    self.movements.append(movement)
+
+  def link(self, traversal: Traversal):
+    for movement in traversal.movements:
+      self.add_movement(movement)
+
+  # iterating through this
+  def __iter__(self):
+
+
+class AppliedTraversal[T]:
+  
+  traversal: Traversal
+  root: View[T]
+
+  def __init__(self, root: Block[T]):
+    self.root = View(root)
+
+  def __init__(self, root: View[T]):
+    self.root = root
+
+@extend 
+class Traversal:
+
+  def __call__[T](self, root):
+    return AppliedTraversal(root)  

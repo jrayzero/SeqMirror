@@ -323,7 +323,21 @@ StmtPtr parse_stmt(value val) {
     Return(Custom, std::make_unique<IdExpr>("pt_build"), parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)));
   case 24:
     Return(Custom, std::make_unique<IdExpr>("pt_leaf"), parse_list(t, parse_expr));
-  default:
+    case 25:
+      Return(Custom, std::make_unique<IdExpr>("trav_build"), parse_expr(Field(t, 0)), parse_stmt_list(Field(t, 1)));
+    case 26:
+      Return(Custom, std::make_unique<IdExpr>("rrot"), parse_list(t, parse_expr));
+    case 27:
+      Return(Custom, std::make_unique<IdExpr>("arot"), parse_list(t, parse_expr));
+    case 28:
+      Return(Custom, std::make_unique<IdExpr>("rstep"), parse_list(t, parse_expr));
+    case 29:
+      Return(Custom, std::make_unique<IdExpr>("astep"), parse_list(t, parse_expr));
+    case 30:
+      Return(Custom, std::make_unique<IdExpr>("seek"), parse_list(t, parse_expr));
+    case 31:
+      Return(Custom, std::make_unique<IdExpr>("link"), parse_list(t, parse_expr));
+    default:
     seq::compilationError("[internal] tag variant mismatch ...");
     return nullptr;
   }

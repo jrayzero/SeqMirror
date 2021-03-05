@@ -206,6 +206,13 @@ and read state = parse
       | "not"      -> [P.NOT "!"]
       | "pt_build" -> [P.PTREE_BUILD]
       | "pt_leaf"  -> [P.LEAF]
+      | "trav_build" -> [P.TRAV_BUILD]
+      | "rrot" -> [P.RROT]
+      | "arot" -> [P.AROT]
+      | "rstep" -> [P.RSTEP]
+      | "astep" -> [P.ASTEP]
+      | "seek" -> [P.SEEK]
+      | "link" -> [P.LINK]
       | _          -> [P.ID id]
     }
 

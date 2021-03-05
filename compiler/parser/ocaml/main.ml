@@ -110,6 +110,13 @@ let print_token t =
   | WALRUS s -> ":="
   | PTREE_BUILD -> "PT_BUILD"
   | LEAF -> "PT_LEAF"
+  | TRAV_BUILD -> "TRAV_BUILD"
+  | RROT -> "RROT"
+  | AROT -> "AROT"
+  | RSTEP -> "RSTEP"
+  | ASTEP -> "ASTEP"
+  | SEEK -> "SEEK"
+  | LINK -> "LINK"
 
 module I = Seqgrammar.MenhirInterpreter
 

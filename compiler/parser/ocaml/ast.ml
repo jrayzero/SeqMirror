@@ -83,6 +83,13 @@ type tstmt =
   (*Cola*)
   | PTreeBuild of (texpr ann * tstmt ann list)
   | Leaf of texpr ann list
+  | TravBuild of (texpr ann * tstmt ann list)
+  | RRot of texpr ann list
+  | ARot of texpr ann list
+  | RStep of texpr ann list
+  | AStep of texpr ann list
+  | Seek of texpr ann list
+  | Link of texpr ann list
 
 and import =
   { imp_from: texpr ann

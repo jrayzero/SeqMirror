@@ -28,7 +28,7 @@
 %token<string> PIPE PPIPE SPIPE B_AND B_OR B_XOR B_NOT B_LSH B_RSH
 %token<string> LSHEQ RSHEQ ANDEQ OREQ XOREQ
 /* COLA custom */
-%token PTREE_BUILD LEAF
+%token PTREE_BUILD LEAF TRAV_BUILD RROT AROT RSTEP ASTEP SEEK LINK
 /* operator precedence */
 %left B_OR
 %left B_XOR
@@ -181,6 +181,12 @@ small_statement:
   | GLOBAL FLNE(COMMA, ID) { List.map (fun e -> $loc, Global e) $2 }
   | PRINT FL_HAS(COMMA, expr) { [$loc, Print (fst $2, snd $2)] }
   | LEAF FLNE(COMMA, expr) { [$loc, Leaf ($2)] }
+  | RROT FLNE(COMMA, expr) { [$loc, RRot ($2)] }
+  | AROT FLNE(COMMA, expr) { [$loc, ARot ($2)] }
+  | RSTEP FLNE(COMMA, expr) { [$loc, RStep ($2)] }
+  | ASTEP FLNE(COMMA, expr) { [$loc, AStep ($2)] }
+  | SEEK FLNE(COMMA, expr) { [$loc, Seek ($2)] }
+  | LINK FLNE(COMMA, expr) { [$loc, Link ($2)] }
   | import_statement { $1 }
   | assign_statement { $1 }
 small_single_statement:
@@ -208,6 +214,7 @@ single_statement:
   | try_statement | with_statement | class_statement { $1 }
   | ID COLON NL INDENT statement+ DEDENT { $loc, Custom (($loc($1), Id $1), List.concat $5) }
   | PTREE_BUILD expr COLON NL INDENT statement+ DEDENT { $loc, PTreeBuild ($2, List.concat $6) }
+  | TRAV_BUILD expr COLON NL INDENT statement+ DEDENT { $loc, TravBuild ($2, List.concat $6) }
 
 suite:
   | FLNE(SEMICOLON, small_statement) NL { List.concat $1 }

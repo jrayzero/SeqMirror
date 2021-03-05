@@ -13,7 +13,7 @@ class Movement:
 
   def set_rotation(self, angle: int):
     assert self.is_arot() or self.is_rrot()
-    assert angle >= 0
+    assert abs(angle) % 45 == 0
     self.angle = angle
 
   def set_step(self, step, step_multiplier: int=1):
@@ -48,8 +48,19 @@ class Traversal:
 
   movements: list[Movement]
 
-  def __init__(self):
+  origin: list[int]
+
+  ndims: int
+
+  # these are the asteps that correspond to a single step with the current
+  # orientation
+  clockwise_angle_steps: dict[int,Tuple[int,int]]
+
+  def __init__(self, ndims):
+    self.ndims = ndims
     self.movements = []
+    self.origin = [0] * ndims
+    self.clockwise_angle_steps = {0:(1,0), 45:(1,1), 90:(0,1), 135:(-1,1), 180:(-1,0), 225:(-1,-1), 270:(0,-1), 315:(1,-1) }
 
   def add_movement(self, movement: Movement):
     self.movements.append(movement)
@@ -69,12 +80,18 @@ class Traversal:
     movement.set_step(multiplier)
     self.add_movement(movement)
 
+  # Note to self: don't immediately convert these to asteps b/c rotations don't actually
+  # do a step themselves. I made this thought mistake once already.
+  # Also, rotations are only supported for 2 dims because I don't know how to 
+  # generalize them (something like an inverse projection...)
   def add_arot(self, angle):
+    assert self.ndims == 2
     movement = Movement(3)
     movement.set_rotation(angle)
     self.add_movement(movement)
 
   def add_rrot(self, angle):
+    assert self.ndims == 2
     movement = Movement(4)
     movement.set_rotation(angle)
     self.add_movement(movement)
@@ -83,23 +100,78 @@ class Traversal:
     for movement in traversal.movements:
       self.add_movement(movement)
 
-  # iterating through this
+  def __call__(self, origin):
+    self.origin = [o for o in origin]
+    assert len(self.origin) == self.ndims
+
+  def _gen_coords(self):
+    cur_coord = [c for c in self.origin]
+    cur_angle = 0
+    for movement in self.movements:
+      if movement.is_seek():
+        cur_coord = [m for m in movement.step]
+        yield cur_coord
+      elif movement.is_astep():
+        for _ in range(~movement.step_multiplier):
+          cur_coord = [c0+c1 for c0,c1 in zip(cur_coord, movement.step)]
+          yield cur_coord
+      elif movement.is_rstep():
+        step = self.clockwise_angle_steps[cur_angle % 360]
+        for _ in range(~movement.step_multiplier):
+          cur_coord = [c0+c1 for c0,c1 in zip(cur_coord, step)]
+          yield cur_coord
+      elif movement.is_arot():
+        cur_angle = ~movement.angle
+      else: #movement.is_rrot():
+        cur_angle += ~movement.angle
+        
+  # iterating through this just returns the coordinates since it's not tied to any 
+  # particular block
   def __iter__(self):
-    pass
+    return self._gen_coords()
+
+  def __str__(self):
+    return ' -> '.join([str(coord) for coord in self])
 
 class AppliedTraversal[T]:
   
   traversal: Traversal
   root: View[T]
+  origin: list[int]
 
   def __init__(self, root: Block[T]):
     self.root = View(root)
+    self.origin = [0] * len(self.root.dims())
 
   def __init__(self, root: View[T]):
     self.root = root
+    self.origin = [0] * len(self.root.dims())
+
+  def __init__(self, root: Block[T], origin):
+    self.root = View(root)
+    self.origin = [o for o in origin]
+    assert len(self.origin) == len(root.dims())
+
+  def __init__(self, root: View[T], origin):
+    self.root = root
+    self.origin = [o for o in origin]
+    assert len(self.origin) == len(root.dims())
 
 @extend 
 class Traversal:
 
-  def __call__[T](self, root):
-    return AppliedTraversal(root)  
+  def __call__[T](self, root: Block[T]):
+    assert len(root.dims) == self.ndims
+    return AppliedTraversal(root)
+
+  def __call__[T](self, root: View[T]):
+    assert len(root.dims) == self.ndims
+    return AppliedTraversal(root)
+
+  def __call__[T](self, root: Block[T], origin):
+    assert len(root.dims) == self.ndims
+    return AppliedTraversal(root, origin)
+
+  def __call__[T](self, root: View[T], origin):
+    assert len(root.dims) == self.ndims
+    return AppliedTraversal(root, origin)

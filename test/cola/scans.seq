@@ -1,7 +1,7 @@
 # zigzag
 
 def zz_upper(i):
-  trav = Traversal()
+  trav = Traversal(2)
   trav_build trav:
     if i == 0:
       astep (0,0)
@@ -11,17 +11,17 @@ def zz_upper(i):
   return trav
 
 def zz_lower(i):
-  trav = Traversal()
+  trav = Traversal(2)
   trav_build trav:
     if i == 0:
       astep (0,0)
     else:
-      astep (-1,1) by i, (1,0), (-1,1) by i-1, (0,1) 
+      astep (-1,1) by i, (1,0), (1,-1) by i-1, (0,1) 
       link zz_lower(i-2)
   return trav
 
 def zigzag(N):
-  trav = Traversal()
+  trav = Traversal(2)
   trav_build trav:
     link zz_upper(N-2)
     astep (0,1), (1,-1) by N-1, (0,1)
@@ -30,13 +30,14 @@ def zigzag(N):
 
 N = 8
 block = Block[int](N,N)
-zigzag(N)
+print(zigzag(N))
+
 #for zz in zigzag(N)(block):
 #  pass
 
 # hilbert
 def hilbert(i,N,which):
-  trav = Traversal()
+  trav = Traversal(2)
   trav_build trav: 
     if i == N:
       astep (0,0)
@@ -58,7 +59,7 @@ def hilbert(i,N,which):
 
 # diagonal
 #def diag_upper(i):
-#  trav = Traversal()
+#  trav = Traversal(2)
 #  trav_build trav:
 #    if i == 0:
 #      astep (1,0)

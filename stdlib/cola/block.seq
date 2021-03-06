@@ -79,6 +79,11 @@ class Block[T]:
   def __add__(self, other: Block[T]) -> Block[T]:
     return Block(self.base + other.base)
 
+  # iteration, which is just a row-major scan by default
+  # yields single realized values
+  def __iter__(self):
+    return self.base.__iter__()  
+
 @extend
 class View[T]:
 
@@ -142,3 +147,8 @@ class View[T]:
 
   def __add__(self, other: Block[T]) -> Block[T]:
     return Block(self.base + other.base)
+
+  # iteration, which is just a row-major scan by default
+  # yields single realized values
+  def __iter__(self):
+    return self.base.__iter__()  

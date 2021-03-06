@@ -343,3 +343,9 @@ class Multidim[T]:
 
   def __add__(self, other: Multidim[T]) -> Multidim[T]:
     return self._elementwise_binary_arithmetic(other, T.__add__)
+
+  ### iteration
+  def __iter__(self):
+    flat = self._flatten()
+    for i in range(flat.nunits()):
+      yield flat(i)

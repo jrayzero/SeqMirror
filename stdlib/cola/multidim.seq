@@ -8,12 +8,12 @@ class Multidim[T]:
   parent: Optional[Multidim[T]]
 
   def __init__(self, dims: list[int]):
-    self.dims = dims
+    self.dims = [d for d in dims]
     n = self.nunits()
     self.buffer = [0] * n
 
   def __init__(self, dims: list[int], data: list[T]):
-    self.dims = dims
+    self.dims = [d for d in dims]
     n = self.nunits()
     assert n == len(data)
     self.buffer = [0] * n    
@@ -24,7 +24,7 @@ class Multidim[T]:
 
   def __init__(self, parent: Multidim[T], create_buffer: bool):
     self.parent = parent
-    self.dims = parent.dims
+    self.dims = [d for d in parent.dims]
     if create_buffer:
       n = 1
       for d in self.dims:
@@ -173,7 +173,7 @@ class Multidim[T]:
     return Multidim[T](self, [idx2.compute_effective_range()], [idx2], False)
 
   def __getitem__(self, idxs) -> Multidim[T]:
-    assert isinstance(idxs, tuple)
+    assert isinstance(idxs, tuple) or isinstance(idxs, list)
     assert len(self.dims) == len(idxs)
     dims = []
     mapping = []
@@ -203,9 +203,8 @@ class Multidim[T]:
     realized = [0] * self.nunits()
     flat = self._flatten()
     for i in range(flat.nunits()):
-      buffer,linear = self._map_to_parent_buffer([i])
+      buffer,linear = flat._map_to_parent_buffer([i])
       realized[i] = buffer[linear[0]]
-    #self._realize_loop_nest([0] * len(self.dims), 0, realized)
     return realized
 
   # only using an int index can produce a plain T value b/c otherwise typechecking 
@@ -344,27 +343,3 @@ class Multidim[T]:
 
   def __add__(self, other: Multidim[T]) -> Multidim[T]:
     return self._elementwise_binary_arithmetic(other, T.__add__)
-
-
-#class Expr[T]:
-  
-#  operands: list[Expr[T]]
-  
-#  is_constant: bool
-#  constant_multi: Optional[Multidim[T]]
-#  constant_val: Optional[T]
-#  constant_iter: Optional[Iter]
-
-#  def __init__(self, val: T):
-#    self.is_constant = True
-#    self.constant_val = val
-    
-#  def __init__(self, multi: Multidim[T]):
-#    self.is_constant = True
-#    self.constant_multi = multi
-
-#  def __init__(self, it: Iter):
-#    self.is_constant = True
-#    self.constant_iter = it)
-
-  

@@ -19,8 +19,7 @@ class Block[T]:
 
   # init dims and fill immediately
   def __init__(self, dims, data: list[T]):
-    # assuming a tuple
-    self.base = Multidim[T](list(dims), data)
+    self.base = Multidim[T]([d for d in dims], data)
 
   def __init__(self, view: View[T]):
     self.base = Multidim[T](view.base, True)

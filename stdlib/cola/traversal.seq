@@ -104,8 +104,8 @@ class Traversal:
     self.origin = [o for o in origin]
     assert len(self.origin) == self.ndims
 
-  def _gen_coords(self):
-    cur_coord = [c for c in self.origin]
+  def _gen_coords(self, origin):
+    cur_coord = [c for c in origin]
     cur_angle = 0
     for movement in self.movements:
       if movement.is_seek():
@@ -128,7 +128,10 @@ class Traversal:
   # iterating through this just returns the coordinates since it's not tied to any 
   # particular block
   def __iter__(self):
-    return self._gen_coords()
+    return self._gen_coords(self.origin)
+
+  def iter_with_origin(self, origin):
+    return self._gen_coords(origin)
 
   def __str__(self):
     return ' -> '.join([str(coord) for coord in self])
@@ -139,15 +142,18 @@ class AppliedTraversal[T]:
   root: View[T]
   origin: list[int]
 
-  def __init__(self, root: Block[T]):
+  def __init__(self, traversal, root: Block[T]):
+    self.traversal = traversal
     self.root = View(root)
     self.origin = [0] * len(self.root.dims())
 
-  def __init__(self, root: View[T]):
+  def __init__(self, traversal, root: View[T]):
+    self.traversal = traversal
     self.root = root
     self.origin = [0] * len(self.root.dims())
 
-  def __init__(self, root: Block[T], origin):
+  def __init__(self, traversal, root: Block[T], origin):
+    self.traversal = traversal
     self.root = View(root)
     self.origin = [o for o in origin]
     assert len(self.origin) == len(root.dims())
@@ -157,21 +163,39 @@ class AppliedTraversal[T]:
     self.origin = [o for o in origin]
     assert len(self.origin) == len(root.dims())
 
+  def _gen_items(self):
+    for coord in self.traversal.iter_with_origin(self.origin):
+      yield self.root(coord)
+
+  def __iter__(self):    
+    return self._gen_items()
+
+  def __str__(self):
+    return ' -> '.join([str(item) for item in self])
+
+  def trav_equals(self, ref: list[T]):
+    idx = 0
+    for elem in self:
+      if elem[0] != ref[idx]:
+        return False
+      idx += 1
+    return True
+
 @extend 
 class Traversal:
 
   def __call__[T](self, root: Block[T]):
-    assert len(root.dims) == self.ndims
-    return AppliedTraversal(root)
+    assert len(root.dims()) == self.ndims
+    return AppliedTraversal(self, root)
 
   def __call__[T](self, root: View[T]):
-    assert len(root.dims) == self.ndims
-    return AppliedTraversal(root)
+    assert len(root.dims()) == self.ndims
+    return AppliedTraversal(self, root)
 
   def __call__[T](self, root: Block[T], origin):
-    assert len(root.dims) == self.ndims
-    return AppliedTraversal(root, origin)
+    assert len(root.dims()) == self.ndims
+    return AppliedTraversal(self, root, origin)
 
   def __call__[T](self, root: View[T], origin):
-    assert len(root.dims) == self.ndims
-    return AppliedTraversal(root, origin)
+    assert len(root.dims()) == self.ndims
+    return AppliedTraversal(self, root, origin)

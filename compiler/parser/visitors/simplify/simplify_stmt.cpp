@@ -723,7 +723,6 @@ void SimplifyVisitor::visit(ClassStmt *stmt) {
 void SimplifyVisitor::visit(CustomStmt *stmt) {
   // COLA
   string head = stmt->head->getId()->value;
-  std::cerr << "Found " << head << std::endl;
   if (head == "pt_build") {
     seqassert(stmt->args.size() == 1, "arg to pt_build is nullptr (or has multiple args)");
     string pt = ctx->cache->getTemporaryVar("pt");

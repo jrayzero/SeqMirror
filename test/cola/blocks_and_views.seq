@@ -1,3 +1,5 @@
+from cola.block import *
+
 # create block
 block1D_a = Block[int](10)
 block1D_b = Block[int](10)

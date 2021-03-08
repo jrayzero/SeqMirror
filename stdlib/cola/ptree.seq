@@ -1,3 +1,5 @@
+from cola.block import *
+
 # this is basically just a collection of leaf nodes
 class AndPTree[T]:
 
@@ -247,7 +249,7 @@ class PTree[T]:
 
   def _generate_and_subtree(self, cur_depth, andn):
     child = self.children[cur_depth]
-    gen = child._generate_andtrees() #generators[cur_depth]    
+    gen = child._generate_andtrees()
     for i in range(child.nandtrees):
       node = next(gen)
       if len(andn.children) < len(self.children):

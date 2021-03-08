@@ -1,3 +1,4 @@
+from cola.block import Block,View
 class Movement:
 
   # seek = 0, astep = 1, rstep = 2, arot = 3, rrot = 4
@@ -199,4 +200,5 @@ class Traversal:
 
   def __call__[T](self, root: View[T], origin):
     assert len(root.dims()) == self.ndims
-    return AppliedTraversal(self, root, origin)
+    return AppliedTraversal(self, root, origin)    
+    

@@ -1,5 +1,5 @@
-def scan(a,b,*items):
-  iters = [iter(b)] + [iter(item) for item in items]
+def scan(a,*items):
+  iters = [iter(item) for item in items]
   for i in a:
     yielded = [i]
     done = False

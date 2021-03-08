@@ -1,3 +1,4 @@
+from cola.traversal import *
 # zigzag
 
 def zz_upper(i):

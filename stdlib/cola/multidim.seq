@@ -243,7 +243,6 @@ class Multidim[T]:
     return buffer[linear[0]]
 
   def __call__(self, idxs) -> list[T]:
-    print(idxs)
     sliced = self.__getitem__(idxs)
     return sliced._realize()
 

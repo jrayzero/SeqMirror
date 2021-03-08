@@ -10,10 +10,16 @@ def jpeg():
   B = image[:,:,2].reshape(20,5)
   rescale_table = generate_rescale_table(input_ppm0_max_val)
   rgb_ycc_table = generate_rgb_ycc_table()  
-  Y,Cb,Cr = rgb_to_ycc(R, G, B, rescale_table, rgb_ycc_table)
-  print(Y)
-  print(Cb)
-  print(Cr)
+  tY,tCb,tCr = rgb_to_ycc(R, G, B, rescale_table, rgb_ycc_table)
+
+  Y = pad_extend_to_multiple_2d(tY)
+  Cb = pad_extend_to_multiple_2d(tCb)
+  Cr = pad_extend_to_multiple_2d(tCr)
+
+  dct(Y)
+  dct(Cb)
+  dct(Cr)
+
   tock = _C.seq_time()
   print('Total time is ' + str((tock-tick)/1e9) + 's')
 

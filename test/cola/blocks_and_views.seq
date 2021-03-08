@@ -84,9 +84,6 @@ def t9():
   assert val2[0] == 99
 t9()
 
-# realize multiple values, Slice
-#val2 = view1D_a(:)
-
 # realize multiple values, ExSlice
 val2 = view1D_a(ExSlice(0,10,3,2))
 l = [100, 101, 102, 9, 10, 43]
@@ -126,7 +123,7 @@ l = [228, 229]
 def t14():
   assert sum_a.buffer_equals(l)
 t14()
-  
+ 
 # view-view arithmetic
 sum_b = block1D_a[:] + block1D_b[:::]
 l = [200, 202, 204, 206, 112, 113, 19, 53, 142, 26]
@@ -143,8 +140,4 @@ def t16():
   assert sum_c.buffer_equals(l)
 t16()
 
-# halide style loop
-#x,y,z = Iter(), Iter(), Iter()
-#block2D = Block[int](2,3,4)
-#block2D[x,y,z] = x + y + z + block1D_a[x+y+z] # block1D_a is len 10, so this is fine
-#l = [0,1,1,2,2,3,1,2,2,3,3,4,2,3,3,4,4,5,3,4,4,5,5,6]
+

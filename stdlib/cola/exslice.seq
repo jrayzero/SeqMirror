@@ -15,6 +15,14 @@ class ExSlice:
     self.take = take
     self.skip = skip
 
+  def __init__(self, start: int, stop: int):
+    assert start >= 0
+    assert stop >= start
+    self.start = start
+    self.stop = stop
+    self.take = 1
+    self.skip = 0
+
   def __init__(self, slc: Slice):
     if slc.start:
       self.start = ~slc.start

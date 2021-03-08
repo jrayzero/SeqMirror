@@ -280,10 +280,7 @@ class Multidim[T]:
         iterators[cur_depth] = i
         buffer,linear = self._map_to_parent_buffer(iterators)
         sym = str(buffer[linear[0]])
-        if i == 0:
-          s += sym
-        else:
-          s += ' ' * (max_sym_size - len(sym) + 1) + sym
+        s += ' ' * (max_sym_size - len(sym)) + sym + ' '
       return s
     else:      
       # more levels

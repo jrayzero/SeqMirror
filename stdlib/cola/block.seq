@@ -43,18 +43,24 @@ class Block[T]:
     self.base[idxs] = items
 
   # does a slice
+  def __getitem__(self, idx: Block[int]):
+    return View[T](self.base.__getitem__(idx.base))
+
+  def __getitem__(self, idx: View[int]):
+    return View[T](self.base.__getitem__(idx.base))
+
   def __getitem__(self, idxs):
     return View[T](self.base.__getitem__(idxs))
   
   # gets a realized (concrete) value
-  def __call__(self, idxs):    
+  def __call__(self, *idxs):    
     return self.base.__call__(idxs)
 
   def reshape(self, *dims):
     return View[T](self.base.reshape(list(dims)))
 
   def __str__(self):
-    return str(self.base)
+    return 'block\n' + str(self.base)
 
   def buffer_equals(self, that: View[T], compare_ndims=False):
     return self.base.buffer_equals(that.base, compare_ndims)
@@ -66,23 +72,96 @@ class Block[T]:
     return self.base.buffer_equals(that)
 
   # broadcast arithmetic
-  def __add__(self, other: T) -> Block[T]:
+  def __add__(self, other: T):
     return Block(self.base + other)
 
-  def __radd__(self, other: T) -> Block[T]:
+  def __radd__(self, other: T):
     return Block(self.base.__radd__(other))
 
+  def __sub__(self, other: T):
+    return Block(self.base - other)
+
+  def __rsub__(self, other: T):
+    return Block(self.base.__rsub__(other))
+
+  def __mul__(self, other: T):
+    return Block(self.base * other)
+
+  def __rmul__(self, other: T):
+    return Block(self.base.__rmul__(other))
+
+  def __truediv__(self, other: T):
+    return Block(self.base / other)
+
+  def __rtruediv__(self, other: T):
+    return Block(self.base.__rtruediv__(other))
+
+  def __floordiv__(self, other: T):
+    return Block(self.base // other)
+
+  def __rfloordiv__(self, other: T):
+    return Block(self.base.__rfloordiv__(other))
+
+  def __rshift__(self, other: T):
+    return Block(self.base >> other)
+
+  def __rrshift__(self, other: T):
+    return Block(self.base.__rrshift__(other))
+
+  def __lshift__(self, other: T):
+    return Block(self.base << other)
+
+  def __rlshift__(self, other: T):
+    return Block(self.base.__rlshift__(other))
+
   # elementwise arithmetic
-  def __add__(self, other: View[T]) -> Block[T]:
+  def __add__(self, other: View[T]):
     return Block(self.base + other.base)
 
-  def __add__(self, other: Block[T]) -> Block[T]:
+  def __add__(self, other: Block[T]):
     return Block(self.base + other.base)
+
+  def __sub__(self, other: View[T]):
+    return Block(self.base - other.base)
+
+  def __sub__(self, other: Block[T]):
+    return Block(self.base - other.base)
+
+  def __mul__(self, other: View[T]):
+    return Block(self.base * other.base)
+
+  def __mul__(self, other: Block[T]):
+    return Block(self.base * other.base)  
+
+  def __truediv__(self, other: View[T]):
+    return Block(self.base / other.base)
+
+  def __truediv__(self, other: Block[T]):
+    return Block(self.base / other.base)
+
+  def __floordiv__(self, other: View[T]):
+    return Block(self.base // other.base)
+
+  def __floordiv__(self, other: Block[T]):
+    return Block(self.base // other.base)
+
+  def __rshift__(self, other: View[T]):
+    return Block(self.base >> other.base)
+
+  def __rshift__(self, other: Block[T]):
+    return Block(self.base >> other.base)
+
+  def __lshift__(self, other: View[T]):
+    return Block(self.base << other.base)
+
+  def __lshift__(self, other: Block[T]):
+    return Block(self.base << other.base)
 
   # iteration, which is just a row-major scan by default
-  # yields single realized values
+  # yields single view values
   def __iter__(self):
-    return self.base.__iter__()  
+    for item in self.base:
+      yield View(item)
 
 @extend
 class View[T]:
@@ -103,6 +182,12 @@ class View[T]:
     return self.base.dims
   
   # does a slice
+  def __getitem__(self, idx: Block[int]):
+    return View[T](self.base.__getitem__(idx.base))
+
+  def __getitem__(self, idx: View[int]):
+    return View[T](self.base.__getitem__(idx.base))
+
   def __getitem__(self, idxs):
     return View[T](self.base.__getitem__(idxs))  
 
@@ -116,14 +201,14 @@ class View[T]:
     self.base[idxs] = items
 
   # gets a realized (concrete) value
-  def __call__(self, idxs):    
+  def __call__(self, *idxs):    
     return self.base.__call__(idxs)
 
   def reshape(self, *dims):
     return View[T](self.base.reshape(list(dims)))
   
   def __str__(self):
-    return str(self.base)
+    return 'view\n' + str(self.base)
     
   def buffer_equals(self, that: View[T], compare_ndims=False):
     return self.base.buffer_equals(that.base, compare_ndims)
@@ -135,20 +220,93 @@ class View[T]:
     return self.base.buffer_equals(that)    
 
   # broadcast arithmetic
-  def __add__(self, other: T) -> Block[T]:
+  def __add__(self, other: T):
     return Block(self.base + other)
 
-  def __radd__(self, other: T) -> Block[T]:
+  def __radd__(self, other: T):
     return Block(self.base.__radd__(other))
 
+  def __sub__(self, other: T):
+    return Block(self.base - other)
+
+  def __rsub__(self, other: T):
+    return Block(self.base.__rsub__(other))
+
+  def __mul__(self, other: T):
+    return Block(self.base * other)
+
+  def __rmul__(self, other: T):
+    return Block(self.base.__rmul__(other))
+
+  def __truediv__(self, other: T):
+    return Block(self.base / other)
+
+  def __rtruediv__(self, other: T):
+    return Block(self.base.__rtruediv__(other))
+
+  def __floordiv__(self, other: T):
+    return Block(self.base // other)
+
+  def __rfloordiv__(self, other: T):
+    return Block(self.base.__rfloordiv__(other))
+
+  def __rshift__(self, other: T):
+    return Block(self.base >> other)
+
+  def __rrshift__(self, other: T):
+    return Block(self.base.__rrshift__(other))
+
+  def __lshift__(self, other: T):
+    return Block(self.base << other)
+
+  def __rlshift__(self, other: T):
+    return Block(self.base.__rlshift__(other))
+
   # elementwise arithmetic
-  def __add__(self, other: View[T]) -> Block[T]:
+  def __add__(self, other: View[T]):
     return Block(self.base + other.base)
 
-  def __add__(self, other: Block[T]) -> Block[T]:
+  def __add__(self, other: Block[T]):
     return Block(self.base + other.base)
+
+  def __sub__(self, other: View[T]):
+    return Block(self.base - other.base)
+
+  def __sub__(self, other: Block[T]):
+    return Block(self.base - other.base)
+
+  def __mul__(self, other: View[T]):
+    return Block(self.base * other.base)
+
+  def __mul__(self, other: Block[T]):
+    return Block(self.base * other.base)  
+
+  def __truediv__(self, other: View[T]):
+    return Block(self.base / other.base)
+
+  def __truediv__(self, other: Block[T]):
+    return Block(self.base / other.base)
+
+  def __floordiv__(self, other: View[T]):
+    return Block(self.base // other.base)
+
+  def __floordiv__(self, other: Block[T]):
+    return Block(self.base // other.base)
+
+  def __rshift__(self, other: View[T]):
+    return Block(self.base >> other.base)
+
+  def __rshift__(self, other: Block[T]):
+    return Block(self.base >> other.base)
+
+  def __lshift__(self, other: View[T]):
+    return Block(self.base << other.base)
+
+  def __lshift__(self, other: Block[T]):
+    return Block(self.base << other.base)
 
   # iteration, which is just a row-major scan by default
-  # yields single realized values
+  # yields single view values
   def __iter__(self):
-    return self.base.__iter__()  
+    for item in self.base:
+      yield View(item)

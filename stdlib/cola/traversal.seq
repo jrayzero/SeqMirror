@@ -163,9 +163,10 @@ class AppliedTraversal[T]:
     self.origin = [o for o in origin]
     assert len(self.origin) == len(root.dims())
 
+  # generates view values
   def _gen_items(self):
     for coord in self.traversal.iter_with_origin(self.origin):
-      yield self.root(coord)
+      yield self.root[coord]
 
   def __iter__(self):    
     return self._gen_items()

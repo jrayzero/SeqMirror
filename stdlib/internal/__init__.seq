@@ -34,8 +34,3 @@ from internal.dlopen import dlsym as _dlsym
 import internal.python
 
 from internal.prefetch import *
-from cola.block import *
-from cola.exslice import *
-from cola.multidim import *
-from cola.ptree import *
-from cola.traversal import *

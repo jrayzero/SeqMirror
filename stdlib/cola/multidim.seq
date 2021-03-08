@@ -1,4 +1,6 @@
 from exslice import ExSlice
+import string
+import random
 
 class Multidim[T]:
 
@@ -6,11 +8,13 @@ class Multidim[T]:
   parent_mapping: Optional[list[ExSlice]]
   buffer: Optional[list[T]]
   parent: Optional[Multidim[T]]
+  unique_id: str
 
   def __init__(self, dims: list[int]):
     self.dims = [d for d in dims]
     n = self.nunits()
     self.buffer = [0] * n
+#    self.unique_id = ''.join(random.choices(string.printable, k=5))
 
   def __init__(self, dims: list[int], data: list[T]):
     self.dims = [d for d in dims]
@@ -21,6 +25,7 @@ class Multidim[T]:
     # TODO is data actually pass-by-ref?
     for idx,d in enumerate(data):
       self.buffer[idx] = d      
+ #   self.unique_id = ''.join(random.choices(string.printable, k=5))
 
   def __init__(self, parent: Multidim[T], create_buffer: bool):
     self.parent = parent
@@ -33,6 +38,7 @@ class Multidim[T]:
     self.parent_mapping = []
     for d in self.dims:
       self.parent_mapping.append(ExSlice(0, d, 1, 0))          
+ #   self.unique_id = ''.join(random.choices(string.printable, k=5))
 
   # this is called from the __getitem__ functions, so the ExSlices should already be adjusted
   def __init__(self, parent: Multidim[T], dims: list[int], parent_mapping: list[ExSlice], create_buffer: bool):
@@ -45,12 +51,14 @@ class Multidim[T]:
     self.parent = parent
     self.dims = dims
     self.parent_mapping = parent_mapping
+ #   self.unique_id = ''.join(random.choices(string.printable, k=5))
 
   # for reshaping (so doesn't have parent_mapping)
   def __init__(self, parent: Multidim[T], dims: list[int]):
     self.parent = parent
     self.dims = dims
     assert self.nunits() == parent.nunits()
+ #   self.unique_id = ''.join(random.choices(string.printable, k=5))
 
   def linearize(self, dims: list[int], coord: list[int]) -> int:
     linear = 0
@@ -160,6 +168,13 @@ class Multidim[T]:
     assert 0 <= idx < self.dims[0]
     return Multidim[T](self, [1], [ExSlice(idx, idx+1, 1, 0)], False)
 
+  def __getitem__(self, idx: Multidim[T]) -> Multidim[T]:
+    assert len(self.dims) == 1
+    assert idx.nunits() == 1
+    val = idx._flatten()(0)
+    assert 0 <= val < self.dims[0]
+    return Multidim[T](self, [1], [ExSlice(val, val+1, 1, 0)], False)
+
   def __getitem__(self, idx: ExSlice) -> Multidim[T]:
     assert len(self.dims) == 1
     idx = idx.adjust(self.dims[0])
@@ -193,9 +208,19 @@ class Multidim[T]:
         assert idx2.compute_effective_stop() < self.dims[i]
         dims.append(idx2.compute_effective_range())
         mapping.append(idx2)
-      else:
-        assert False
+      elif isinstance(idx, Multidim[int]):
+        assert idx.nunits() == 1
+        val = idx._flatten()(0)
+        assert 0 <= val < self.dims[i]
+        mapping.append(ExSlice(val, val+1, 1, 0))
+      else: # a view[int] or block[int], but I can't reference that here
+        base: Multidim[int] = idx.base
+        assert base.nunits() == 1
+        val = base._flatten()(0)
+        assert 0 <= val < self.dims[i]
+        mapping.append(ExSlice(val, val+1, 1, 0))        
       i += 1
+    print(self.unique_id)
     return Multidim[T](self, dims, mapping, False)
 
   # gets realized values (i.e. not views). Only returns single elements or flat lists
@@ -335,17 +360,73 @@ class Multidim[T]:
       tmp.buffer[i] = op_func_ptr(sbuffer[slinear[0]], obuffer[olinear[0]])
     return tmp
     
+  # broadcast
   def __add__(self, other: T) -> Multidim[T]:
     return self._broadcast_binary_arithmetic(other, T.__add__)
 
   def __radd__(self, other: T) -> Multidim[T]:
     return self + other
 
+  def __sub__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__sub__)
+
+  def __rsub__(self, other: T) -> Multidim[T]:
+    return self - other
+
+  def __mul__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__mul__)
+
+  def __rmul__(self, other: T) -> Multidim[T]:
+    return self * other
+
+  def __truediv__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__truediv__)
+
+  def __rtruediv__(self, other: T) -> Multidim[T]:
+    return self / other
+
+  def __floordiv__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__floordiv__)
+
+  def __rfloordiv__(self, other: T) -> Multidim[T]:
+    return self // other
+
+  def __rshift__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__rshift__)
+
+  def __rrshift__(self, other: T) -> Multidim[T]:
+    return self >> other
+
+  def __lshift__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__lshift__)
+
+  def __rlshift__(self, other: T) -> Multidim[T]:
+    return self << other
+
+  # elementwise
   def __add__(self, other: Multidim[T]) -> Multidim[T]:
     return self._elementwise_binary_arithmetic(other, T.__add__)
+
+  def __sub__(self, other: Multidim[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other, T.__add__)
+
+  def __mul__(self, other: Multidim[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other, T.__add__)
+
+  def __truediv__(self, other: Multidim[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other, T.__truediv__)
+
+  def __floordiv__(self, other: Multidim[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other, T.__floordiv__)
+
+  def __rshift__(self, other: Multidim[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other, T.__rshift__)
+
+  def __lshift__(self, other: Multidim[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other, T.__lshift__)
 
   ### iteration
   def __iter__(self):
     flat = self._flatten()
     for i in range(flat.nunits()):
-      yield flat(i)
+      yield flat[i]

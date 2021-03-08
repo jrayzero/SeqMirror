@@ -1,0 +1,13 @@
+def scan(a,b,*items):
+  iters = [b] + [iter(item) for item in items]
+  for i in a:
+    done = False
+    for it in iters:      
+      if it.done():
+        done = True
+        break
+    if done:
+      break
+    yielded = [i] + [it.next() for it in iters]
+    yield yielded
+  [it.destroy() for it in iters]

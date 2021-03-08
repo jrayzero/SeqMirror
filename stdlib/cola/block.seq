@@ -56,6 +56,9 @@ class Block[T]:
   def __call__(self, *idxs):    
     return self.base.__call__(idxs)
 
+  def __call__(self, idx):    
+    return self.base.__call__(idx)
+
   def reshape(self, *dims):
     return View[T](self.base.reshape(list(dims)))
 
@@ -203,6 +206,9 @@ class View[T]:
   # gets a realized (concrete) value
   def __call__(self, *idxs):    
     return self.base.__call__(idxs)
+
+  def __call__(self, idx):    
+    return self.base.__call__(idx)
 
   def reshape(self, *dims):
     return View[T](self.base.reshape(list(dims)))

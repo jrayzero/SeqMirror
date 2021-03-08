@@ -1,0 +1,38 @@
+import math
+from cola.block import *
+from cola.iter_utils import *
+
+def generate_rgb_ycc_table():
+  table = Block[int](9,256)
+  fix = lambda x : x * (1<<16) + 0.5
+  for i in range(256):
+    table[0,i] = int(math.floor(fix(0.299) * i))
+    table[1,i] = int(math.floor(fix(0.587) * i))
+    table[2,i] = int(math.floor(fix(0.114) * i + (1<<15)))
+    table[3,i] = int(math.floor(-fix(0.16874) * i))
+    table[4,i] = int(math.floor(-fix(0.33126) * i))
+    table[5,i] = int(math.floor(fix(0.5) * i + (128 << 16) + (1 << 15) - 1))
+    table[6,i] = int(math.floor(fix(0.5) * i + (128 << 16) + (1 << 15) - 1))
+    table[7,i] = int(math.floor(-fix(0.41869) * i))
+    table[8,i] = int(math.floor(-fix(0.08131) * i))
+  return table
+
+def generate_rescale_table(realized_max_val, bounded_max_val=255):
+  table = Block[int](realized_max_val + 1)
+  half_max_val = realized_max_val // 2
+  for v in range(realized_max_val + 1):
+    table[v] = (v * bounded_max_val + half_max_val) // realized_max_val
+  return table
+
+def rgb_to_ycc(R, G, B, rescale_table, rgb_ycc_table):
+  Y = Block(R)
+  Cb = Block(G)
+  Cr = Block(B)
+  for r,g,b,y,cb,cr in scan(R,G,B,Y,Cb,Cr):
+    r = rescale_table[r]
+    g = rescale_table[g]
+    b = rescale_table[b]
+    y[0] = ((rgb_ycc_table[0,r] + rgb_ycc_table[1,g] + rgb_ycc_table[2,b]) >> 16) - 128
+    cb[0] = ((rgb_ycc_table[3,r] + rgb_ycc_table[4,g] + rgb_ycc_table[5,b]) >> 16) - 128
+    cr[0] = ((rgb_ycc_table[6,r] + rgb_ycc_table[7,g] + rgb_ycc_table[8,b]) >> 16) - 128
+  return Y,Cb,Cr

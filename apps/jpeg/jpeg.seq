@@ -1,0 +1,20 @@
+from jpeg_inputs import *
+from jpeg_functions import *
+
+def jpeg():
+  print('BEGIN')
+  tick = _C.seq_time()
+  image = input_ppm0
+  R = image[:,:,0].reshape(20,5)
+  G = image[:,:,1].reshape(20,5)
+  B = image[:,:,2].reshape(20,5)
+  rescale_table = generate_rescale_table(input_ppm0_max_val)
+  rgb_ycc_table = generate_rgb_ycc_table()  
+  Y,Cb,Cr = rgb_to_ycc(R, G, B, rescale_table, rgb_ycc_table)
+  print(Y)
+  print(Cb)
+  print(Cr)
+  tock = _C.seq_time()
+  print('Total time is ' + str((tock-tick)/1e9) + 's')
+
+jpeg()

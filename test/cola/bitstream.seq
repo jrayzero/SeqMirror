@@ -17,16 +17,30 @@ from cola.stream import BitStream
 
 bs0 = BitStream(u64(7), 3)
 print(bs0)
+assert str(bs0) == '0b111'
 
 s = ''
 for b in bs0:
     s += str(b)
 print(s)
+assert s == '111'
 
 bs0.append(u32(10), 4)
 print(bs0)
+assert str(bs0) == '0b1111010'
 
 s = ''
 for b in bs0:
-    s += str(b)
+  s += str(b)
 print(s)
+assert s == '1111010'
+
+print(0b111)
+
+def foo(val: int):
+  pass
+foo(0b1010)
+
+# this one should fail because 7 means the LSB->MSB bits, which excludes the first 1 (i.e. it reads as 1110101, not 1111010)
+assert bs0 != BitStream(0b11110101, 7)
+assert bs0 == BitStream(0b11111010, 7) # this chops off that leftmost 1, giving the correct 1111010

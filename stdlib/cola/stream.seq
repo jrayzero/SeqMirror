@@ -32,6 +32,8 @@ class UInt[N]:
   def to_bitstr(self, bitwidth: int) -> str:
     return cola_bitstr_uint(u64(self), bitwidth)
 
+# TODO parameterize BitStream by the bitwidth for the individual (with the default being 64). Currently, not allowed to have default
+# generics for classes, so not doing that
 class BitStream:
 
   effective_width: int

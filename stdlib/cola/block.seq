@@ -284,6 +284,13 @@ class Multidim[T]:
   # reshaping doesn't create a parent mapping
 
   # reshape to the dimensions of other
+  def reshape(self, other: int) -> Multidim[T]:
+    assert self.nunits() == 1
+    md = Multidim[T]()
+    md.dims = [1]
+    md.parent = self
+    return md
+
   def reshape(self, other: Block[T]) -> Multidim[T]:
     assert self.nunits() == other.nunits()
     md = Multidim[T]()
@@ -357,7 +364,7 @@ class Multidim[T]:
     return Multidim[T](self, dims, mapping)
       
   def _compute_dim_and_map(self, idx: int, it: int) -> Tuple[int, ExSlice]:
-    return idx,ExSlice(idx,idx+1)
+    return 1,ExSlice(idx,idx+1)
   
   def _compute_dim_and_map(self, idx: ExSlice, it: int) -> Tuple[int, ExSlice]:
     idx = idx.adjust(self.dims[it])
@@ -372,12 +379,12 @@ class Multidim[T]:
   def _compute_dim_and_map(self, idx: Block[T], it: int) -> Tuple[int, ExSlice]:
     val = idx.base()
     assert 0 <= val < self.dims[it]
-    return val,ExSlice(val,val+1)
+    return 1,ExSlice(val,val+1)
 
   def _compute_dim_and_map(self, idx: View[T], it: int) -> Tuple[int, ExSlice]:
     val = idx.base()
     assert 0 <= val < self.dims[it]
-    return val,ExSlice(val,val+1)
+    return 1,ExSlice(val,val+1)
 
   ### __CALL__ AND ASSOCIATED FUNCTIONS
   
@@ -531,39 +538,90 @@ class Multidim[T]:
   def __ge__(self, other: T) -> Multidim[bool]:
     return self._broadcast_binary_arithmetic[bool](other, T.__ge__)
 
+  def __eq__(self, other: T) -> Multidim[bool]:
+    return self._broadcast_binary_arithmetic[bool](other, T.__eq__)
+
+  def __ne__(self, other: T) -> Multidim[bool]:
+    return self._broadcast_binary_arithmetic[bool](other, T.__ne__)
+
   # elementwise
-  def __add__(self, other: Multidim[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other, T.__add__)
+  def __add__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __sub__(self, other: Multidim[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other, T.__add__)
+  def __add__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __mul__(self, other: Multidim[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other, T.__add__)
+  def __sub__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __truediv__(self, other: Multidim[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other, T.__truediv__)
+  def __sub__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __floordiv__(self, other: Multidim[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other, T.__floordiv__)
+  def __mul__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __rshift__(self, other: Multidim[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other, T.__rshift__)
+  def __mul__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __lshift__(self, other: Multidim[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other, T.__lshift__)
+  def __truediv__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__truediv__)
 
-  def __lt__(self, other: Multidim[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other, T.__lt__)
+  def __truediv__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__truediv__)
 
-  def __le__(self, other: Multidim[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other, T.__le__)
+  def __floordiv__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__floordiv__)
 
-  def __gt__(self, other: Multidim[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other, T.__gt__)
+  def __floordiv__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__floordiv__)
 
-  def __ge__(self, other: Multidim[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other, T.__ge__)
+  def __rshift__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__rshift__)
+
+  def __rshift__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__rshift__)
+
+  def __lshift__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__lshift__)
+
+  def __lshift__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__lshift__)
+
+  def __lt__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__lt__)
+
+  def __lt__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__lt__)
+
+  def __le__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__le__)
+
+  def __le__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__le__)
+
+  def __gt__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__gt__)
+
+  def __gt__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__gt__)
+
+  def __ge__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__ge__)
+
+  def __ge__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__ge__)
+
+  def __eq__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__eq__)
+
+  def __eq__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__eq__)
+
+  def __ne__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__ne__)
+
+  def __ne__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic(other.base, T.__ne__)
 
   ### iteration
 
@@ -636,115 +694,65 @@ class Block[T]:
   def buffer_equals(self, that):
     return self.base.buffer_equals(that)
 
-  # broadcast arithmetic
-  def __add__(self, other: T):
+  def __add__(self, other):
     return Block(self.base + other)
 
-  def __radd__(self, other: T):
+  def __radd__(self, other):
     return Block(self.base.__radd__(other))
 
-  def __sub__(self, other: T):
+  def __sub__(self, other):
     return Block(self.base - other)
 
-  def __rsub__(self, other: T):
+  def __rsub__(self, other):
     return Block(self.base.__rsub__(other))
 
-  def __mul__(self, other: T):
+  def __mul__(self, other):
     return Block(self.base * other)
 
-  def __rmul__(self, other: T):
+  def __rmul__(self, other):
     return Block(self.base.__rmul__(other))
 
-  def __truediv__(self, other: T):
+  def __truediv__(self, other):
     return Block(self.base / other)
 
-  def __rtruediv__(self, other: T):
+  def __rtruediv__(self, other):
     return Block(self.base.__rtruediv__(other))
 
-  def __floordiv__(self, other: T):
+  def __floordiv__(self, other):
     return Block(self.base // other)
 
-  def __rfloordiv__(self, other: T):
+  def __rfloordiv__(self, other):
     return Block(self.base.__rfloordiv__(other))
 
-  def __rshift__(self, other: T):
+  def __rshift__(self, other):
     return Block(self.base >> other)
 
-  def __rrshift__(self, other: T):
+  def __rrshift__(self, other):
     return Block(self.base.__rrshift__(other))
 
-  def __lshift__(self, other: T):
+  def __lshift__(self, other):
     return Block(self.base << other)
 
-  def __rlshift__(self, other: T):
+  def __rlshift__(self, other):
     return Block(self.base.__rlshift__(other))
 
-  def __lt__(self, other: T):
+  def __lt__(self, other):
     return Block[bool](self.base < other)
 
-  def __le__(self, other: T):
+  def __le__(self, other):
     return Block[bool](self.base <= other)
 
-  def __gt__(self, other: T):
+  def __gt__(self, other):
     return Block[bool](self.base > other)
 
-  def __ge__(self, other: T):
+  def __ge__(self, other):
     return Block[bool](self.base >= other)
 
-  # elementwise arithmetic
-  def __add__(self, other: View[T]):
-    return Block(self.base + other.base)
+  def __eq__(self, other):
+    return Block[bool](self.base == other)
 
-  def __add__(self, other: Block[T]):
-    return Block(self.base + other.base)
-
-  def __sub__(self, other: View[T]):
-    return Block(self.base - other.base)
-
-  def __sub__(self, other: Block[T]):
-    return Block(self.base - other.base)
-
-  def __mul__(self, other: View[T]):
-    return Block(self.base * other.base)
-
-  def __mul__(self, other: Block[T]):
-    return Block(self.base * other.base)  
-
-  def __truediv__(self, other: View[T]):
-    return Block(self.base / other.base)
-
-  def __truediv__(self, other: Block[T]):
-    return Block(self.base / other.base)
-
-  def __floordiv__(self, other: View[T]):
-    return Block(self.base // other.base)
-
-  def __floordiv__(self, other: Block[T]):
-    return Block(self.base // other.base)
-
-  def __rshift__(self, other: View[T]):
-    return Block(self.base >> other.base)
-
-  def __rshift__(self, other: Block[T]):
-    return Block(self.base >> other.base)
-
-  def __lshift__(self, other: View[T]):
-    return Block(self.base << other.base)
-
-  def __lshift__(self, other: Block[T]):
-    return Block(self.base << other.base)
-
-  def __lt__(self, other: View[T]):
-    return Block[bool](self.base < other.base)
-
-  def __le__(self, other: View[T]):
-    return Block[bool](self.base <= other.base)
-
-  def __gt__(self, other: View[T]):
-    return Block[bool](self.base > other.base)
-
-  def __ge__(self, other: View[T]):
-    return Block[bool](self.base >= other.base)
+  def __ne__(self, other):
+    return Block[bool](self.base != other)
 
   # iteration, which is just a row-major scan by default
   # yields single view values
@@ -813,115 +821,65 @@ class View[T]:
   def buffer_equals(self, that):
     return self.base.buffer_equals(that)    
 
-  # broadcast arithmetic
-  def __add__(self, other: T):
+  def __add__(self, other):
     return Block(self.base + other)
 
-  def __radd__(self, other: T):
+  def __radd__(self, other):
     return Block(self.base.__radd__(other))
 
-  def __sub__(self, other: T):
+  def __sub__(self, other):
     return Block(self.base - other)
 
-  def __rsub__(self, other: T):
+  def __rsub__(self, other):
     return Block(self.base.__rsub__(other))
 
-  def __mul__(self, other: T):
+  def __mul__(self, other):
     return Block(self.base * other)
 
-  def __rmul__(self, other: T):
+  def __rmul__(self, other):
     return Block(self.base.__rmul__(other))
 
-  def __truediv__(self, other: T):
+  def __truediv__(self, other):
     return Block(self.base / other)
 
-  def __rtruediv__(self, other: T):
+  def __rtruediv__(self, other):
     return Block(self.base.__rtruediv__(other))
 
-  def __floordiv__(self, other: T):
+  def __floordiv__(self, other):
     return Block(self.base // other)
 
-  def __rfloordiv__(self, other: T):
+  def __rfloordiv__(self, other):
     return Block(self.base.__rfloordiv__(other))
 
-  def __rshift__(self, other: T):
+  def __rshift__(self, other):
     return Block(self.base >> other)
 
-  def __rrshift__(self, other: T):
+  def __rrshift__(self, other):
     return Block(self.base.__rrshift__(other))
 
-  def __lshift__(self, other: T):
+  def __lshift__(self, other):
     return Block(self.base << other)
 
-  def __rlshift__(self, other: T):
+  def __rlshift__(self, other):
     return Block(self.base.__rlshift__(other))
 
-  def __lt__(self, other: T):
+  def __lt__(self, other):
     return Block[bool](self.base < other)
 
-  def __le__(self, other: T):
+  def __le__(self, other):
     return Block[bool](self.base <= other)
 
-  def __gt__(self, other: T):
+  def __gt__(self, other):
     return Block[bool](self.base > other)
 
-  def __ge__(self, other: T):
+  def __ge__(self, other):
     return Block[bool](self.base >= other)
 
-  # elementwise arithmetic
-  def __add__(self, other: View[T]):
-    return Block(self.base + other.base)
+  def __eq__(self, other):
+    return Block[bool](self.base == other)
 
-  def __add__(self, other: Block[T]):
-    return Block(self.base + other.base)
-
-  def __sub__(self, other: View[T]):
-    return Block(self.base - other.base)
-
-  def __sub__(self, other: Block[T]):
-    return Block(self.base - other.base)
-
-  def __mul__(self, other: View[T]):
-    return Block(self.base * other.base)
-
-  def __mul__(self, other: Block[T]):
-    return Block(self.base * other.base)  
-
-  def __truediv__(self, other: View[T]):
-    return Block(self.base / other.base)
-
-  def __truediv__(self, other: Block[T]):
-    return Block(self.base / other.base)
-
-  def __floordiv__(self, other: View[T]):
-    return Block(self.base // other.base)
-
-  def __floordiv__(self, other: Block[T]):
-    return Block(self.base // other.base)
-
-  def __rshift__(self, other: View[T]):
-    return Block(self.base >> other.base)
-
-  def __rshift__(self, other: Block[T]):
-    return Block(self.base >> other.base)
-
-  def __lshift__(self, other: View[T]):
-    return Block(self.base << other.base)
-
-  def __lshift__(self, other: Block[T]):
-    return Block(self.base << other.base)
-
-  def __lt__(self, other: View[T]):
-    return Block[bool](self.base < other.base)
-
-  def __le__(self, other: View[T]):
-    return Block[bool](self.base <= other.base)
-
-  def __gt__(self, other: View[T]):
-    return Block[bool](self.base > other.base)
-
-  def __ge__(self, other: View[T]):
-    return Block[bool](self.base >= other.base)
+  def __ne__(self, other):
+    return Block[bool](self.base != other)
 
   # iteration, which is just a row-major scan by default
   # yields single view values

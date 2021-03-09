@@ -106,6 +106,7 @@ class Traversal:
     assert len(self.origin) == self.ndims
 
   def _gen_coords(self, origin):
+    assert len(origin) > 0
     cur_coord = [c for c in origin]
     cur_angle = 0
     for movement in self.movements:
@@ -123,7 +124,7 @@ class Traversal:
           yield cur_coord
       elif movement.is_arot():
         cur_angle = ~movement.angle
-      else: #movement.is_rrot():
+      else:
         cur_angle += ~movement.angle
         
   # iterating through this just returns the coordinates since it's not tied to any 
@@ -173,12 +174,12 @@ class AppliedTraversal[T]:
     return self._gen_items()
 
   def __str__(self):
-    return ' -> '.join([str(item) for item in self])
+    return ' -> '.join([str(item()) for item in self])
 
   def trav_equals(self, ref: list[T]):
     idx = 0
     for elem in self:
-      if elem[0] != ref[idx]:
+      if elem() != ref[idx]:
         return False
       idx += 1
     return True

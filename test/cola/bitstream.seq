@@ -1,0 +1,32 @@
+from cola.stream import BitStream
+
+#val = 10
+#bs0 = BitStream(val)
+#bs1 = BitStream(val, 4)
+#print(bs0)
+#print(bs1)
+#print(str(bs1, True))
+#for i in bs1:
+#    print(int(i))
+
+#bs1.append(1)
+#print(bs1)
+#bs0 = BitStream()
+#bs0.append(1)
+#bs0.append(0)
+
+bs0 = BitStream(u64(7), 3)
+print(bs0)
+
+s = ''
+for b in bs0:
+    s += str(b)
+print(s)
+
+bs0.append(u32(10), 4)
+print(bs0)
+
+s = ''
+for b in bs0:
+    s += str(b)
+print(s)

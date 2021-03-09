@@ -198,10 +198,11 @@ SEQ_FUNC seq_str_t seq_str_byte(char c) { return string_conv("%c", 5, c); }
 SEQ_FUNC seq_str_t seq_str_ptr(void *p) { return string_conv("%p", 19, p); }
 
 // prints MSB->LSB so you can read from left-to-right
+// bitwidth counts from MSB->LSB also, which is a little different, but makes sense for the compression bitstreams
 static seq_str_t to_bitstr(cola_uint_t n, seq_int_t bitwidth) {
   char *p = (char*)seq_alloc_atomic(bitwidth);
   for (seq_int_t i = 0; i < bitwidth; i++) {
-    p[i] = (bool)((n >> (bitwidth-i-1)) & 0x1) ? '1' : '0';
+    p[i] = (bool)((n >> (sizeof(cola_uint_t) * 8 - i - 1)) & 0x1) ? '1' : '0';
   }
   return {bitwidth, p};
 }

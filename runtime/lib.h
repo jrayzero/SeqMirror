@@ -10,6 +10,7 @@
 #define SEQ_FUNC extern "C"
 
 typedef int64_t seq_int_t;
+typedef uint64_t cola_uint_t;
 
 struct seq_t {
   seq_int_t len;
@@ -53,6 +54,9 @@ SEQ_FUNC seq_str_t seq_str_bool(bool b);
 SEQ_FUNC seq_str_t seq_str_byte(char c);
 SEQ_FUNC seq_str_t seq_str_ptr(void *p);
 SEQ_FUNC seq_str_t seq_str_tuple(seq_str_t *strs, seq_int_t n);
+
+SEQ_FUNC seq_str_t cola_bitstr_uint(cola_uint_t n, seq_int_t bit_width);
+SEQ_FUNC seq_str_t cola_str_uint(cola_uint_t n);
 
 SEQ_FUNC void seq_print(seq_str_t str);
 SEQ_FUNC void seq_print_full(seq_str_t str, FILE *fo);

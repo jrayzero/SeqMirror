@@ -501,10 +501,10 @@ class Multidim[T]:
   def __rmul__(self, other: T) -> Multidim[T]:
     return self * other
 
-  def __truediv__(self, other: T) -> Multidim[T]:
-    return self._broadcast_binary_arithmetic(other, T.__truediv__)
+  def __truediv__(self, other: T) -> Multidim[float]:
+    return self._broadcast_binary_arithmetic[float](other, T.__truediv__)
 
-  def __rtruediv__(self, other: T) -> Multidim[T]:
+  def __rtruediv__(self, other: T) -> Multidim[float]:
     return self / other
 
   def __floordiv__(self, other: T) -> Multidim[T]:
@@ -562,11 +562,11 @@ class Multidim[T]:
   def __mul__(self, other: View[T]) -> Multidim[T]:
     return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __truediv__(self, other: Block[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__truediv__)
+  def __truediv__(self, other: Block[T]) -> Multidim[float]:
+    return self._elementwise_binary_arithmetic[float](other.base, T.__truediv__)
 
-  def __truediv__(self, other: View[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__truediv__)
+  def __truediv__(self, other: View[T]) -> Multidim[float]:
+    return self._elementwise_binary_arithmetic[float](other.base, T.__truediv__)
 
   def __floordiv__(self, other: Block[T]) -> Multidim[T]:
     return self._elementwise_binary_arithmetic(other.base, T.__floordiv__)
@@ -722,10 +722,10 @@ class Block[T]:
     return Block(self.base.__rmul__(other))
 
   def __truediv__(self, other):
-    return Block(self.base / other)
+    return Block[float](self.base / other)
 
   def __rtruediv__(self, other):
-    return Block(self.base.__rtruediv__(other))
+    return Block[float](self.base.__rtruediv__(other))
 
   def __floordiv__(self, other):
     return Block(self.base // other)
@@ -859,10 +859,10 @@ class View[T]:
     return Block(self.base.__rmul__(other))
 
   def __truediv__(self, other):
-    return Block(self.base / other)
+    return Block[float](self.base / other)
 
   def __rtruediv__(self, other):
-    return Block(self.base.__rtruediv__(other))
+    return Block[float](self.base.__rtruediv__(other))
 
   def __floordiv__(self, other):
     return Block(self.base // other)

@@ -16,9 +16,11 @@ def jpeg():
   Cb = pad_extend_to_multiple_2d(tCb)
   Cr = pad_extend_to_multiple_2d(tCr)
 
-  dct(Y)
-  dct(Cb)
-  dct(Cr)
+  dct_quant_encode(Y, Cb, Cr)
+
+  print(Y)
+  print(Cb)
+  print(Cr)
 
   tock = _C.seq_time()
   print('Total time is ' + str((tock-tick)/1e9) + 's')

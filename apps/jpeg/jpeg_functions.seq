@@ -1,6 +1,8 @@
 import math
 from cola.block import *
 from cola.iter_utils import *
+from ..traversals.zigzag import make_zigzag
+from jpeg_tables import *
 
 def generate_rgb_ycc_table():
   table = Block[int](9,256)
@@ -62,88 +64,117 @@ def pad_extend_to_multiple_2d[T](blk: Block[T], multiple=8):
 
   return padded
 
-def dct(plane):
-  # ptree is overkill, so won't do that here
-  for y in range(0, plane.dims()[0], 8):
-    for x in range(0, plane.dims()[1], 8):
-      mcu = plane[y:y+8,x:x+8]
-      for r in range(8):
-        row = mcu[r,:].reshape(8)
-        # note to self:
-        # if do something like tmp0 = row[0], it gives you a view
-        # if do tmp0 = row[0] + row[7], it gives you a block
-        tmp0 = row(0) + row(7)
-        tmp7 = row(0) - row(7)
-        tmp1 = row(1) + row(6)
-        tmp6 = row(1) - row(6)
-        tmp2 = row(2) + row(5)
-        tmp5 = row(2) - row(5)
-        tmp3 = row(3) + row(4)
-        tmp4 = row(3) - row(4)
-        tmp10 = tmp0 + tmp3
-        tmp13 = tmp0 - tmp3
-        tmp11 = tmp1 + tmp2
-        tmp12 = tmp1 - tmp2
-        row[0] = (tmp10 + tmp11) << 2
-        row[4] = (tmp10 - tmp11) << 2
-        z1 = (tmp12 + tmp13) * 4433
-        row[2] = ((z1 + tmp13 * 6270) + (1<<10)) >> 11
-        row[6] = ((z1 + tmp12 * -15137) + (1<<10)) >> 11
-        z1 = tmp4 + tmp7
-        z2 = tmp5 + tmp6
-        z3 = tmp4 + tmp6
-        z4 = tmp5 + tmp7
-        z5 = (z3 + z4) * 9633
-        tmp4 *= 2446
-        tmp5 *= 16819
-        tmp6 *= 25172
-        tmp7 *= 12299
-        z1 *= -7373
-        z2 *= -20995
-        z3 *= -16069
-        z4 *= -3196
-        z3 += z5
-        z4 += z5        
-        row[7] = ((tmp4 + z1 + z3) + (1<<10)) >> 11
-        row[5] = ((tmp5 + z2 + z4) + (1<<10)) >> 11
-        row[3] = ((tmp6 + z2 + z3) + (1<<10)) >> 11
-        row[1] = ((tmp7 + z1 + z4) + (1<<10)) >> 11
-      for c in range(8):
-        col = mcu[:,c].reshape(8)
-        tmp0 = col(0) + col(7)
-        tmp7 = col(0) - col(7)
-        tmp1 = col(1) + col(6)
-        tmp6 = col(1) - col(6)
-        tmp2 = col(2) + col(5)
-        tmp5 = col(2) - col(5)
-        tmp3 = col(3) + col(4)
-        tmp4 = col(3) - col(4)
-        tmp10 = tmp0 + tmp3
-        tmp13 = tmp0 - tmp3
-        tmp11 = tmp1 + tmp2
-        tmp12 = tmp1 - tmp2
-        col[0] = ((tmp10 + tmp11) + (1<<1)) >> 2
-        col[4] = ((tmp10 - tmp11) + (1<<1)) >> 2
-        z1 = (tmp12 + tmp13) * 4433
-        col[2] = ((z1 + tmp13 * 6270) + (1<<14)) >> 15
-        col[6] = ((z1 + tmp12 * -15137) + (1<<14)) >> 15
-        z1 = tmp4 + tmp7
-        z2 = tmp5 + tmp6
-        z3 = tmp4 + tmp6
-        z4 = tmp5 + tmp7
-        z5 = (z3 + z4) * 9633
-        tmp4 *= 2446
-        tmp5 *= 16819
-        tmp6 *= 25172
-        tmp7 *= 12299
-        z1 *= -7373
-        z2 *= -20995
-        z3 *= -16069
-        z4 *= -3196
-        z3 += z5
-        z4 += z5
-        col[7] = ((tmp4 + z1 + z3) + (1<<14)) >> 15
-        col[5] = ((tmp5 + z2 + z4) + (1<<14)) >> 15
-        col[3] = ((tmp6 + z2 + z3) + (1<<14)) >> 15
-        col[1] = ((tmp7 + z1 + z4) + (1<<14)) >> 15
+def dct(mcu):
+  for r in range(8):
+    row = mcu[r,:].reshape(8)
+    # note to self:
+    # if do something like tmp0 = row[0], it gives you a view
+    # if do tmp0 = row[0] + row[7], it gives you a block
+    tmp0 = row(0) + row(7)
+    tmp7 = row(0) - row(7)
+    tmp1 = row(1) + row(6)
+    tmp6 = row(1) - row(6)
+    tmp2 = row(2) + row(5)
+    tmp5 = row(2) - row(5)
+    tmp3 = row(3) + row(4)
+    tmp4 = row(3) - row(4)
+    tmp10 = tmp0 + tmp3
+    tmp13 = tmp0 - tmp3
+    tmp11 = tmp1 + tmp2
+    tmp12 = tmp1 - tmp2
+    row[0] = (tmp10 + tmp11) << 2
+    row[4] = (tmp10 - tmp11) << 2
+    z1 = (tmp12 + tmp13) * 4433
+    row[2] = ((z1 + tmp13 * 6270) + (1<<10)) >> 11
+    row[6] = ((z1 + tmp12 * -15137) + (1<<10)) >> 11
+    z1 = tmp4 + tmp7
+    z2 = tmp5 + tmp6
+    z3 = tmp4 + tmp6
+    z4 = tmp5 + tmp7
+    z5 = (z3 + z4) * 9633
+    tmp4 *= 2446
+    tmp5 *= 16819
+    tmp6 *= 25172
+    tmp7 *= 12299
+    z1 *= -7373
+    z2 *= -20995
+    z3 *= -16069
+    z4 *= -3196
+    z3 += z5
+    z4 += z5        
+    row[7] = ((tmp4 + z1 + z3) + (1<<10)) >> 11
+    row[5] = ((tmp5 + z2 + z4) + (1<<10)) >> 11
+    row[3] = ((tmp6 + z2 + z3) + (1<<10)) >> 11
+    row[1] = ((tmp7 + z1 + z4) + (1<<10)) >> 11
+  for c in range(8):
+    col = mcu[:,c].reshape(8)
+    tmp0 = col(0) + col(7)
+    tmp7 = col(0) - col(7)
+    tmp1 = col(1) + col(6)
+    tmp6 = col(1) - col(6)
+    tmp2 = col(2) + col(5)
+    tmp5 = col(2) - col(5)
+    tmp3 = col(3) + col(4)
+    tmp4 = col(3) - col(4)
+    tmp10 = tmp0 + tmp3
+    tmp13 = tmp0 - tmp3
+    tmp11 = tmp1 + tmp2
+    tmp12 = tmp1 - tmp2
+    col[0] = ((tmp10 + tmp11) + (1<<1)) >> 2
+    col[4] = ((tmp10 - tmp11) + (1<<1)) >> 2
+    z1 = (tmp12 + tmp13) * 4433
+    col[2] = ((z1 + tmp13 * 6270) + (1<<14)) >> 15
+    col[6] = ((z1 + tmp12 * -15137) + (1<<14)) >> 15
+    z1 = tmp4 + tmp7
+    z2 = tmp5 + tmp6
+    z3 = tmp4 + tmp6
+    z4 = tmp5 + tmp7
+    z5 = (z3 + z4) * 9633
+    tmp4 *= 2446
+    tmp5 *= 16819
+    tmp6 *= 25172
+    tmp7 *= 12299
+    z1 *= -7373
+    z2 *= -20995
+    z3 *= -16069
+    z4 *= -3196
+    z3 += z5
+    z4 += z5
+    col[7] = ((tmp4 + z1 + z3) + (1<<14)) >> 15
+    col[5] = ((tmp5 + z2 + z4) + (1<<14)) >> 15
+    col[3] = ((tmp6 + z2 + z3) + (1<<14)) >> 15
+    col[1] = ((tmp7 + z1 + z4) + (1<<14)) >> 15
 
+def quantize(unit: int, qt_val: int) -> int:
+  if unit < 0:
+    unit = -unit
+    unit += qt_val >> 1
+    unit = unit // qt_val
+    unit = -unit
+  else:
+    unit += qt_val >> 1
+    unit = unit // qt_val
+  return unit
+
+def dct_quant_encode(Y, Cb, Cr):
+  # ptree is overkill, so won't do that here
+  # Y may be different size than Cb/Cr if had subsampling, so do it separately
+  prev_y_blk: Optional[View[int]] = None
+  zigzag = make_zigzag(8)
+  for r in range(0, Y.dims()[0], 8):
+    for c in range(0, Y.dims()[1], 8):
+      mcu = Y[r:r+8,c:c+8]
+      dct(mcu)
+      for y,q in scan(zigzag(mcu), zigzag(luma_qt)):
+        y[0] = quantize(y(), q()*8)
+  for r in range(0, Cb.dims()[0], 8):
+    for c in range(0, Cb.dims()[1], 8):
+      mcu_cb = Cb[r:r+8,c:c+8]
+      mcu_cr = Cr[r:r+8,c:c+8]
+      dct(mcu_cb)
+      dct(mcu_cr)
+      for cb,cr,q in scan(zigzag(mcu_cb), zigzag(mcu_cr), zigzag(chroma_qt)):
+        cb[0] = quantize(cb(), q()*8)
+        cr[0] = quantize(cr(), q()*8)
+      
+      

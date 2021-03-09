@@ -33,7 +33,7 @@ class UInt[N]:
     return cola_bitstr_uint(u64(self), bitwidth)
 
 # TODO parameterize BitStream by the bitwidth for the individual (with the default being 64). Currently, not allowed to have default
-# generics for classes, so not doing that
+# generics for classes, so not doing that.
 class BitStream:
 
   effective_width: int
@@ -44,12 +44,14 @@ class BitStream:
   def __init__(self):
     # measures MSB->LSB
     self.effective_width = 0
-    self.bit_seqs = []
+    self.bit_seqs = [u64(0)]
     
   # following how jpeg-6d does bit stuff cause I'm hopeless with this part
 
+  # TODO automatically do the mask with the subtraction thing
   def _do_init(self, val: u64, width: int, mask: u64):
     # mask off extra bits towards the MSB
+    # doing a 64 bit left shift is undefined, so in the case where it is a full mask, need to just specify 0
     bits = val & mask
     # align it towards the MSB
     bits <<= u64(64 - width)
@@ -61,6 +63,9 @@ class BitStream:
   # you wouldn't want to take the MSB bits in this case.
 
   # width can be different than the actual type since you might not want all of the bits
+  def __init__(self, val: u1):
+    self._do_init(u64(val), 1, u64(1))
+
   def __init__(self, val: u8, width: int=8):
     assert width >= 0 and width <= 8
     self._do_init(u64(val), width, ((u64(1) << u64(width)) - u64(1)))
@@ -75,8 +80,6 @@ class BitStream:
 
   def __init__(self, val: u64, width: int=64):
     assert width >= 0 and width <= 64
-    # but don't shift beyond the 64 bits b/c it doesn't just make it zeros (is this a bug?)
-    # to see bug, run (1<<64) in python and (1<<64) in seq
     mask = u64(0) if width == 64 else ((u64(1) << u64(width)))
     mask = ~mask
     self._do_init(u64(val), width, mask)
@@ -86,41 +89,81 @@ class BitStream:
     self.__init__(u64(val), width)    
     
   # can only append max 64 bits at a time for now
-  def _do_append(self, val: u64, width: int, mask: u64):
+  def _do_append(self, val: u64, width: int):#, mask: u64):
+    # determine how many bits we have left to append to in the current bit seq
+    bits_left = 64 - self.effective_width % 64
+    print('bits left: ' + str(bits_left))
+    # take bits from MSB->LSB of val
+    bits_kept_in_val = width-max(0,width-bits_left)
+    print('bits kept in val: ' + str(bits_kept_in_val))
+    print(val)
+    bits = val >> u64(max(0, width-bits_left))
+    print(bits)
+    # align them so they fit in the bits_left region (since there may be more bits left than we need)
+    bits <<= u64(max(0, bits_left - width))
+    print(bits)
+    last_bit_seq_idx = self.effective_width // 65
+    print(last_bit_seq_idx)
+    print(self.bit_seqs[0].to_bitstr(64))
+    self.bit_seqs[last_bit_seq_idx] |= bits
+    print(self.bit_seqs[0].to_bitstr(64))
+    self.effective_width += min(width,bits_left)
+
+    # now do the rest of val (if it exists)
+    remaining_bits = max(0, width - bits_left)
+    print(remaining_bits)
+    # we only allow a max of 64bit val, so don't need more than 1 extra seq
+    if remaining_bits > 0:
+      bits = val & u64((1 << remaining_bits)-1)
+      self.bit_seqs.append(BitStream(val).bit_seqs[0])
+    
+    # figure out how many extra bitseqs we need
+ #   extra_bit_seqs = remaining_bits // 65 + (0 if remaining_bits == 0 else 1)
+ #   for i in range(extra_bit_seqs):
+ #     self.bit_seqs.append(0)
+      
+
     # it's // 65 because we can have 64 bits max in a single sequenece, so 64 // 65 + 1 == 1 total bit seq
     # and 63 // 65 + 1 == 1 total bit seq and 65 // 65 + 1 == 2 total bit seq
-    nseqs =  self.effective_width // 65 + 1
-    nseqs_append = (self.effective_width + width) // 65 + 1
-    if nseqs_append > nseqs_append:
-      bits = val & ~mask
-      # jam it towards the MSB
-      bits <<= u64(64 - width)
-      self.bit_seqs.append(bits)
-      self.effective_width += width
-    else:
+#    nseqs =  self.effective_width // 65 + 1
+#    nseqs_append = (self.effective_width + width) // 65 + 1
+#    if nseqs_append > nseqs:
+#      bits = val & ~mask
+#      # jam it towards the MSB
+#      bits <<= u64(64 - width)
+#      self.bit_seqs.append(bits)
+#      self.effective_width += width
+#    else:
       # jam it to the side, but leave room for the current stuff
-      self.effective_width += width
-      idx = self.effective_width % 64
-      val <<= u64(64) - u64(idx)
-      self.bit_seqs[-1] |= val
+#      self.effective_width += width
+#      idx = self.effective_width % 64
+#      val <<= u64(64) - u64(idx)
+#      self.bit_seqs[-1] |= val
+
+  def append(self, val: u1):    
+    self._do_append(u64(val), 1)#, ((u64(1) << u64(1)) - u64(1)))
 
   def append(self, val: u8, width: int=8):    
     assert width >= 0 and width <= 8
-    self._do_append(u64(val), width, ((u64(1) << u64(width)) - u64(1)))
+    self._do_append(u64(val), width)#, ((u64(1) << u64(width)) - u64(1)))
 
   def append(self, val: u16, width: int=16):
     assert width >= 0 and width <= 16
-    self._do_append(u64(val), width, ((u64(1) << u64(width)) - u64(1)))
+    self._do_append(u64(val), width)#, ((u64(1) << u64(width)) - u64(1)))
 
   def append(self, val: u32, width: int=32):    
     assert width >= 0 and width <= 32
-    self._do_append(u64(val), width, ((u64(1) << u64(width)) - u64(1)))
+    self._do_append(u64(val), width)#, ((u64(1) << u64(width)) - u64(1)))
 
   def append(self, val: u64, width: int=64):
     assert width >= 0 and width <= 64
     mask = u64(0) if width == 64 else ((u64(1) << u64(width)))
     mask = ~mask
-    self._do_append(val, width, mask)
+    self._do_append(val, width)#, mask)
+
+  def append(self, val: int, width: int=64):
+    assert width >= 0 and width <= 64
+    self._do_append(u64(val), width)
 
   def __iter__(self) -> Generator[UInt[1]]:
     nbit_seqs = self.effective_width // 65 + 1
@@ -135,7 +178,7 @@ class BitStream:
 
   # prints out in binary
   def __str__(self) -> str:
-    nbit_seqs = self.effective_width // 65 + 1
+    nbit_seqs = 0 if self.effective_width == 0 else self.effective_width // 65 + 1
     s = ''
     for i in range(nbit_seqs-1):
       s += self.bit_seqs[i].to_bitstr(64)    
@@ -146,7 +189,7 @@ class BitStream:
   def __eq__(self, other: BitStream) -> bool:
     if self.effective_width != other.effective_width:
       return False
-    nbit_seqs = self.effective_width // 65 + 1
+    nbit_seqs = 0 if self.effective_width == 0 else self.effective_width // 65 + 1
     for i in range(nbit_seqs-1):
       self_bs = self.bit_seqs[i]
       other_bs = other.bit_seqs[i]

@@ -1,46 +1,36 @@
 from cola.stream import BitStream
 
-#val = 10
-#bs0 = BitStream(val)
-#bs1 = BitStream(val, 4)
-#print(bs0)
-#print(bs1)
-#print(str(bs1, True))
-#for i in bs1:
-#    print(int(i))
-
-#bs1.append(1)
-#print(bs1)
-#bs0 = BitStream()
-#bs0.append(1)
-#bs0.append(0)
-
-bs0 = BitStream(u64(7), 3)
+bs0 = BitStream(u64(6), 3)
 print(bs0)
-assert str(bs0) == '0b111'
+assert str(bs0) == '0b110'
 
 s = ''
 for b in bs0:
     s += str(b)
 print(s)
-assert s == '111'
+assert s == '110'
 
 bs0.append(u32(10), 4)
 print(bs0)
-assert str(bs0) == '0b1111010'
+assert str(bs0) == '0b1101010'
 
 s = ''
 for b in bs0:
   s += str(b)
 print(s)
-assert s == '1111010'
+assert s == '1101010'
 
-print(0b111)
+# this one should fail because 7 means the LSB->MSB bits, which excludes the first 1 (i.e. it reads as 1010101, not 1101010)
+assert bs0 != BitStream(0b11010101, 7)
+assert bs0 == BitStream(0b11101010, 7) # this chops off that leftmost 1, giving the correct 1101010
 
-def foo(val: int):
-  pass
-foo(0b1010)
+bs1 = BitStream(0b010111100, 63)
+print(bs1)
+assert str(bs1) == '0b000000000000000000000000000000000000000000000000000000010111100'
+bs1.append(0b1, 1)
+print(bs1)
+assert str(bs1) == '0b0000000000000000000000000000000000000000000000000000000101111001'
 
-# this one should fail because 7 means the LSB->MSB bits, which excludes the first 1 (i.e. it reads as 1110101, not 1111010)
-assert bs0 != BitStream(0b11110101, 7)
-assert bs0 == BitStream(0b11111010, 7) # this chops off that leftmost 1, giving the correct 1111010
+bs1.append(0b1011, 5)
+print(bs1)
+assert str(bs1) == '0b000000000000000000000000000000000000000000000000000000010111100101011'

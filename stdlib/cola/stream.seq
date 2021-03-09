@@ -40,6 +40,7 @@ class BitStream:
   bit_seqs: list[u64]
   
   def __init__(self):
+    # measures MSB->LSB
     self.effective_width = 0
     self.bit_seqs = []
     
@@ -52,6 +53,10 @@ class BitStream:
     bits <<= u64(64 - width)
     self.bit_seqs = [bits]
     self.effective_width = width
+
+  # width here is measured from the LSB->MSB, which is different than the effective_width which measures
+  # from MSB->LSB. I do this because if you want to pass in decimal values (say 10, which is 0b1010, or maybe 0b000001010),
+  # you wouldn't want to take the MSB bits in this case.
 
   # width can be different than the actual type since you might not want all of the bits
   def __init__(self, val: u8, width: int=8):
@@ -74,14 +79,16 @@ class BitStream:
     mask = ~mask
     self._do_init(u64(val), width, mask)
 
-  def __init__(self, val: int, width: int=63): # if it's 64, then you can get some weird sign stuff
-    assert width >= 0 and width <= 63
+  def __init__(self, val: int, width: int=64): 
+    assert width >= 0 and width <= 64
     self.__init__(u64(val), width)    
     
   # can only append max 64 bits at a time for now
   def _do_append(self, val: u64, width: int, mask: u64):
-    nseqs =  self.effective_width / 64
-    nseqs_append = (self.effective_width + width) / 64
+    # it's // 65 because we can have 64 bits max in a single sequenece, so 64 // 65 + 1 == 1 total bit seq
+    # and 63 // 65 + 1 == 1 total bit seq and 65 // 65 + 1 == 2 total bit seq
+    nseqs =  self.effective_width // 65 + 1
+    nseqs_append = (self.effective_width + width) // 65 + 1
     if nseqs_append > nseqs_append:
       bits = val & ~mask
       # jam it towards the MSB
@@ -114,22 +121,43 @@ class BitStream:
     self._do_append(val, width, mask)
 
   def __iter__(self) -> Generator[UInt[1]]:
-    w = self.effective_width
-    for i in self.bit_seqs[:-1]:
-      for b in i:
+    nbit_seqs = self.effective_width // 65 + 1
+    for i in range(nbit_seqs-1):      
+      for b in self.bit_seqs[i]:
         yield UInt[1](b)
-        w -= 1
-    it = iter(self.bit_seqs[-1])
+    w = self.effective_width % 64
+    it = iter(self.bit_seqs[nbit_seqs-1])
     for i in range(w):
       yield next(it)
     it.destroy()
 
   # prints out in binary
   def __str__(self) -> str:
+    nbit_seqs = self.effective_width // 65 + 1
     s = ''
-    w = self.effective_width
-    for i in self.bit_seqs[:-1]:
-      s += i.to_bitstr(64)    
-      w -= 64
+    for i in range(nbit_seqs-1):
+      s += self.bit_seqs[i].to_bitstr(64)    
+    w = self.effective_width % 64
     s += self.bit_seqs[-1].to_bitstr(w)
     return '0b' + s
+
+  def __eq__(self, other: BitStream) -> bool:
+    if self.effective_width != other.effective_width:
+      return False
+    nbit_seqs = self.effective_width // 65 + 1
+    for i in range(nbit_seqs-1):
+      self_bs = self.bit_seqs[i]
+      other_bs = other.bit_seqs[i]
+      if self_bs != other_bs:
+        return False
+    # remaining MSB bits
+    w = self.effective_width % 64
+    # get last bitseq and mask off anything on the LSB (rhs) side that isn't needed
+    self_bs = self.bit_seqs[nbit_seqs-1] & u64(~((1 << (64-w))-1))
+    other_bs = other.bit_seqs[nbit_seqs-1] & u64(~((1 << (64-w))-1))
+    if self_bs != other_bs:
+      return False
+    return True
+      
+  def __ne__(self, other: BitStream) -> bool:
+    return not (self == other)

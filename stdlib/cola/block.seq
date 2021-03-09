@@ -1,4 +1,3 @@
-#from multidim import Multidim
 from exslice import ExSlice
 import random,string
 # TODO best way to preinitialize a list in codon? or is there a better array type or something?
@@ -119,15 +118,8 @@ class Multidim[T]:
 
   ### INTERNAL NON-STATIC UTILITY FUNCTIONS
 
-  # reshapes to 1D if needed
-  def _flatten(self):
-    if len(self.dims) == 1:
-      return self
-    else:
-      return self.reshape([self.nunits()])
-
   def _broadcast_binary_arithmetic[S=T](self, other: T, op_func_ptr) -> Multidim[S]:
-    flat = self._flatten()
+    flat = self.flatten()
     tmp = Multidim[S](self.dims, True)    
     for i in range(self.nunits()):
       buffer,linear = flat._map_to_parent_buffer([i])
@@ -137,8 +129,8 @@ class Multidim[T]:
   def _elementwise_binary_arithmetic[S=T](self, other: Multidim[T], op_func_ptr) -> Multidim[S]:
     assert len(self.dims) == len(other.dims)
     assert self.nunits() == other.nunits()
-    self_flat = self._flatten()
-    other_flat = other._flatten()
+    self_flat = self.flatten()
+    other_flat = other.flatten()
     tmp = Multidim[S](self.dims, True)
     for i in range(self.nunits()):
       sbuffer,slinear = self_flat._map_to_parent_buffer([i])
@@ -184,6 +176,13 @@ class Multidim[T]:
       n *= d
     return n
 
+  # reshapes to 1D if needed
+  def flatten(self):
+    if len(self.dims) == 1:
+      return self
+    else:
+      return self.reshape([self.nunits()])
+
   # gets local origin relative to parent
   def origin(self) -> list[int]:
     if self.parent_mapping:
@@ -198,7 +197,7 @@ class Multidim[T]:
 
   def __bool__(self: Multidim[bool]) -> bool:
     assert self.nunits() == 1
-    return self._flatten()(0)
+    return self.flatten()(0)
 
   # shorthand form of __str__ that just returns size + abs_origin
   def shorthand(self):
@@ -233,7 +232,7 @@ class Multidim[T]:
       return s
 
   def _get_max_symbol_size(self):
-    flat = self._flatten()
+    flat = self.flatten()
     max_size = 0
     for i in range(flat.nunits()):
       buffer,linear = flat._map_to_parent_buffer([i])
@@ -259,8 +258,8 @@ class Multidim[T]:
     if compare_ndims:
       if len(self.dims) != len(that.dims):
         return False
-    self_flat = self._flatten()
-    that_flat = that._flatten()
+    self_flat = self.flatten()
+    that_flat = that.flatten()
     for i in range(self.nunits()):
       sbuffer,slinear = self_flat._map_to_parent_buffer([i])
       tbuffer,tlinear = that_flat._map_to_parent_buffer([i])
@@ -271,7 +270,7 @@ class Multidim[T]:
   def buffer_equals(self, that: list[T]) -> bool:
     if self.nunits() != len(that):
       return False
-    flat = self._flatten()
+    flat = self.flatten()
     for i in range(self.nunits()):
       buffer,linear = flat._map_to_parent_buffer([i])
       if buffer[linear[0]] != that[i]:
@@ -284,24 +283,24 @@ class Multidim[T]:
   # reshaping doesn't create a parent mapping
 
   # reshape to the dimensions of other
-  def reshape(self, other: int) -> Multidim[T]:
-    assert self.nunits() == 1
+  def reshape(self, dim: int) -> Multidim[T]:
+    assert self.nunits() == dim
     md = Multidim[T]()
-    md.dims = [1]
+    md.dims = [dim]
     md.parent = self
     return md
 
-  def reshape(self, other: Block[T]) -> Multidim[T]:
-    assert self.nunits() == other.nunits()
+  def reshape(self, dim: Block[T]) -> Multidim[T]:
+    assert self.nunits() == dim.nunits()
     md = Multidim[T]()
-    md.dims = [d for d in other.dims()]
+    md.dims = [d for d in dim.dims()]
     md.parent = self
     return md
 
-  def reshape(self, other: View[T]) -> Multidim[T]:
-    assert self.nunits() == other.nunits()
+  def reshape(self, dim: View[T]) -> Multidim[T]:
+    assert self.nunits() == dim.nunits()
     md = Multidim[T]()
-    md.dims = [d for d in other.dims()]
+    md.dims = [d for d in dim.dims()]
     md.parent = self
     return md
 
@@ -390,7 +389,7 @@ class Multidim[T]:
   
   def __call__(self) -> T:
     assert self.nunits() == 1
-    flat = self._flatten()
+    flat = self.flatten()
     buffer,linear = flat._map_to_parent_buffer([0])
     return buffer[linear[0]]
 
@@ -416,7 +415,7 @@ class Multidim[T]:
 
   def _realize(self) -> list[T]:
     realized = [0] * self.nunits()
-    flat = self._flatten()
+    flat = self.flatten()
     for i in range(flat.nunits()):
       buffer,linear = flat._map_to_parent_buffer([i])
       realized[i] = buffer[linear[0]]
@@ -461,15 +460,15 @@ class Multidim[T]:
 
   def _write(self, items: list[T]):
     assert self.nunits() == len(items)
-    flat = self._flatten()
+    flat = self.flatten()
     for i in range(flat.nunits()):
       buffer,linear = flat._map_to_parent_buffer([i])
       buffer[linear[0]] = items[i]
 
   def _write(self, item: Multidim[T]):
     assert self.nunits() == item.nunits()
-    self_flat = self._flatten()
-    item_flat = item._flatten()
+    self_flat = self.flatten()
+    item_flat = item.flatten()
     for i in range(self_flat.nunits()):
       dest_buffer,dest_linear = self_flat._map_to_parent_buffer([i])
       src_buffer,src_linear = item_flat._map_to_parent_buffer([i])
@@ -626,8 +625,8 @@ class Multidim[T]:
   ### iteration
 
   # note that it flattens the dimensions
-  def __iter__(self) -> Generator[View[T]]:
-    flat = self._flatten()
+  def __iter__(self) -> Generator[Multidim[T]]:
+    flat = self.flatten()
     for i in range(flat.nunits()):
       yield flat[i]
 
@@ -636,6 +635,13 @@ class Multidim[T]:
 class Block[T]:
 
   # everything is deferred to Multidim
+
+  # need separate init for block and view so it typechecks
+  def __init__(self, other: Block[T]):
+    self.base = Multidim[T](other, False)
+
+  def __init__(self, other: View[T]):
+    self.base = Multidim[T](other, False)
 
   def __init__(self, other):
     self.base = Multidim[T](other, False)
@@ -660,6 +666,9 @@ class Block[T]:
 
   def nunits(self):
     return self.base.nunits()
+
+  def flatten(self) -> View[T]:
+    return View(self.base.flatten())
 
   # with __setitem__ and __getitem__, we don't need the star arg syntax because args automatically get grouped
   # as a tuple (or just a single item if is a 1D access)
@@ -756,7 +765,7 @@ class Block[T]:
 
   # iteration, which is just a row-major scan by default
   # yields single view values
-  def __iter__(self):
+  def __iter__(self) -> Generator[View[T]]:
     for item in self.base:
       yield View(item)
 
@@ -765,6 +774,13 @@ class Block[T]:
 
 @extend
 class View[T]:
+
+  # need separate init for block and view so it typechecks
+  def __init__(self, parent: Block[T]):
+    self.base = Multidim[T](parent, True)
+
+  def __init__(self, parent: View[T]):
+    self.base = Multidim[T](parent, True)
 
   def __init__(self, parent):
     self.base = Multidim[T](parent, True)
@@ -787,6 +803,9 @@ class View[T]:
 
   def nunits(self):
     return self.base.nunits()
+
+  def flatten(self) -> View[T]:
+    return View(self.base.flatten())
 
   # with __setitem__ and __getitem__, we don't need the star arg syntax because args automatically get grouped
   # as a tuple (or just a single item if is a 1D access)
@@ -883,7 +902,7 @@ class View[T]:
 
   # iteration, which is just a row-major scan by default
   # yields single view values
-  def __iter__(self):
+  def __iter__(self) -> Generator[View[T]]:
     for item in self.base:
       yield View(item)
 

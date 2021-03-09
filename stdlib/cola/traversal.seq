@@ -132,10 +132,10 @@ class Traversal:
   def __iter__(self):
     return self._gen_coords(self.origin)
 
-  def iter_with_origin(self, origin):
+  def iter_with_origin(self, origin) -> Generator[list[int]]:
     return self._gen_coords(origin)
 
-  def __str__(self):
+  def __str__(self) -> str:
     return ' -> '.join([str(coord) for coord in self])
 
 class AppliedTraversal[T]:
@@ -144,39 +144,40 @@ class AppliedTraversal[T]:
   root: View[T]
   origin: list[int]
 
-  def __init__(self, traversal, root: Block[T]):
+  def __init__(self, traversal: Traversal, root: Block[T]):
     self.traversal = traversal
     self.root = View(root)
     self.origin = [0] * len(self.root.dims())
 
-  def __init__(self, traversal, root: View[T]):
+  def __init__(self, traversal: Traversal, root: View[T]):
     self.traversal = traversal
     self.root = root
     self.origin = [0] * len(self.root.dims())
 
-  def __init__(self, traversal, root: Block[T], origin):
+  # TODO eventually allow origin to have views and such with the values (like dims)
+  def __init__(self, traversal: Traversal, root: Block[T], origin: list[int]):
+    assert len(origin) == self.traversal.ndims
     self.traversal = traversal
     self.root = View(root)
     self.origin = [o for o in origin]
-    assert len(self.origin) == len(root.dims())
 
-  def __init__(self, root: View[T], origin):
+  def __init__(self, traversal: Traversal, root: View[T], origin: list[int]):
+    assert len(origin) == self.traversal.ndims
+    self.traversal = traversal
     self.root = root
     self.origin = [o for o in origin]
-    assert len(self.origin) == len(root.dims())
 
   # generates view values
-  def _gen_items(self):
+  # flattens
+  def __iter__(self) -> Generator[View[T]]:
+    assert len(self.origin) > 0
     for coord in self.traversal.iter_with_origin(self.origin):
-      yield self.root[coord]
+      yield self.root[coord].flatten()
 
-  def __iter__(self):    
-    return self._gen_items()
-
-  def __str__(self):
+  def __str__(self) -> str:
     return ' -> '.join([str(item()) for item in self])
 
-  def trav_equals(self, ref: list[T]):
+  def trav_equals(self, ref: list[T]) -> bool:
     idx = 0
     for elem in self:
       if elem() != ref[idx]:
@@ -187,19 +188,21 @@ class AppliedTraversal[T]:
 @extend 
 class Traversal:
 
-  def __call__[T](self, root: Block[T]):
+  def __call__[T](self, root: Block[T]) -> AppliedTraversal[T]:
     assert len(root.dims()) == self.ndims
     return AppliedTraversal(self, root)
 
-  def __call__[T](self, root: View[T]):
+  def __call__[T](self, root: View[T]) -> AppliedTraversal[T]:
     assert len(root.dims()) == self.ndims
     return AppliedTraversal(self, root)
 
-  def __call__[T](self, root: Block[T], origin):
+  def __call__[T](self, root: Block[T], origin) -> AppliedTraversal[T]:
+    assert False
     assert len(root.dims()) == self.ndims
     return AppliedTraversal(self, root, origin)
 
-  def __call__[T](self, root: View[T], origin):
+  def __call__[T](self, root: View[T], origin) -> AppliedTraversal[T]:
+    assert False
     assert len(root.dims()) == self.ndims
     return AppliedTraversal(self, root, origin)    
     

@@ -44,7 +44,7 @@ class UInt[N]:
 # bit_seqs[0] -> MSB 
 # bit_seqs[-1] -> LSB
 # Thus, bitwidths for appending measure from LSB to MSB, but effective width measures from MSB->LSB
-class BitStream:
+class BitSeq:
 
   # measures MSB->LSB
   effective_width: int
@@ -67,7 +67,6 @@ class BitStream:
       v <<= u64(63-msb_bit_idx)
       self.bit_seqs[-1] |= v             
       self.effective_width += 1
-    print(self.nseqs)
 
   # width here is measured from the LSB->MSB, which is different than the effective_width which measures
   # from MSB->LSB. I do this because if you want to pass in decimal values (say 10, which is 0b1010, or maybe 0b000001010),
@@ -108,26 +107,39 @@ class BitStream:
     assert width >= 1 and width <= 64
     self._pack_bits(u64(val), width)
 
-  def append(self, val: u1):
+  def nbits(self) -> int:
+    return self.effective_width
+
+  def pack(self, val: BitSeq):
+    w = val.effective_width
+    for bitseq in val.bit_seqs[:-1]:
+      self._pack_bits(bitseq, 64)
+      w -= 64
+    # need to align the last one to the right hand side
+    last_seq = val.bit_seqs[-1]
+    last_seq >>= u64(64-w)
+    self._pack_bits(last_seq, w)
+
+  def pack(self, val: u1):
     self._pack_bits(u64(val), 1)
 
-  def append(self, val: u8, width: int=8):
+  def pack(self, val: u8, width: int=8):
     assert width >= 1 and width <= 8
     self._pack_bits(u64(val), width)
 
-  def append(self, val: u16, width: int=16):
+  def pack(self, val: u16, width: int=16):
     assert width >= 1 and width <= 16
     self._pack_bits(u64(val), width)
 
-  def append(self, val: u32, width: int=32):
+  def pack(self, val: u32, width: int=32):
     assert width >= 1 and width <= 32
     self._pack_bits(u64(val), width)
 
-  def append(self, val: u64, width: int=64):
+  def pack(self, val: u64, width: int=64):
     assert width >= 1 and width <= 64
     self._pack_bits(u64(val), width)
 
-  def append(self, val: int, width: int=64): 
+  def pack(self, val: int, width: int=64): 
     assert width >= 1 and width <= 64
     self._pack_bits(u64(val), width)
 
@@ -151,7 +163,7 @@ class BitStream:
     s += self.bit_seqs[-1].to_bitstr(w)
     return '0b' + s
 
-  def __eq__(self, other: BitStream) -> bool:
+  def __eq__(self, other: BitSeq) -> bool:
     if self.effective_width != other.effective_width:
       return False
     w = self.effective_width
@@ -169,5 +181,5 @@ class BitStream:
       return False
     return True
       
-  def __ne__(self, other: BitStream) -> bool:
+  def __ne__(self, other: BitSeq) -> bool:
     return not (self == other)

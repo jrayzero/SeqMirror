@@ -347,6 +347,23 @@ class Multidim[T]:
     assert len(self.dims) == 1
     d,m = self._compute_dim_and_map(idx, 0)
     return Multidim[T](self, [d], [m])
+  
+  # one of the calls uses this one
+  def __getitem__(self, idx0, idx1, *idxs) -> Multidim[T]:
+    assert isinstance(idxs, tuple) or isinstance(idxs, list)
+    assert (2 + len(idxs)) == len(self.dims)
+    d0,m0 = self._compute_dim_and_map(idx0,0)
+    d1,m1 = self._compute_dim_and_map(idx1,1)
+    dims = [d0,d1]
+    mapping = [m0,m1]
+    if staticlen(idxs) > 0:
+      it = 2
+      for idx in idxs:
+        d,m = self._compute_dim_and_map(idx, it)
+        dims.append(d)
+        mapping.append(m)
+        it += 1
+    return Multidim[T](self, dims, mapping)    
 
   # should be a tuple of things
   def __getitem__(self, idxs) -> Multidim[T]:
@@ -387,6 +404,7 @@ class Multidim[T]:
 
   ### __CALL__ AND ASSOCIATED FUNCTIONS
   
+  # all the calls realized a SINGLE element
   def __call__(self) -> T:
     assert self.nunits() == 1
     flat = self.flatten()
@@ -398,22 +416,24 @@ class Multidim[T]:
     buffer,linear = self._map_to_parent_buffer([idx])
     return buffer[linear[0]]
 
-  def __call__(self, idx: Multidim[T]) -> list[T]:
+  def __call__(self, idx: Multidim[T]) -> T:
     assert len(self.dims) == 1
-    sliced = self[idx]
-    return sliced._realize()
+    return self[idx]()
 
-  def __call__(self, idx: Block[T]) -> list[T]:
-    return self.call(idx.base)
+  def __call__(self, idx: Block[T]) -> T:
+    return self(idx.base)
 
-  def __call__(self, idx: View[T]) -> list[T]:
-    return self.call(idx.base)
+  def __call__(self, idx: View[T]) -> T:
+    return self(idx.base)
 
-  def __call__(self, idxs) -> list[T]:
-    sliced = self[idxs]
-    return sliced._realize()    
+  def __call__(self, idxs) -> T:
+    return self[idxs]()
 
-  def _realize(self) -> list[T]:
+  def __call__(self, idx0, idx1, *idx) -> T:
+    return self.__getitem__(idx0,idx1,*idx)()
+
+  # realize all elements of the multidim
+  def realize(self) -> list[T]:
     realized = [0] * self.nunits()
     flat = self.flatten()
     for i in range(flat.nunits()):
@@ -685,11 +705,11 @@ class Block[T]:
   def __call__(self, idx: int) -> T:
     return self.base(idx)
 
-  def __call__(self, idxs) -> list[T]:
+  def __call__(self, idxs) -> T:
     return self.base(idxs)
 
-  def __call__(self, idx0, idx1, *idxs) -> list[T]:
-    return self.base(idx0, idx1, idxs)
+  def __call__(self, idx0, idx1, *idxs) -> T:
+    return self.base(idx0, idx1, *idxs)
 
   def __str__(self):
     return 'block\n' + str(self.base)
@@ -822,11 +842,11 @@ class View[T]:
   def __call__(self, idx: int) -> T:
     return self.base(idx)
 
-  def __call__(self, idxs) -> list[T]:
+  def __call__(self, idxs) -> T:
     return self.base(idxs)
 
-  def __call__(self, idx0, idx1, *idxs) -> list[T]:
-    return self.base(idx0, idx1, idxs)
+  def __call__(self, idx0, idx1, *idxs) -> T:
+    return self.base(idx0, idx1, *idxs)
   
   def __str__(self):
     return 'view\n' + str(self.base)

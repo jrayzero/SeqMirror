@@ -81,33 +81,31 @@ t8()
 val2 = view1D_a(ExSlice(8,9,1,0))
 @test
 def t9():
-  assert val2[0] == 99
+  assert val2 == 99
 t9()
 
-# realize multiple values, ExSlice
-val2 = view1D_a(ExSlice(0,10,3,2))
-l = [100, 101, 102, 9, 10, 43]
+# realize single value, Slice
+val2 = view1D_a(Slice(8,10,2))
 @test
 def t10():
-  assert val2 == l
+  assert val2 == 99
 t10()
 
-# realize multiple values, ExSlice
-val2 = view1D_a(ExSlice(0,10,2,1))
-l = [100, 101, 103, 104, 10, 43]
-@test
-def t11():
-  assert val2 == l
-t11()
-  
 # 2D reshape
 view2D_a = block1D_a.reshape(2,5)
 l = [100, 101, 102, 103, 104, 9, 10, 43, 99, 13]
 @test
-def t12():
+def t11():
   assert view2D_a.buffer_equals(Block[int]((2,5), l), True)
-t12()
+t11()
 
+# realize single value, idxs
+block4D = Block[int]([2,2,2,2], [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15])
+@test
+def t12():
+  assert block4D(1,0,1,1) == 11
+t12()
+  
 # 2D slice and 3D reshape
 view3D_a = view2D_a[:, ExSlice(0, 5, 2, 1)].reshape(2,2,2)
 l = [100, 101, 103, 104, 9, 10, 99, 13]

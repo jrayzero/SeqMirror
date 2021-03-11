@@ -3,63 +3,6 @@ from C import cola_bitstr_uint(u64, int) -> str
 # TODO really need to double check that my integer sizes/bit ops are correct cause I'm not great with this part
 u1 = UInt[1]
 
-# used in conjunction with int/uint[N].new to get stuff as raw unisnged chars
-# get raw unsigned characters from a string
-@extend
-class byte:
-  def zext_or_trunc[T: int](self) -> UInt[T]:
-    if 8 < T:
-      return UInt.uint_zext[8,T](self)
-    elif 8 == T:
-      return UInt.ident[8](self)
-    else: # N > T
-      return UInt.uint_trunc[8,T](self)    
-
-@extend 
-class UInt[N]:
-
-  def __new__(val) -> UInt[N]:
-    return val.zext_or_trunc[N]()
-  @llvm
-  def ident[T: int](what) -> UInt[T]:
-    ret i{=T} %what
-  @llvm
-  def uint_zext[F: int, T: int](what) -> UInt[T]:
-    %0 = zext i{=F} %what to i{=T}
-    ret i{=T} %0
-  @llvm
-  def uint_trunc[F: int, T: int](what) -> UInt[T]:
-    %0 = trunc i{=F} %what to i{=T}
-    ret i{=T} %0
-  def zext_or_trunc[T: int](self) -> UInt[T]:
-    if N < T:
-      return UInt.uint_zext[N,T](self)
-    elif N == T:
-      return self
-    else: # N > T
-      return UInt.uint_trunc[N,T](self)
-
-  # this is MSB to LSB iter
-  def __iter__(self) -> Generator[u1]:
-    for i in range(N):
-      yield u1((self >> u64(64-i-1)) & u64(1))
-      
-  # this is LSB to MSB iter
-  def inverse_iter(self) -> Generator[u1]:
-    for i in range(N):
-      yield u1(self >> u64(i))
-
-  # this is MSB to LSB stringify
-  def to_bitstr(self, bitwidth: int) -> str:
-    return cola_bitstr_uint(u64(self), bitwidth)
-
-@extend
-class File:
-  def write(self, arr: Array[byte]):
-    self._ensure_open() 
-    _C.fwrite(arr.ptr, 1, len(arr), self.fp) 
-    self._ensure_open() 
-
 # basic idea: the individual values you append (or init with) have their MSB bits trimmed off to match the specified size
 # then that value is shifted toward the MSB of the current bitseq. So, bits are always packed from MSB->LSB.
 # bit_seqs[0] -> MSB 
@@ -238,3 +181,74 @@ class BitSeq:
       return 0
     else:
       return int(self.bit_seqs[0])
+
+# used in conjunction with int/uint[N].new to get stuff as raw unisnged chars
+# get raw unsigned characters from a string
+@extend
+class byte:
+  def zext_or_trunc[T: int](self) -> UInt[T]:
+    if 8 < T:
+      return UInt.uint_zext[8,T](self)
+    elif 8 == T:
+      return UInt.ident[8](self)
+    else: # N > T
+      return UInt.uint_trunc[8,T](self)    
+
+@extend 
+class UInt[N]:
+
+  def __new__(val: BitSeq) -> UInt[N]:
+    ui = UInt[N]()
+    idx = 0
+    # go through the fully filled bitseqs
+    for bs in val.bit_seqs[:-1]:
+      ui |= UInt[N](bs) << UInt[N](N-idx*N)
+      idx += 1
+    bs = val.bit_seqs[-1]
+    bits = UInt[N](bs) << UInt[N](N - val.effective_width & (N-1))#UInt[N]((val.nseqs-1)*N)
+    ui |= bits
+    # LSB align the whole thing nwo
+    ui >>= UInt[N](N - val.effective_width & (N-1))
+    return ui
+
+  def __new__(val) -> UInt[N]:
+    return val.zext_or_trunc[N]()
+  @llvm
+  def ident[T: int](what) -> UInt[T]:
+    ret i{=T} %what
+  @llvm
+  def uint_zext[F: int, T: int](what) -> UInt[T]:
+    %0 = zext i{=F} %what to i{=T}
+    ret i{=T} %0
+  @llvm
+  def uint_trunc[F: int, T: int](what) -> UInt[T]:
+    %0 = trunc i{=F} %what to i{=T}
+    ret i{=T} %0
+  def zext_or_trunc[T: int](self) -> UInt[T]:
+    if N < T:
+      return UInt.uint_zext[N,T](self)
+    elif N == T:
+      return self
+    else: # N > T
+      return UInt.uint_trunc[N,T](self)
+
+  # this is MSB to LSB iter
+  def __iter__(self) -> Generator[u1]:
+    for i in range(N):
+      yield u1((self >> u64(64-i-1)) & u64(1))
+      
+  # this is LSB to MSB iter
+  def inverse_iter(self) -> Generator[u1]:
+    for i in range(N):
+      yield u1(self >> u64(i))
+
+  # this is MSB to LSB stringify
+  def to_bitstr(self, bitwidth: int) -> str:
+    return cola_bitstr_uint(u64(self), bitwidth)
+
+@extend
+class File:
+  def write(self, arr: Array[byte]):
+    self._ensure_open() 
+    _C.fwrite(arr.ptr, 1, len(arr), self.fp) 
+    self._ensure_open() 

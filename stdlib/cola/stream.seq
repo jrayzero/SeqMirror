@@ -67,7 +67,8 @@ class File:
 # Thus, bitwidths for appending measure from LSB to MSB, but effective width measures from MSB->LSB
 class BitSeq:
 
-  # measures MSB->LSB
+  # for storage, everythign is aligned towards the LSB. But when you pack, we align to the MSB, pack after the MSB (towards
+  # the LSB), and then realign to the LSB
   effective_width: int
   bit_seqs: list[u64]
   nseqs: int
@@ -80,14 +81,24 @@ class BitSeq:
       next(it)
     for i in range(width):
       v = u64(next(it))
+      cur_bit_seq = u64(0)
       if self.nseqs == 0 or self.effective_width & 63 == 0:
         # need a new sequence
-        self.bit_seqs.append(u64(0))
+        self.bit_seqs.append(cur_bit_seq)
         self.nseqs += 1
+      else:
+        # MSB align the current bitseq
+        align_shift = 64 - self.effective_width & 63
+        # sanity check
+        assert align_shift != 64 # should never reach this
+        cur_bit_seq = self.bit_seqs[-1] << u64(align_shift)
       msb_bit_idx = self.effective_width & 63 # counted from the MSB->LSB
       v <<= u64(63-msb_bit_idx)
-      self.bit_seqs[-1] |= v             
+      cur_bit_seq |= v
+      # LSB align again
       self.effective_width += 1
+      rshift = 64 - self.effective_width & 63
+      self.bit_seqs[-1] = (cur_bit_seq >> u64(rshift))
 
   # width here is measured from the LSB->MSB, which is different than the effective_width which measures
   # from MSB->LSB. I do this because if you want to pass in decimal values (say 10, which is 0b1010, or maybe 0b000001010),
@@ -155,7 +166,7 @@ class BitSeq:
       w -= 64
     # need to align the last one to the right hand side
     last_seq = val.bit_seqs[-1]
-    last_seq >>= u64(64-w)
+#    last_seq >>= u64(64-w)
     self._pack_bits(last_seq, w)
 
   def pack(self, val: u1):

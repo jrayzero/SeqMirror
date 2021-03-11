@@ -50,6 +50,7 @@ class Multidim[T]:
   def __init__(self, dims: list[int]):
     self.__init__()
     self.dims = [d for d in dims]
+    self.buffer = [T(0)] * self.nunits()
 
   # dimensions can be integers or a Multidim[int]/Block[int]/View[int] of size 1
   # for specifying something like Block[T](10,11,12,...)
@@ -608,40 +609,40 @@ class Multidim[T]:
     return self._elementwise_binary_arithmetic(other.base, T.__lshift__)
 
   def __lt__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__lt__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__lt__)
 
   def __lt__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__lt__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__lt__)
 
   def __le__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__le__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__le__)
 
   def __le__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__le__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__le__)
 
   def __gt__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__gt__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__gt__)
 
   def __gt__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__gt__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__gt__)
 
   def __ge__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__ge__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__ge__)
 
   def __ge__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__ge__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__ge__)
 
   def __eq__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__eq__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__eq__)
 
   def __eq__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__eq__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__eq__)
 
   def __ne__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__ne__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__ne__)
 
   def __ne__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic(other.base, T.__ne__)
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__ne__)
 
   ### iteration
 

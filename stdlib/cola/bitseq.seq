@@ -3,6 +3,11 @@ from C import cola_bitstr_uint(u64, int) -> str
 # TODO really need to double check that my integer sizes/bit ops are correct cause I'm not great with this part
 u1 = UInt[1]
 
+# Note to self: I can't just use UInt[N] here because I don't statically know the size. If I did want to do that,
+# I could just have something like (if effectivewidth > N: return BitSeq[N+64] or something like that)
+# However, I can't add type parameters to the init functions, so I wouldn't be able to handle different size Ns.
+# UNLESS: maybe I can defer
+
 # basic idea: the individual values you append (or init with) have their MSB bits trimmed off to match the specified size
 # then that value is shifted toward the MSB of the current bitseq. So, bits are always packed from MSB->LSB.
 # bit_seqs[0] -> MSB 

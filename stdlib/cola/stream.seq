@@ -3,6 +3,26 @@ from C import cola_bitstr_uint(u64, int) -> str
 # TODO really need to double check that my integer sizes/bit ops are correct cause I'm not great with this part
 u1 = UInt[1]
 
+# Some stdlib extensions for extra bit support
+def uraw[N: int](s: str) -> UInt[N]:
+  assert N >= 0 and N <= 64
+  assert 8 * len(s) >= N # need enough bits
+  sum = u64(0)
+  for idx in range(N // 8):
+    sum |= u64(int(s.ptr[idx])) << u64(idx * 8)
+  return UInt[N](int(sum)) 
+ 
+def raw[N: int](s: str) -> Int[N]:
+    assert N >= 0 and N <= 64
+    assert 8 * len(s) >= N # need enough bits
+    sum = 0
+    for idx in range(N // 8):
+      sum |= int(s.ptr[idx]) << (idx * 8)
+    return Int[N](sum)
+
+# used in conjunction with int/uint[N].new to get stuff as raw unisnged chars
+# get raw unsigned characters from a string
+
 @extend 
 class UInt[N]:
 
@@ -38,6 +58,13 @@ class UInt[N]:
   # this is MSB to LSB stringify
   def to_bitstr(self, bitwidth: int) -> str:
     return cola_bitstr_uint(u64(self), bitwidth)
+
+@extend
+class File:
+  def write(self, arr: Array[byte]):
+    self._ensure_open() 
+    _C.fwrite(arr.ptr, 1, len(arr), self.fp) 
+    self._ensure_open() 
 
 # basic idea: the individual values you append (or init with) have their MSB bits trimmed off to match the specified size
 # then that value is shifted toward the MSB of the current bitseq. So, bits are always packed from MSB->LSB.

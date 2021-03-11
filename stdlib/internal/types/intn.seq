@@ -32,7 +32,7 @@ class Int[N]:
             i += 1
         while i < what.len:
             if what.ptr[i] < byte(48) or what.ptr[i] >= byte(58):
-                raise ValueError("Invalid integer string")
+                raise ValueError("Invalid integer string " + str(what.ptr[i]))
             ret = ret * Int[N](10) + Int[N](int(what.ptr[i]) - 48)
             i += 1
         return sign * ret

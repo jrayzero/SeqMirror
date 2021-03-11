@@ -5,6 +5,7 @@ import random,string
 class Multidim[T]:
   dims: list[int]
   parent_mapping: Optional[list[ExSlice]]
+  # TODO there is list[T](self, capacity: int) that we can use for prealloc
   buffer: Optional[list[T]]
   parent: Optional[Multidim[T]]
   unique_id: str

@@ -1,0 +1,100 @@
+from turbojpeg import *
+from jpeglib import *
+from errors import *
+
+# TODO really need better bit level support
+
+# get raw unsigned characters from a string
+class raw:
+  ptr: Ptr[byte]
+  sz: int
+  def __init__(self, s: str):
+    self.ptr = s.ptr
+    self.sz = len(s)
+
+@extend
+class UInt[N]:
+  def __new__(r: raw):
+    assert N >= 0 and N <= 64
+    assert 8 * r.sz >= N # need enough bits
+    sum = u64(0)
+    for idx in range(N // 8):
+      sum |= u64(int(r.ptr[idx])) << u64(idx * 8)
+    return UInt[N](int(sum))
+
+@extend 
+class int:
+  def __new__(r: raw):
+    sum = 0
+    for idx in range(r.sz):
+      sum |= int(r.ptr[idx]) << (idx * 8)
+    return sum
+    
+def start_input_bmp(fd: File, cinfo: jpeg_compress_struct, use_inversion_array: bool):
+  bmpfileheader = fd.read(14)  
+  if bmpfileheader == '':
+    raise LoadImageError('Bitmap header missing')
+  if u16(raw(bmpfileheader[0:2])) != u16(0x4D42):
+    raise LoadImageError('Not bitmap')
+  bmpinfoheader = fd.read(4)
+  if bmpinfoheader == '':
+    raise LoadImageError('Bitmap info header missing')
+  headersize = int(raw(bmpinfoheader))
+  if headersize < 12 or headersize > 64:
+    raise LoadImageError('Bad info header')
+  bmpinfoheader = fd.read(headersize-4)
+     
+
+def tjLoadImage(filename: str, align: int, pixelFormat: TJPF, flags: int, cinfo: jpeg_compress_struct) -> Block[u8]:
+  if len(filename) == 0 or align < 1:
+    raise LoadImageError('Invalid argument')
+  if (align & (align-1)) != 0:
+    raise LoadImageError('Alignment must be a power of 2')  
+  try:
+    fd = open(filename, 'rb')
+    tempc = fd.read(1)
+    if tempc == '':
+      # eof 
+      raise LoadImageError('Input file contains no data')
+    fd.seek(0)
+    cinfo.in_color_space = pf2cs[pixelFormat.val]
+    invert: bool = False
+    if tempc == 'B': # bitmap
+      start_input_bmp(cinfo, False)
+      invert = (flags & TJFLAG_BOTTOMUP) == 0
+    elif tempc == 'P': # ppm
+      invert = (flags & TJFLAG_BOTTOMUP) != 0
+    else:
+      raise LoadImageError('Unsupported image type')
+
+    
+    fd.close()
+  except IOError:
+    raise LoadImageError('Cannot open input file')  
+
+@extend
+class str:
+  # so these return ints, but with leading 0s for unneeded digits
+  def as_ushort(self, start: int = 0) -> int:
+    if start < 0 or (start + 1) >= len(self):
+      raise IndexError()
+    # convert to unsigned to the shift is handled properly
+    b0 = u16(int(self.ptr[start]))
+    b1 = u16(int(self.ptr[start+1])) << u16(8)
+    return int(b0+b1)
+
+#  def as_uint(self, start: int = 0) -> int:
+#    if start < 0 or (start + 3) >= len(self):
+#      raise IndexError()
+#    b0 = u32(int(self.ptr[start]))
+#    b1 = u32(int(self.ptr[start+1])) << u32(8)
+#    b2 = u32(int(self.ptr[start+2])) << u32(16)
+#    b3 = u32(int(self.ptr[start+3])) << u32(24)
+#    return int(b0+b1+b2+b3)
+
+@extend
+class File:
+  def write(self, arr: Array[byte]):
+    self._ensure_open() 
+    _C.fwrite(arr.ptr, 1, len(arr), self.fp) 
+    self._ensure_open() 

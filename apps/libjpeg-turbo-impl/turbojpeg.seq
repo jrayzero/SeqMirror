@@ -1,0 +1,117 @@
+from jpeglib import *
+
+# TODO if compile-time assertions, could use generic type as the value and check that it is valid
+
+# pixel formats
+TJPF_LOW = -1
+TJPF_HIGH = 11
+
+class TJPF:
+  val: int
+  def __init__(self, val: int):
+    assert val >= TJPF_LOW and val <= TJPF_HIGH
+    self.val = val 
+
+TJPF_RGB = TJPF(0)
+TJPF_BGR = TJPF(1)
+TJPF_RGBX = TJPF(2)
+TJPF_BGRX = TJPF(3)
+TJPF_XBGR = TJPF(4)
+TJPF_XRGB = TJPF(5)
+TJPF_GRAY = TJPF(6)
+TJPF_RGBA = TJPF(7)
+TJPF_BGRA = TJPF(8)
+TJPF_ABGR = TJPF(9)
+TJPF_ARGB = TJPF(10)
+TJPF_CMYK = TJPF(11)
+TJPF_UNKNOWN = TJPF(-1)
+
+pf2cs = [JCS_EXT_RGB, JCS_EXT_BGR, JCS_EXT_RGBX, JCS_EXT_BGRX, JCS_EXT_XBGR,
+         JCS_EXT_XRGB, JCS_GRAYSCALE, JCS_EXT_RGBA, JCS_EXT_BGRA, JCS_EXT_ABGR,
+         JCS_EXT_ARGB, JCS_CMYK, JCS_UNKNOWN]
+
+# colorspaces
+TJCS_LOW = 0
+TJCS_HIGH = 4
+
+class TJCS:
+  val: int
+  def __init__(self, val: int):
+    assert val >= TJCS_LOW and val <= TJCS_HIGH
+    self.val = val
+
+TJCS_RGB = TJCS(0)
+TJCS_YCbCr = TJCS(1)
+TJCS_GRAY = TJCS(2)
+TJCS_CMYK = TJCS(3)
+TJCS_YCCK = TJCS(4)
+
+# chrominance subsampling
+TJSAMP_LOW = 0
+TJSAMP_HIGH = 5
+
+class TJSAMP:
+  val: int
+  def __init__(self, val: int):
+    assert val >= TJSAMP_LOW and val <= TJSAMP_HIGH
+    self.val = val
+
+TJSAMP_444 = TJSAMP(0)
+TJSAMP_422 = TJSAMP(1)
+TJSAMP_420 = TJSAMP(2)
+TJSAMP_GRAY = TJSAMP(3)
+TJSAMP_440 = TJSAMP(4)
+TJSAMP_411 = TJSAMP(5)
+
+# flags
+TJFLAG_BOTTOMUP = 2
+TJFLAG_FASTUPSAMPLE = 256
+TJFLAG_NOREALLOC = 1024
+TJFLAG_FASTDCT = 2048
+TJFLAG_ACCURATEDCT = 4096
+TJFLAG_STOPONWARNING = 8192
+TJFLAG_PROGRESSIVE = 16384
+
+# errors
+TJERR_LOW = 0
+TJERR_HIGH = 1
+
+class TJERR:
+  val: int
+  def __init__(self, val: int):
+    assert val >= TJERR_LOW and val <= TJERR_HIGH
+    self.val = val
+
+TJERR_WARNING = TJERR(0)
+TJERR_FATAL = TJERR(1)
+
+# transform ops
+TJXOP_LOW = 0
+TJXOP_HIGH = 7
+
+class TJXOP:
+  val: int
+  def __init__(self, val: int):
+    assert val >= TJXOP_LOW and val <= TJXOP_HIGH
+    self.val = val
+
+TJXOP_NONE = TJXOP(0)
+TJXOP_HFLIP = TJXOP(1)
+TJXOP_VFLIP = TJXOP(2)
+TJXOP_TRANSPOSE = TJXOP(3)
+TJXOP_TRANSVERSE = TJXOP(4)
+TJXOP_ROT90 = TJXOP(5)
+TJXOP_ROT180 = TJXOP(6)
+TJXOP_ROT270 = TJXOP(7)
+
+# transform operations
+
+TJXOPT_PERFECT = 1
+TJXOPT_TRIM = 2
+TJXOPT_CROP = 4
+TJXOPT_GRAY = 8
+TJXOPT_NOOUTPUT = 16
+TJXOPT_PROGRESSIVE = 32
+TJXOPT_COPYNONE = 64
+ 
+    

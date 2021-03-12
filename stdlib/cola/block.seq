@@ -1,6 +1,8 @@
 from exslice import ExSlice
 import random,string
-# TODO best way to preinitialize a list in codon? or is there a better array type or something?
+
+# TODO fix list inits
+# TODO make dims and stuff like that be uints (and exslices stop be int sand allow ti to be negative)
 
 class Multidim[T]:
   dims: list[int]
@@ -656,8 +658,6 @@ class Multidim[T]:
 @extend
 class Block[T]:
 
-  # everything is deferred to Multidim
-
   # need separate init for block and view so it typechecks
   def __init__(self, other: Block[T]):
     self.base = Multidim[T](other, False)
@@ -796,6 +796,9 @@ class Block[T]:
 
 @extend
 class View[T]:
+
+  def __init__(self):
+    self.base = Multidim[T]()
 
   # need separate init for block and view so it typechecks
   def __init__(self, parent: Block[T]):

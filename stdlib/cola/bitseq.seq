@@ -193,9 +193,6 @@ class BitSeq:
         idx += 1
         w -= 1
     bs = self.bit_seqs[-1]
-#    print('ew: ' + str(self.effective_width))
-#    w = self.effective_width & 64 # this is %64 because we don't want 64 % 64 to return 0.
-    print('w ' + str(w))
     for b in range(w):
       # remember, stored as LSB aligned
       bit = u1((bs >> u64(w - b - 1)) & u64(1))
@@ -231,9 +228,7 @@ class BitSeq:
     while True:
       try:
         sb = next(self_iter)
-        print('sb ' + str(sb))
         ob = next(other_iter)
-        print('ob ' + str(ob))
         if sb == ob:
           continue
         else:
@@ -337,3 +332,8 @@ class File:
     self._ensure_open() 
     _C.fwrite(arr.ptr, 1, len(arr), self.fp) 
     self._ensure_open() 
+
+@extend
+class str:
+  def __sub__(self, other: str) -> u8:
+    return u8(BitSeq(self, 8)) - u8(BitSeq(other, 8))

@@ -1,19 +1,8 @@
 from jpeglib import *
 from moreconstants import *
+from structs import *
 
 # TODO if compile-time assertions, could use generic type as the value and check that it is valid
-
-@extend
-class List[T]:
-  
-  def __init__(self, *items):
-    if staticlen(items) == 0:
-      self.__init__()
-    else:
-      self.arr = Array[T](staticlen(items))
-      for item in items:
-        self.append(item)
-
 # pixel formats
 TJPF_LOW = -1
 TJPF_HIGH = 11
@@ -42,16 +31,24 @@ pf2cs = [JCS_EXT_RGB, JCS_EXT_BGR, JCS_EXT_RGBX, JCS_EXT_BGRX, JCS_EXT_XBGR,
          JCS_EXT_XRGB, JCS_GRAYSCALE, JCS_EXT_RGBA, JCS_EXT_BGRA, JCS_EXT_ABGR,
          JCS_EXT_ARGB, JCS_CMYK, JCS_UNKNOWN]
 # TODO this could really benefit from some compile-time #if like in C
-inner_cs2pf = list[TJPF](TJPF_UNKNOWN, TJPF_CMYK, TJPF_UNKNOWN, TJPF_RGB, TJPF_RGBX, TJPF_BGR,
+inner_cs2pf: list[TJPF] = [TJPF_UNKNOWN, TJPF_CMYK, TJPF_UNKNOWN, TJPF_RGB, TJPF_RGBX, TJPF_BGR,
   TJPF_BGRX, TJPF_XBGR, TJPF_XRGB, TJPF_RGBA, TJPF_BGRA, TJPF_ABGR, TJPF_ARGB,
-  TJPF_UNKNOWN)
-cs2pf = list[TJPF](TJPF_UNKNOWN, TJPF_GRAY) + \
-        (list[TJPF](TJPF_RGB) + inner_cs2pf if RGB_RED == 0 and RGB_GREEN == 1 and RGB_BLUE == 2 and RGB_PIXELSIZE == 3 else \
-         (list[TJPF](TJPF_BGR) + inner_cs2pf if RGB_RED == 2 and RGB_GREEN == 1 and RGB_BLUE == 0 and RGB_PIXELSIZE == 3 else \
-          (list(TJPF_RGBX) + inner_cs2pf if RGB_RED == 0 and RGB_GREEN == 1 and RGB_BLUE == 2 and RGB_PIXELSIZE == 4 else \
-           (list(TJPF_BGRX) + inner_cs2pf if RGB_RED == 2 and RGB_GREEN == 1 and RGB_BLUE == 0 and RGB_PIXELSIZE == 4 else \
-            (list(TJPF_XBGR) + inner_cs2pf if RGB_RED == 3 and RGB_GREEN == 2 and RGB_BLUE == 1 and RGB_PIXELSIZE == 4 else \
-             (list(TJPF_XRGB) + inner_cs2pf if RGB_RED == 1 and RGB_GREEN == 2 and RGB_BLUE == 3 and RGB_PIXELSIZE == 4 else inner_cs2pf))))))
+  TJPF_UNKNOWN]
+# TODO these won't typecheck if I create them inline 
+list0: list[TJPF] = [TJPF_RGB]
+list1: list[TJPF] = [TJPF_BGR]
+list2: list[TJPF] = [TJPF_RGBX]
+list3: list[TJPF] = [TJPF_BGRX]
+list4: list[TJPF] = [TJPF_XBGR]
+list5: list[TJPF] = [TJPF_XRGB]
+list6: list[TJPF] = [TJPF_UNKNOWN, TJPF_GRAY]
+cs2pf: list[TJPF] = list6 + \
+        (list0 + inner_cs2pf if RGB_RED == 0 and RGB_GREEN == 1 and RGB_BLUE == 2 and RGB_PIXELSIZE == 3 else \
+         (list1 + inner_cs2pf if RGB_RED == 2 and RGB_GREEN == 1 and RGB_BLUE == 0 and RGB_PIXELSIZE == 3 else \
+          (list2 + inner_cs2pf if RGB_RED == 0 and RGB_GREEN == 1 and RGB_BLUE == 2 and RGB_PIXELSIZE == 4 else \
+           (list3 + inner_cs2pf if RGB_RED == 2 and RGB_GREEN == 1 and RGB_BLUE == 0 and RGB_PIXELSIZE == 4 else \
+            (list4 + inner_cs2pf if RGB_RED == 3 and RGB_GREEN == 2 and RGB_BLUE == 1 and RGB_PIXELSIZE == 4 else \
+             (list5 + inner_cs2pf if RGB_RED == 1 and RGB_GREEN == 2 and RGB_BLUE == 3 and RGB_PIXELSIZE == 4 else inner_cs2pf))))))
 
 tjPixelSize = [3, 3, 4, 4, 4, 4, 1, 4, 4, 4, 4, 4]
 tjAlphaOffset = [-1, -1, -1, -1, -1, -1, -1, 3, 3, 0, 0, -1]

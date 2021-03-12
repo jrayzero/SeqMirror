@@ -146,12 +146,15 @@ def start_input_bmp(cmaster: CompressMaster, fd: File):
   if cmaster.bmpinfo.use_inversion_array:    
     raise NotImplementedError()
   else:
-    cmaster.bmpinfo.iobuffer = Block[u8](int(row_width))
+    cmaster.bmpinfo.iobuffer = Block[u8](1, int(row_width)//cmaster.cinfo.input_components, cmaster.cinfo.input_components)
   if u64(biWidth * cmaster.cinfo.input_components) > BitSeq(0xFFFFFFFF, 64):
     raise LoadImageError('Width overflow')
   # This is different from libjpeg-turbo. They have biWidth instead of row width, but that can be smaller than 
   # row-width, which makes memcpy copy more bytes than the size of the destination
-  cmaster.bmpinfo.buffer = Block[JSAMPLE](cmaster.cinfo.input_components, int(row_width) // cmaster.cinfo.input_components)#biWidth * cmaster.cinfo.input_components)
+  # height, width, input_com
+  buff = Block[JSAMPLE](1, int(row_width)//cmaster.cinfo.input_components, cmaster.cinfo.input_components)
+  cmaster.bmpinfo.buffer = buff
+  cmaster.commoninfo.buffer = View(cmaster.bmpinfo.buffer)
   cmaster.cinfo.data_precision = 8
   cmaster.cinfo.image_width = u32(biWidth)
   cmaster.cinfo.image_height = u32(biHeight)
@@ -165,25 +168,26 @@ def get_24bit_row(cmaster: CompressMaster, fd: File) -> int:
     raise NotImplementedError()
   else:
     bmpinfo = cmaster.bmpinfo
-    rwidth = bmpinfo.iobuffer.dims()[0]
+    nelems = bmpinfo.iobuffer.nunits()
     # This check may actually be done in the seq C impl of file read, but I'm not sure
-    if fd.read(rwidth, 1, bmpinfo.iobuffer) != rwidth:
+    # Read a whole row of R,G,B values which are interleaved, I think.
+    # This reads into the underlying buffer
+    if fd.read(nelems, 1, bmpinfo.iobuffer) != nelems:
       raise LoadImageError('read error')
     cinfo = cmaster.cinfo
     if cinfo.in_color_space == JCS_EXT_BGR:
-      print(bmpinfo.buffer.dims())
-      print(bmpinfo.iobuffer.dims())
-      bmpinfo.buffer.reshape(rwidth)[:] = bmpinfo.iobuffer
-      print(bmpinfo.buffer)
+      # components are interleaved
+      bmpinfo.buffer[:,:,:] = bmpinfo.iobuffer
+      print(bmpinfo.buffer.flatten())
     elif cinfo.in_color_space == JCS_CMYK:
       raise NotTestedError()
-      Rs = bmpinfo.iobuffer[::3]
-      Gs = bmpinfo.iobuffer[1::3]
-      Bs = bmpinfo.iobuffer[2::3]
-      outCs = bmpinfo.buffer[0,::4]
-      outMs = bmpinfo.buffer[0,1::4]
-      outYs = bmpinfo.buffer[0,2::4]
-      outKs = bmpinfo.buffer[0,3::4]
+      Rs = bmpinfo.iobuffer[:,:,0]
+      Gs = bmpinfo.iobuffer[:,:,1]
+      Bs = bmpinfo.iobuffer[:,:,2]
+      outCs = bmpinfo.buffer[:,:,0]
+      outMs = bmpinfo.buffer[:,:,1]
+      outYs = bmpinfo.buffer[:,:,2]
+      outKs = bmpinfo.buffer[:,:,3]
       for r,g,b,c,m,y,k in scan(Rs, Gs, Bs, outCs, outMs, outYs, outKs):
         rgb_to_cmyk(r(),g(),b(),c,m,y,k)
     else:
@@ -193,14 +197,14 @@ def get_24bit_row(cmaster: CompressMaster, fd: File) -> int:
       bindex = rgb_blue[cinfo.in_color_space]
       aindex = alpha_index[cinfo.in_color_space]
       if aindex >= 0:
-        bmpinfo.buffer[0,bindex::3] = bmpinfo.iobuffer[::3]
-        bmpinfo.buffer[0,gindex::3] = bmpinfo.iobuffer[1::3]
-        bmpinfo.buffer[0,rindex::3] = bmpinfo.iobuffer[2::3]
-        bmpinfo.buffer[0,aindex::3] = JSAMPLE(0xFF)
+        bmpinfo.buffer[:,:,bindex] = bmpinfo.iobuffer[:,:,0]
+        bmpinfo.buffer[:,:,gindex] = bmpinfo.iobuffer[:,:,1]
+        bmpinfo.buffer[:,:,rindex] = bmpinfo.iobuffer[:,:,2]
+        bmpinfo.buffer[:,:,aindex] = JSAMPLE(0xFF)
       else:
-        bmpinfo.buffer[0,bindex::3] = bmpinfo.iobuffer[::3]
-        bmpinfo.buffer[0,gindex::3] = bmpinfo.iobuffer[1::3]
-        bmpinfo.buffer[0,rindex::3] = bmpinfo.iobuffer[2::3]        
+        bmpinfo.buffer[:,:,bindex] = bmpinfo.iobuffer[:,:,0]
+        bmpinfo.buffer[:,:,gindex] = bmpinfo.iobuffer[:,:,1]
+        bmpinfo.buffer[:,:,rindex] = bmpinfo.iobuffer[:,:,2]       
   return 1
 
 def get_32bit_row(cmaster: CompressMaster, fd: File) -> int:
@@ -210,3 +214,4 @@ def jinit_read_bmp(cmaster: CompressMaster, use_inversion_array: bool):
   cmaster.bmpinfo = bmp_source_struct()
   cmaster.bmpinfo.use_inversion_array = use_inversion_array
   cmaster.filetype = 'BMP'
+

@@ -19,7 +19,7 @@ class List[T]:
 def PAD(width: u32, align: int) -> u32:
   return ((width + u32(align) - u32(1)) & u32(~(align - 1)))  
   
-def tjLoadImage( cmaster: CompressMaster, filename: str, align: int, pixelFormat: TJPF, flags: int) -> Block[u8]:
+def tjLoadImage(cmaster: CompressMaster, filename: str, align: int, pixelFormat: TJPF, flags: int) -> Block[u8]:
   if len(filename) == 0 or align < 1:
     raise LoadImageError('Invalid argument')
   if (align & (align-1)) != 0:
@@ -48,7 +48,9 @@ def tjLoadImage( cmaster: CompressMaster, filename: str, align: int, pixelFormat
     width = cinfo.image_width
     height = cinfo.image_height
     pitch = PAD(u32(width) * u32(tjPixelSize[pixelFormat]), align)
-    get_pixel_rows: Optional[Function[int, CompressMaster, File]] = None
+    dstBufBlock = Block[JSAMPLE](int(height), int(pitch) // cmaster.cinfo.input_components)
+    dstBuf = dstBufBlock.reshape(int(height), int(pitch)) if cmaster.cinfo.input_components == 1 else View(dstBufBlock)
+    get_pixel_rows: Optional[Function[int, CompressMaster, File]] = None    
     if cmaster.filetype.lower() == 'bmp':
       if cmaster.bmpinfo.bits_per_pixel == 8:
         get_pixel_rows = get_8bit_row
@@ -61,6 +63,12 @@ def tjLoadImage( cmaster: CompressMaster, filename: str, align: int, pixelFormat
     scanline = u32(0)
     while scanline < height:
       nlines = get_pixel_rows(cmaster, fd)
+      for i in range(nlines):
+        row = scanline + u32(i)
+        if invert:
+          raise NotImplementedError()
+        # TODO left off here. see if can change read_bmp to use 3d buffer (or 2d for grayscale)
+        # then redo this for that
       scanline += u32(1)
     fd.close()
   except IOError:

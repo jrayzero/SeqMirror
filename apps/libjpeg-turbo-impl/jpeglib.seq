@@ -1,5 +1,4 @@
 from  cola.block import Block
-# has the non-function declarations from jpeglib.h
 
 DCTSIZE = 8
 #DCTSIZE2 = 64 use DCTSIZE,DCTSIZE instead

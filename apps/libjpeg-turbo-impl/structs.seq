@@ -29,10 +29,13 @@ class ppm_source_struct:
   buffer_width: u64
   rescale: Optional[Block[JSAMPLE]]
   maxval: u32  
-  buffer: View[JSAMPLE]
+
+class common_source_struct:
+  buffer: Optional[View[JSAMPLE]]
 
 class CompressMaster:
   cinfo: jpeg_compress_struct
   filetype: str
   bmpinfo: Optional[bmp_source_struct]
-  ppminfo: Optional[ppm_source_struct]  
+  ppminfo: Optional[ppm_source_struct]
+  commoninfo: common_source_struct

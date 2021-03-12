@@ -10,7 +10,7 @@ class List[T]:
     if staticlen(items) == 0:
       self.__init__()
     else:
-      self.arr = Array[T](l)
+      self.arr = Array[T](staticlen(items))
       for item in items:
         self.append(item)
 

@@ -1,0 +1,131 @@
+from turbojpeg import *
+from jpeglib import *
+from errors import *
+from config import *
+from moreconstants import *
+from structs import *
+
+def jinit_read_ppm(cmaster: CompressMaster):
+  cmaster.ppminfo = ppm_source_struct()
+  cmaster.filetype = 'PPM'
+
+def cond1(cinfo) -> bool:
+  return cinfo.in_color_space == JCS_EXT_RGB or cinfo.in_color_space == JCS_RGB
+
+def cond2(cinfo) -> bool:
+  return cinfo.in_color_space == JCS_EXT_RGB
+
+def pbm_getc(fd: File) -> str:
+  ch = fd.read(1)
+  if ch == '#':
+    ch = fd.read(1)
+    while ch != '\n' and ch != '':
+      ch = fd.read(1)
+  return ch
+
+def read_pbm_integer(fd: File, maxval: u32) -> u32:
+  # skip leading whitespace
+  ch = pbm_getc(fd)
+  while ch == ' ' or ch == '\t' or ch == '\n' or ch == '\r':
+    ch = pbm_getc(fd)
+    if ch == '':
+      raise LoadImageError('ppm EOF')
+  if ch < '0' or ch > '9':
+    raise LoadImageError('ppm non-numeric')
+  val = u32(ch - '0')
+  ch = pbm_getc(fd)
+  while ch >= '0'  and ch <= '9':
+    val *= u32(10)
+    val += u32(ch - '0')
+    ch = pbm_getc(fd)
+  if val > maxval:
+    raise LoadImageError("ppm out of range")
+  return val
+
+def start_input_ppm(cmaster: CompressMaster, fd: File):
+  if BitSeq(fd.read(1), 8) != BitSeq(0x50, 8):
+    raise LoadImageError('Not ppm')
+  c = fd.read(1)
+  if c == '2' and c != '3' and c != '5' and c != '6':
+    raise LoadImageError('Not ppm') 
+  maxval = u32(65535)
+  w = read_pbm_integer(fd, maxval)
+  h = read_pbm_integer(fd, maxval)
+  maxval = read_pbm_integer(fd, maxval)
+  if w <= u32(0) or h <= u32(0) or maxval <= u32(0):
+    raise LoadImageError('Not ppm')
+  cinfo = cmaster.cinfo
+  cinfo.data_precision = BITS_IN_JSAMPLE
+  cinfo.image_width = w
+  cinfo.image_height = h
+  cmaster.ppminfo.maxval = maxval
+  need_iobuffer = True
+  use_raw_buffer = False
+  need_rescale = True
+  print('c: ' + c)
+  print('image width: ' + str(cinfo.image_width))
+  print('image height: ' + str(cinfo.image_height))
+  if c == '2':
+    if cinfo.in_color_space == JCS_UNKNOWN:
+      cinfo.in_color_space = JCS_GRAYSCALE
+    if not (cinfo.in_color_space.is_ext_rgb() or cinfo.in_color_space == JCS_CMYK):
+      raise LoadImageError('bad colorspace')
+    need_iobuffer = False
+  elif c == '3':
+    if cinfo.in_color_space == JCS_UNKNOWN:
+      cinfo.in_color_space = JCS_EXT_RGB
+    if not (cinfo.in_color_space.is_ext_rgb() or cinfo.in_color_space == JCS_CMYK):
+      raise LoadImageError('bad colorspace')
+  elif c == '5':
+    if cinfo.in_color_space == JCS_UNKNOWN:
+      cinfo.in_color_space = JCS_GRAYSCALE
+    if maxval > u32(255):
+      pass
+    elif maxval == u32(MAXJSAMPLE) and JSAMPLE.len() == 8 and cinfo.in_color_space == JCS_GRAYSCALE:
+      use_raw_buffer = True
+      need_rescale = False
+    else:
+      if cinfo.in_color_space != JCS_GRAYSCALE and not cinfo.in_color_space.is_ext_rgb() and cinfo.in_color_space != JCS_CMYK:
+        raise LoadImageError('bad colorspace')
+  elif c == '6':
+    if cinfo.in_color_space == JCS_UNKNOWN:
+      cinfo.in_color_space = JCS_EXT_RGB
+    if maxval > u32(255):
+      pass
+    elif maxval == u32(MAXJSAMPLE) and JSAMPLE.len() == 8 and (cond1(cinfo) if RGB_RED == 0 and RGB_GREEN == 1 and RGB_BLUE == 2 and RGB_PIXELSIZE == 3 else cond2(cinfo)):
+      use_raw_buffer = True
+      need_rescale = False
+    else:
+      if not cinfo.in_color_space.is_ext_rgb() and cinfo.in_color_space != JCS_CMYK:
+        raise LoadImageError('bad colorspace')
+  
+  if cinfo.in_color_space.is_ext_rgb():
+    cinfo.input_components = rgb_pixelsize[cinfo.in_color_space]
+  elif cinfo.in_color_space == JCS_GRAYSCALE:
+    cinfo.input_components = 1
+  elif cinfo.in_color_space == JCS_CMYK:
+    cinfo.input_components = 4
+
+  if need_iobuffer:
+    buffer_width: u64 = u64(0)
+    if c == '6':
+      buffer_width = u64(w) * u64(3) * (u64(1) if maxval <= u32(255) else u64(2))
+    else:
+      buffer_width = u64(w) * (u64(1) if maxval <= u32(255) else u64(2))
+    # TODO update and remove int cast once allow uints for blocks dims
+    cmaster.ppminfo.iobuffer = Block[u8](int(buffer_width))
+  ppminfo = cmaster.ppminfo
+  if use_raw_buffer:
+    ppminfo.pixrow = View(ppminfo.iobuffer)
+    ppminfo.buffer = View(ppminfo.iobuffer)
+  else:
+    ppminfo.buffer = View(Block[JSAMPLE](int(w) * cinfo.input_components))
+  
+  if need_rescale:
+    print('need rescale')
+    ppminfo.rescale = Block[JSAMPLE](int(max(int(maxval), 255) + 1) * JSAMPLE.len())
+    half_maxval = u64(maxval) // u64(2)
+    for val in range(int(maxval)):
+      ppminfo.rescale[val] = JSAMPLE((u64(val) * u64(MAXJSAMPLE) + half_maxval) // u64(maxval))
+    print(ppminfo.rescale)
+  

@@ -2,6 +2,7 @@ import sys
 
 # user defined configuration parameters
 BITS_IN_JSAMPLE = 8
+MAXJSAMPLE = 2**BITS_IN_JSAMPLE - 1
 ORDERING = 'ROW_MAJOR'
 
 def write(fd: File, line: str, newline: bool=True):
@@ -14,6 +15,7 @@ def generate_config(fn: str = 'config.seq'):
   write(fd, 'from cola.config import ordering')
   write(fd, 'ordering.set_order(' + '\'' + ORDERING + '\')')
   write(fd, 'BITS_IN_JSAMPLE = ' + str(BITS_IN_JSAMPLE))
+  write(fd, 'MAXJSAMPLE = ' + str(MAXJSAMPLE))
   write(fd, 'JSAMPLE = UInt[' + str(BITS_IN_JSAMPLE) + ']')
 
 if len(sys.argv) > 1:

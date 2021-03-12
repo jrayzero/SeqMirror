@@ -16,6 +16,14 @@ J_COLOR_SPACE_HIGH = 16
 
 class J_COLOR_SPACE:
   val: int
+  def __init__(self, val: int):
+    self.val = val
+  def __eq__(self, other: J_COLOR_SPACE):
+    return self.val == other.val
+  def __eq__(self, other):
+    return self.val == other
+  def __ne__(self, other):
+    return not self == other
 
 JCS_UNKNOWN = J_COLOR_SPACE(0)
 JCS_GRAYSCALE = J_COLOR_SPACE(1)

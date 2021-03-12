@@ -11,7 +11,11 @@ from structs import CompressMaster
 #fd.close()
 
 
-cmaster = CompressMaster()
-fd = open('/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/vgl_6434_0018a.bmp', 'rb')
-print('reading file')
-start_input_bmp(fd, cmaster, False)
+bmp = '/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/vgl_6434_0018a.bmp'
+ppm = '/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/testorig.ppm'
+
+print('reading bmp file')
+tjLoadImage(CompressMaster(), bmp, 1, TJPF_UNKNOWN, 0)
+
+print('reading ppm file')
+tjLoadImage(CompressMaster(), ppm, 1, TJPF_UNKNOWN, 0)

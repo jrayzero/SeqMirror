@@ -23,6 +23,16 @@ class bmp_source_struct:
   iobuffer: Optional[Block[u8]]
   buffer: Block[JSAMPLE]
 
+class ppm_source_struct:
+  iobuffer: Block[JSAMPLE]
+  pixrow: View[JSAMPLE]
+  buffer_width: u64
+  rescale: Optional[Block[JSAMPLE]]
+  maxval: u32  
+  buffer: View[JSAMPLE]
+
 class CompressMaster:
   cinfo: jpeg_compress_struct
-  bmpinfo: bmp_source_struct
+  filetype: str
+  bmpinfo: Optional[bmp_source_struct]
+  ppminfo: Optional[ppm_source_struct]  

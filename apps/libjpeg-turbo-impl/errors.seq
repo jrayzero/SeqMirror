@@ -10,3 +10,16 @@ class LoadImageError:
   @property
   def message(self):
     return self._hdr.msg
+
+class NotTestedError:
+  _hdr: ExcHeader
+  
+  def __init__(self):
+    self._hdr = ('NotTestedError', '', '', '', 0, 0)
+    
+  def __init__(self, message: str):
+    self._hdr = ('NotTestedError', message, '', '', 0, 0)
+    
+  @property
+  def message(self):
+    return self._hdr.msg

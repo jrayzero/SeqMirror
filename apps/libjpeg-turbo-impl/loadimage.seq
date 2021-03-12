@@ -48,9 +48,7 @@ def tjLoadImage( cmaster: CompressMaster, filename: str, align: int, pixelFormat
     width = cinfo.image_width
     height = cinfo.image_height
     pitch = PAD(u32(width) * u32(tjPixelSize[pixelFormat]), align)
-    print('pitch ' + str(pitch))
-    scanline = 0
-    get_pixel_rows: Optional[Function[void, CompressMaster]] = None
+    get_pixel_rows: Optional[Function[int, CompressMaster, File]] = None
     if cmaster.filetype.lower() == 'bmp':
       if cmaster.bmpinfo.bits_per_pixel == 8:
         get_pixel_rows = get_8bit_row
@@ -58,11 +56,12 @@ def tjLoadImage( cmaster: CompressMaster, filename: str, align: int, pixelFormat
         get_pixel_rows = get_24bit_row
       elif cmaster.bmpinfo.bits_per_pixel == 32:
         get_pixel_rows = get_32bit_row
-#      while scanline < int(height):
-        # TODO left off here
-#        pass
     elif cmaster.filetype.lower() == 'ppm':
       raise NotImplementedError()
+    scanline = u32(0)
+    while scanline < height:
+      nlines = get_pixel_rows(cmaster, fd)
+      scanline += u32(1)
     fd.close()
   except IOError:
     raise LoadImageError('Cannot open input file')  

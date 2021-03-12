@@ -4,6 +4,10 @@ from errors import *
 from config import *
 from moreconstants import *
 from structs import *
+from colorconv import *
+from cola.iter_utils import *
+
+alpha_index = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 3, 3, 0, 0, -1]
 
 def read_colormap(fd: File, cmaster: CompressMaster, mapentrysize: int):
   gray = True
@@ -139,24 +143,67 @@ def start_input_bmp(cmaster: CompressMaster, fd: File):
     raise LoadImageError('Bad depth')
   while row_width & u32(3) != u32(0):
     row_width += u32(1)
-  if cmaster.bmpinfo.use_inversion_array:
+  if cmaster.bmpinfo.use_inversion_array:    
     raise NotImplementedError()
   else:
-    iobuffer = Block[u8](int(row_width))
+    cmaster.bmpinfo.iobuffer = Block[u8](int(row_width))
   if u64(biWidth * cmaster.cinfo.input_components) > BitSeq(0xFFFFFFFF, 64):
     raise LoadImageError('Width overflow')
-  cmaster.bmpinfo.buffer = Block[JSAMPLE](biWidth * cmaster.cinfo.input_components)
+  # This is different from libjpeg-turbo. They have biWidth instead of row width, but that can be smaller than 
+  # row-width, which makes memcpy copy more bytes than the size of the destination
+  cmaster.bmpinfo.buffer = Block[JSAMPLE](cmaster.cinfo.input_components, int(row_width) // cmaster.cinfo.input_components)#biWidth * cmaster.cinfo.input_components)
   cmaster.cinfo.data_precision = 8
   cmaster.cinfo.image_width = u32(biWidth)
   cmaster.cinfo.image_height = u32(biHeight)
 
-def get_8bit_row(cmaster: CompressMaster):
+def get_8bit_row(cmaster: CompressMaster, fd: File) -> int:
   raise NotImplementedError()
 
-def get_24bit_row(cmaster: CompressMaster) -> void:
-  raise NotImplementedError()
+def get_24bit_row(cmaster: CompressMaster, fd: File) -> int:
+  print('in get_24bit_row')
+  if cmaster.bmpinfo.use_inversion_array:
+    raise NotImplementedError()
+  else:
+    bmpinfo = cmaster.bmpinfo
+    rwidth = bmpinfo.iobuffer.dims()[0]
+    # This check may actually be done in the seq C impl of file read, but I'm not sure
+    if fd.read(rwidth, 1, bmpinfo.iobuffer) != rwidth:
+      raise LoadImageError('read error')
+    cinfo = cmaster.cinfo
+    if cinfo.in_color_space == JCS_EXT_BGR:
+      print(bmpinfo.buffer.dims())
+      print(bmpinfo.iobuffer.dims())
+      bmpinfo.buffer.reshape(rwidth)[:] = bmpinfo.iobuffer
+      print(bmpinfo.buffer)
+    elif cinfo.in_color_space == JCS_CMYK:
+      raise NotTestedError()
+      Rs = bmpinfo.iobuffer[::3]
+      Gs = bmpinfo.iobuffer[1::3]
+      Bs = bmpinfo.iobuffer[2::3]
+      outCs = bmpinfo.buffer[0,::4]
+      outMs = bmpinfo.buffer[0,1::4]
+      outYs = bmpinfo.buffer[0,2::4]
+      outKs = bmpinfo.buffer[0,3::4]
+      for r,g,b,c,m,y,k in scan(Rs, Gs, Bs, outCs, outMs, outYs, outKs):
+        rgb_to_cmyk(r(),g(),b(),c,m,y,k)
+    else:
+      raise NotTestedError()
+      rindex = rgb_red[cinfo.in_color_space]
+      gindex = rgb_green[cinfo.in_color_space]
+      bindex = rgb_blue[cinfo.in_color_space]
+      aindex = alpha_index[cinfo.in_color_space]
+      if aindex >= 0:
+        bmpinfo.buffer[0,bindex::3] = bmpinfo.iobuffer[::3]
+        bmpinfo.buffer[0,gindex::3] = bmpinfo.iobuffer[1::3]
+        bmpinfo.buffer[0,rindex::3] = bmpinfo.iobuffer[2::3]
+        bmpinfo.buffer[0,aindex::3] = JSAMPLE(0xFF)
+      else:
+        bmpinfo.buffer[0,bindex::3] = bmpinfo.iobuffer[::3]
+        bmpinfo.buffer[0,gindex::3] = bmpinfo.iobuffer[1::3]
+        bmpinfo.buffer[0,rindex::3] = bmpinfo.iobuffer[2::3]        
+  return 1
 
-def get_32bit_row(cmaster: CompressMaster):
+def get_32bit_row(cmaster: CompressMaster, fd: File) -> int:
   raise NotImplementedError()
 
 def jinit_read_bmp(cmaster: CompressMaster, use_inversion_array: bool):

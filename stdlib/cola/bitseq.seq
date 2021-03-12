@@ -1,6 +1,7 @@
-#from C import cola_bitstr_uint(u64, int) -> str
+# everything bit and built-in-type related
 
-# TODO really need to double check that my integer sizes/bit ops are correct cause I'm not great with this part
+# TODO I might be able to just do LLVM for some of these operations
+
 u1 = UInt[1]
 
 # Note to self: I can't just use UInt[N] here because I don't statically know the size in every case
@@ -276,10 +277,14 @@ class UInt[N]:
     for b in val:
       ui |= (UInt[N](b) << UInt[N](n))
       n -= 1    
-    return ui
+    return ui    
 
   def __new__(val) -> UInt[N]:
     return val.zext_or_trunc[N]()
+  @llvm
+  def __new__(val: float) -> UInt[N]:
+    %0 = fptoui double %val to i{=N}
+    ret i{=N} %0
   @llvm
   def ident[T: int](what) -> UInt[T]:
     ret i{=T} %what
@@ -291,6 +296,10 @@ class UInt[N]:
   def uint_trunc[F: int, T: int](what) -> UInt[T]:
     %0 = trunc i{=F} %what to i{=T}
     ret i{=T} %0
+  @llvm
+  def to_float(self) -> float:
+    %0 = uitofp i{=N} %self to double
+    ret double %0
   def zext_or_trunc[T: int](self) -> UInt[T]:
     if N < T:
       return UInt.uint_zext[N,T](self)
@@ -337,3 +346,8 @@ class File:
 class str:
   def __sub__(self, other: str) -> u8:
     return u8(BitSeq(self, 8)) - u8(BitSeq(other, 8))
+
+@extend 
+class float:
+  def __new__(val) -> float:
+    return val.to_float()

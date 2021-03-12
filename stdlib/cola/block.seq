@@ -933,3 +933,13 @@ class View[T]:
 
   def __bool__(self):
     return bool(self.base)
+
+@extend
+class File:
+  # nelems is total number of elems to read and elem_bytes is the size of each elem
+  def read[T](self, nelems: int, elem_bytes: int, block: Block[T]) -> int:
+    self._ensure_open();
+    assert len(block.base.buffer) >= nelems # make sure enough space
+    ret = _C.fread(block.base.buffer.arr.ptr.as_byte(), T.len() // 8, nelems, self.fp)
+    self._errcheck("error in read")
+    return ret

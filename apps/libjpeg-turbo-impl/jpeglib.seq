@@ -13,11 +13,9 @@ C_MAX_BLOCKS_IN_MCU = 10
 # colorspaces
 J_COLOR_SPACE_LOW = 0
 J_COLOR_SPACE_HIGH = 16
+
 class J_COLOR_SPACE:
   val: int
-  def __init__(self, val: int=0):
-    assert val >= J_COLOR_SPACE_LOW and val <= J_COLOR_SPACE_HIGH
-    self.val = val
 
 JCS_UNKNOWN = J_COLOR_SPACE(0)
 JCS_GRAYSCALE = J_COLOR_SPACE(1)
@@ -37,6 +35,22 @@ JCS_EXT_ABGR = J_COLOR_SPACE(14)
 JCS_EXT_ARGB = J_COLOR_SPACE(15)
 JCS_RGB565 = J_COLOR_SPACE(16)
 
+@extend
+class J_COLOR_SPACE:
+  def __init__(self, val: int=0):
+    assert val >= J_COLOR_SPACE_LOW and val <= J_COLOR_SPACE_HIGH
+    self.val = val
+  def is_ext_rgb(self):
+    return self == JCS_RGB or (self >= JCS_EXT_RGB and self <= JCS_EXT_ARGB)
+  def __eq__(self, other: J_COLOR_SPACE):
+    return self.val == other.val
+  def __ge__(self, other: J_COLOR_SPACE):
+    return self.val >= other.val
+  def __le__(self, other: J_COLOR_SPACE):
+    return self.val <= other.val
+  def __str__(self):
+    return str(self.val)
+
 # quantization tables
 class JQUANT_TBL:
   quantval: Block[u16]
@@ -55,8 +69,4 @@ class JHUFF_TBL:
   def __init__(self, sent_table: bool = False):
     self.bits = Block[u8](17)
     self.huffval = Block[u8](256)
-    self.sent_table = sent_table
-  
-# compression info
-class jpeg_compress_struct:
-  in_color_space: J_COLOR_SPACE
+    self.sent_table = sent_table  

@@ -1,24 +1,183 @@
 from turbojpeg import *
 from jpeglib import *
 from errors import *
-from cola.stream import *
+from config import *
+from moreconstants import *
+from structs import *
+from cola.bitseq import *
 
-# TODO really need better bit level support    
-def start_input_bmp(fd: File, cinfo: jpeg_compress_struct, use_inversion_array: bool):
+def read_colormap(fd: File, cmaster: CompressMaster, mapentrysize: int):
+  gray = True
+  if mapentrysize == 3:
+    for i in range(cmaster.bmpinfo.colormap.dims()[1]):
+      cmaster.bmpinfo.colormap[2,i] = JSAMPLE(fd.read(1))
+      cmaster.bmpinfo.colormap[1,i] = JSAMPLE(fd.read(1))
+      cmaster.bmpinfo.colormap[0,i] = JSAMPLE(fd.read(1))
+      if cmaster.bmpinfo.colormap[2,i] != cmaster.bmpinfo.colormap[1,i] or cmaster.bmpinfo.colormap[1,i] != cmaster.bmpinfo.colormap[0,i]:
+        gray = False
+  elif mapentrysize == 4:
+    for i in range(cmaster.bmpinfo.colormap.dims()[1]):
+      cmaster.bmpinfo.colormap[2,i] = JSAMPLE(fd.read(1))
+      cmaster.bmpinfo.colormap[1,i] = JSAMPLE(fd.read(1))
+      cmaster.bmpinfo.colormap[0,i] = JSAMPLE(fd.read(1))
+      fd.read(1)
+      if cmaster.bmpinfo.colormap[2,i] != cmaster.bmpinfo.colormap[1,i] or cmaster.bmpinfo.colormap[1,i] != cmaster.bmpinfo.colormap[0,i]:
+        gray = False
+  else:
+    raise LoadImageError('Bad cmap')
+  if cmaster.cinfo.in_color_space == JCS_UNKNOWN and gray:
+    cmaster.cinfo.in_color_space = JCS_GRAYSCALE
+  if cmaster.cinfo.in_color_space == JCS_GRAYSCALE and not gray:
+    raise LoadImageError('Bad colorspace')
+
+def start_input_bmp(fd: File, cmaster: CompressMaster, use_inversion_array: bool):
+  cmaster.bmpinfo = bmp_source_struct()
   bmpfileheader = fd.read(14)  
   if bmpfileheader == '':
     raise LoadImageError('Bitmap header missing')
-  if uraw[16](bmpfileheader[0:2]) != u16(0x4D42):
+  if BitSeq(bmpfileheader, 16) != BitSeq(0x4D42, 16):
     raise LoadImageError('Not bitmap')
+  bfOffBits = u32(BitSeq(bmpfileheader[10:], 32))
   bmpinfoheader = fd.read(4)
   if bmpinfoheader == '':
     raise LoadImageError('Bitmap info header missing')
-  headersize = int(raw[32](bmpinfoheader))
-  if headersize < 12 or headersize > 64:
+  headerSize = int(BitSeq(bmpinfoheader, 32))
+  if headerSize < 12 or headerSize > 64:
     raise LoadImageError('Bad info header')
-  bmpinfoheader = fd.read(headersize-4)
-     
+  bmpinfoheader = fd.read(headerSize-4)
+  mapentrysize = 0
+  biWidth = 0
+  biHeight = 0
+  biPlanes = u16(0)
+  biCompression = u32(0)
+  biXPelsPerMeter = 0
+  biYPelsPerMeter = 0
+  biClrUsed = u32(0)
+  print(headerSize)
+  if headerSize == 12:
+    biWidth = int(BitSeq(bmpinfoheader, 16))
+    biHeight = int(BitSeq(bmpinfoheader[2:], 16))
+    biPlanes = u16(BitSeq(bmpinfoheader[4:], 16))
+    cmaster.bmpinfo.bits_per_pixel = int(BitSeq(bmpinfoheader[6:], 16))
+    raise NotImplementedError()
+  elif headerSize == 40 or headerSize == 64:
+    biWidth = int(BitSeq(bmpinfoheader, 32))
+    biHeight = int(BitSeq(bmpinfoheader[4:], 32))
+    biPlanes = u16(BitSeq(bmpinfoheader[8:], 16))
+    cmaster.bmpinfo.bits_per_pixel = int(BitSeq(bmpinfoheader[10:], 16))
+    biCompression = u32(BitSeq(bmpinfoheader[12:], 32))
+    biXPelsPerMeter = int(BitSeq(bmpinfoheader[20:], 32))
+    biYPelsPerMeter = int(BitSeq(bmpinfoheader[24:], 32))
+    biClrUsed = u32(BitSeq(bmpinfoheader[28:], 32))
+    if cmaster.bmpinfo.bits_per_pixel == 8:
+      # TODO traceinfo
+      mapentrysize = 3
+    elif cmaster.bmpinfo.bits_per_pixel == 24 or cmaster.bmpinfo.bits_per_pixel == 32:
+      # TODO traceinfo
+      pass
+    else:
+      raise LoadImageError("Bad depth")
+    if biCompression != u32(0):
+      raise LoadImageError("biCompression")
+    if biXPelsPerMeter > 0 and biYPelsPerMeter > 0:
+      cmaster.cinfo.X_density = u16(biXPelsPerMeter//100)
+      cmaster.cinfo.Y_density = u16(biYPelsPerMeter//100)
+      cmaster.cinfo.density_unit = 2
+  else:
+    raise LoadImageError("Bad header")
+  if biWidth <= 0 or biHeight <= 0:
+    raise LoadImageError("BMP empty")
+  if biPlanes != u16(1):
+    raise LoadImageError("Bad planes")
+  bPad = int(bfOffBits - u32(headerSize + 14))
+  if mapentrysize > 0:
+    if biClrUsed <= u32(0):
+      biClrUsed = u32(256)
+    elif biClrUsed > u32(256):
+      raise LoadImageError("badcmap")
+    cmaster.bmpinfo.colormap = Block[JSAMPLE](3, int(biClrUsed))
+    read_colormap(fd, cmaster,  mapentrysize)
+    bPad -= int(biClrUsed * u32(mapentrysize))
+  if bPad < 0:
+    raise LoadImageError("Bad header")
+  bPad -= 1
+  while bPad >= 0:
+    fd.read(1)
+    bPad -= 1
+  row_width = u32(0)
+  if cmaster.bmpinfo.bits_per_pixel == 8:
+    if cmaster.cinfo.in_color_space == JCS_UNKNOWN:
+      cmaster.cinfo.in_color_space = JCS_EXT_RGB
+    if cmaster.cinfo.in_color_space.is_ext_rgb():
+      cmaster.cinfo.input_components = rgb_pixelsize[cmaster.cinfo.in_color_space]
+    elif cmaster.cinfo.in_color_space == JCS_GRAYSCALE:
+      cmaster.cinfo.input_components = 1
+    elif cmaster.cinfo.in_color_space == JCS_CMYK:
+      cmaster.cinfo.input_components = 4
+    else:
+      raise LoadImageError('Bad colorspace')
+    row_width = u32(biWidth)
+  elif cmaster.bmpinfo.bits_per_pixel == 24:
+    if cmaster.cinfo.in_color_space == JCS_UNKNOWN:
+      cmaster.cinfo.in_color_space = JCS_EXT_BGR
+    if cmaster.cinfo.in_color_space.is_ext_rgb():
+      cmaster.cinfo.input_components = rgb_pixelsize[cmaster.cinfo.in_color_space]
+    elif cmaster.cinfo.in_color_space == JCS_CMYK:
+      cmaster.cinfo.input_components = 4
+    else:
+      raise LoadImageError('Bad colorspace')
+    row_width = u32(biWidth * 3)
+  elif cmaster.bmpinfo.bits_per_pixel == 32:
+    if cmaster.cinfo.in_color_space == JCS_UNKNOWN:
+      cmaster.cinfo.in_color_space = JCS_EXT_BGRA
+    if cmaster.cinfo.in_color_space.is_ext_rgb():
+      cmaster.cinfo.input_components = rgb_pixelsize[cmaster.cinfo.in_color_space]
+    elif cmaster.cinfo.in_color_space == JCS_CMYK:
+      cmaster.cinfo.input_components = 4
+    else:
+      raise LoadImageError('Bad colorspace')
+    row_width = u32(biWidth * 4)    
+  else:
+    raise LoadImageError('Bad depth')
+  while row_width & u32(3) != u32(0):
+    row_width += u32(1)
+  if use_inversion_array:
+    raise NotImplementedError()
+  else:
+    iobuffer = Block[u8](int(row_width))
+  if u64(biWidth * cmaster.cinfo.input_components) > BitSeq(0xFFFFFFFF, 64):
+    raise LoadImageError('Width overflow')
+  cmaster.bmpinfo.buffer = Block[JSAMPLE](biWidth * cmaster.cinfo.input_components)
+  cmaster.cinfo.data_precision = 8
+  cmaster.cinfo.image_width = u32(biWidth)
+  cmaster.cinfo.image_height = u32(biHeight)
 
+def get_8bit_row(cmaster):
+  raise NotImplementedError()
+
+def get_32bit_row(cmaster):
+  raise NotImplementedError()
+
+@extend
+class List[T]:
+  def __getitem__(self, idx: J_COLOR_SPACE):
+    return self[idx.val]
+  def __getitem__(self, idx: TJPF):
+    return self[idx.val]
+
+#@inline
+def PAD(width: u32, align: int) -> u32:
+  return ((width + u32(align) - u32(1)) & u32(~(align - 1)))  
+
+#def loadScanlines(cinfo: jpeg_compress_struct, pixelSize: u32, pixel_row_getter: Function[???]):
+#  width = cinfo.image_width
+#  height = cinfo.image_height
+#  pitch = PAD(width * pixelSize, align)
+#  dstBuf = Block[u8](height, pitch)
+#  next_scanline = 0
+#  while next_scanline < height:
+#    i, nlines = pixel_row_getter(cinfo, ???)
+  
 def tjLoadImage(filename: str, align: int, pixelFormat: TJPF, flags: int, cinfo: jpeg_compress_struct) -> Block[u8]:
   if len(filename) == 0 or align < 1:
     raise LoadImageError('Invalid argument')
@@ -34,14 +193,15 @@ def tjLoadImage(filename: str, align: int, pixelFormat: TJPF, flags: int, cinfo:
     cinfo.in_color_space = pf2cs[pixelFormat.val]
     invert: bool = False
     if tempc == 'B': # bitmap
-      start_input_bmp(cinfo, False)
+      bmp_info = start_input_bmp(cinfo, False)
+      pixelFormat = cs2pf[cinfo.in_color_space]
+      #loadScanlines(cinfo, tjPixelSize[pixelFormat]
       invert = (flags & TJFLAG_BOTTOMUP) == 0
     elif tempc == 'P': # ppm
+      raise NotImplementedError()
       invert = (flags & TJFLAG_BOTTOMUP) != 0
     else:
       raise LoadImageError('Unsupported image type')
-
-    
     fd.close()
   except IOError:
     raise LoadImageError('Cannot open input file')  

@@ -1,0 +1,19 @@
+class Ordering:
+  order: str
+
+  def __init__(self):
+    self.order = 'row_major'
+
+  def set_order(self, order: str):  
+    if order.lower() == 'col_major':
+      raise NotImplementedError('not tested yet')
+    assert order.lower() == 'row_major' or order.lower() == 'col_major'
+    self.order = order
+
+  def remap[T](self, l: T) -> T:
+    if self.order.lower() == 'col_major':
+      [i for i in reversed(l)]
+    else:
+      return l
+
+ordering = Ordering()

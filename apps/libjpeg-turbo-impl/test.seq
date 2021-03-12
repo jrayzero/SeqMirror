@@ -1,0 +1,17 @@
+from loadimage import *
+from jpeglib import *
+from structs import CompressMaster
+
+#fd = open('hex.bin', 'wb')
+#bts = Array[byte](2)
+#bts[0] = byte(0x42)
+#bts[1] = byte(0x4D)
+#fd.write(bts)
+#fd.flush()
+#fd.close()
+
+
+cmaster = CompressMaster()
+fd = open('/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/vgl_6434_0018a.bmp', 'rb')
+print('reading file')
+start_input_bmp(fd, cmaster, False)

@@ -1,0 +1,28 @@
+# There are so many different structs passed around so I'd rather wrap them all up into one
+from moreconstants import *
+from jpeglib import *
+from turbojpeg import *
+from config import *
+from cola.bitseq import *
+from cola.block import *
+
+class jpeg_compress_struct:
+  in_color_space: J_COLOR_SPACE
+  X_density: u16
+  Y_density: u16
+  density_unit: int
+  input_components: int
+  data_precision: int
+  image_width: u32
+  image_height: u32
+
+class bmp_source_struct:
+  bits_per_pixel: int
+  use_inversion_array: bool
+  colormap: Optional[Block[JSAMPLE]]
+  iobuffer: Optional[Block[u8]]
+  buffer: Block[JSAMPLE]
+
+class CompressMaster:
+  cinfo: jpeg_compress_struct
+  bmpinfo: bmp_source_struct

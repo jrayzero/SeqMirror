@@ -1,0 +1,22 @@
+import sys
+
+# user defined configuration parameters
+BITS_IN_JSAMPLE = 8
+ORDERING = 'ROW_MAJOR'
+
+def write(fd: File, line: str, newline: bool=True):
+  fd.write(line + '\n' if newline else '')
+
+# generate the correct configuration file
+def generate_config(fn: str = 'config.seq'):
+  fd = open(fn, 'w')
+  write(fd, '# AUTO-GENERATED')
+  write(fd, 'from cola.config import ordering')
+  write(fd, 'ordering.set_order(' + '\'' + ORDERING + '\')')
+  write(fd, 'BITS_IN_JSAMPLE = ' + str(BITS_IN_JSAMPLE))
+  write(fd, 'JSAMPLE = UInt[' + str(BITS_IN_JSAMPLE) + ']')
+
+if len(sys.argv) > 1:
+  generate_config(sys.argv[1])
+else:
+  generate_config()

@@ -1,18 +1,16 @@
-from C import cola_bitstr_uint(u64, int) -> str
+#from C import cola_bitstr_uint(u64, int) -> str
 
 # TODO really need to double check that my integer sizes/bit ops are correct cause I'm not great with this part
 u1 = UInt[1]
 
-# Note to self: I can't just use UInt[N] here because I don't statically know the size. If I did want to do that,
-# I could just have something like (if effectivewidth > N: return BitSeq[N+64] or something like that)
-# However, I can't add type parameters to the init functions, so I wouldn't be able to handle different size Ns.
-# UNLESS: maybe I can defer
+# Note to self: I can't just use UInt[N] here because I don't statically know the size in every case
 
 # basic idea: the individual values you append (or init with) have their MSB bits trimmed off to match the specified size
 # then that value is shifted toward the MSB of the current bitseq. So, bits are always packed from MSB->LSB.
 # bit_seqs[0] -> MSB 
 # bit_seqs[-1] -> LSB
 # Thus, bitwidths for appending measure from LSB to MSB, but effective width measures from MSB->LSB
+# TODO I coudl parameterize this by the size of each bitseq that I want (If it allows me to do defaults, I can have BitSeq[N=64] or somehting)
 class BitSeq:
 
   # for storage, everythign is aligned towards the LSB. But when you pack, we align to the MSB, pack after the MSB (towards
@@ -35,17 +33,18 @@ class BitSeq:
         self.bit_seqs.append(cur_bit_seq)
         self.nseqs += 1
       else:
-        # MSB align the current bitseq
-        align_shift = 64 - self.effective_width & 63
+        # MSB align the current bitseq (since it is always stored as LSB aligned)
+        align_shift = 64 - (self.effective_width & 63)
         # sanity check
         assert align_shift != 64 # should never reach this
         cur_bit_seq = self.bit_seqs[-1] << u64(align_shift)
       msb_bit_idx = self.effective_width & 63 # counted from the MSB->LSB
-      v <<= u64(63-msb_bit_idx)
+      # move the single bit to the correct lcation
+      v <<= u64(63-msb_bit_idx) 
       cur_bit_seq |= v
       # LSB align again
       self.effective_width += 1
-      rshift = 64 - self.effective_width & 63
+      rshift = 63-msb_bit_idx
       self.bit_seqs[-1] = (cur_bit_seq >> u64(rshift))
 
   # width here is measured from the LSB->MSB, which is different than the effective_width which measures
@@ -114,7 +113,6 @@ class BitSeq:
       w -= 64
     # need to align the last one to the right hand side
     last_seq = val.bit_seqs[-1]
-#    last_seq >>= u64(64-w)
     self._pack_bits(last_seq, w)
 
   def pack(self, val: u1):
@@ -141,23 +139,22 @@ class BitSeq:
     self._pack_bits(u64(val), width)
 
   def __iter__(self) -> Generator[UInt[1]]:
+    w = self.effective_width
     for i in range(self.nseqs-1):      
       for b in self.bit_seqs[i]:
         yield UInt[1](b)
-    w = self.effective_width & 63
-    it = iter(self.bit_seqs[self.nseqs-1])
-    for i in range(int(w)):
+        w -= 1
+    # get remaining bits
+    it = self.bit_seqs[-1].msb_iter_from(64-w)
+    for i in range(w):
       yield next(it)
     it.destroy()
 
   # prints out in binary
   def __str__(self) -> str:
     s = ''
-    w = self.effective_width
-    for i in range(self.nseqs-1):
-      s += self.bit_seqs[i].to_bitstr(64)    
-      w -= 64
-    s += self.bit_seqs[-1].to_bitstr(w)
+    for b in self:
+      s += str(b)
     return '0b' + s
 
   def __eq__(self, other: BitSeq) -> bool:
@@ -170,16 +167,91 @@ class BitSeq:
       if self_bs != other_bs:
         return False
       w -= 64
-    # remaining MSB bits
-    # get last bitseq and mask off anything on the LSB (rhs) side that isn't needed
-    self_bs = self.bit_seqs[self.nseqs-1] & u64(~((1<<(64-w))-1))
-    other_bs = other.bit_seqs[self.nseqs-1] & u64(~((1<<(64-w))-1))
+    # check remaining bits
+    self_bs = self.bit_seqs[self.nseqs-1]
+    other_bs = other.bit_seqs[self.nseqs-1]
     if self_bs != other_bs:
       return False
     return True
+
+  def __eq__[N: int](self, other: UInt[N]):
+    bother = BitSeq(other, N)
+    return self == bother
       
-  def __ne__(self, other: BitSeq) -> bool:
+  def __ne__(self, other):
     return not (self == other)
+
+  def _iter_ones(self):
+    idx = 0 
+    w = self.effective_width
+    for i in range(self.nseqs-1):
+      bs = self.bit_seqs[i]
+      for b in range(64):
+        bit = (bs >> u64(64-b-1)) & u64(1)
+        if bit == u64(1):
+          yield idx
+        idx += 1
+        w -= 1
+    bs = self.bit_seqs[-1]
+#    print('ew: ' + str(self.effective_width))
+#    w = self.effective_width & 64 # this is %64 because we don't want 64 % 64 to return 0.
+    print('w ' + str(w))
+    for b in range(w):
+      # remember, stored as LSB aligned
+      bit = u1((bs >> u64(w - b - 1)) & u64(1))
+      if bit == u1(1):
+        yield idx
+      idx += 1    
+
+  def __ge__(self, other: BitSeq):
+    # go through from MSB to LSB comparing the values
+    self_iter = self._iter_ones()
+    other_iter = other._iter_ones()
+    while True:
+      try:
+        sb = next(self_iter)
+        ob = next(other_iter)
+        if sb == ob:
+          continue
+        else:
+          self_iter.destroy()
+          other_iter.destroy()
+          # found a differing index
+          return sb <= ob # <= b/c it's from the MSB side
+      except StopIteration:
+        self_iter.destroy()
+        other_iter.destroy()
+        # no more ones, so they both had the same till this point
+        return True
+
+  def __gt__(self, other: BitSeq):
+    # go through from MSB to LSB comparing the values
+    self_iter = self._iter_ones()
+    other_iter = other._iter_ones()
+    while True:
+      try:
+        sb = next(self_iter)
+        print('sb ' + str(sb))
+        ob = next(other_iter)
+        print('ob ' + str(ob))
+        if sb == ob:
+          continue
+        else:
+          # found a differing index
+          self_iter.destroy()
+          other_iter.destroy()
+          return sb < ob
+      except StopIteration:
+        self_iter.destroy()
+        other_iter.destroy()
+        # no more ones, so they both had the same till this point
+        return False
+
+  def __le__(self, other: BitSeq):
+    return not (self > other)
+
+  def __lt__(self, other: BitSeq):
+    return not (self >= other)
 
   def __int__(self) -> int:
     if self.nseqs == 0:
@@ -205,15 +277,10 @@ class UInt[N]:
   def __new__(val: BitSeq) -> UInt[N]:
     ui = UInt[N]()
     idx = 0
-    # go through the fully filled bitseqs
-    for bs in val.bit_seqs[:-1]:
-      ui |= UInt[N](bs) << UInt[N](N-idx*N)
-      idx += 1
-    bs = val.bit_seqs[-1]
-    bits = UInt[N](bs) << UInt[N](N - val.effective_width & (N-1))#UInt[N]((val.nseqs-1)*N)
-    ui |= bits
-    # LSB align the whole thing nwo
-    ui >>= UInt[N](N - val.effective_width & (N-1))
+    n = N-1
+    for b in val:
+      ui |= (UInt[N](b) << UInt[N](n))
+      n -= 1    
     return ui
 
   def __new__(val) -> UInt[N]:
@@ -239,17 +306,30 @@ class UInt[N]:
 
   # this is MSB to LSB iter
   def __iter__(self) -> Generator[u1]:
-    for i in range(N):
-      yield u1((self >> u64(64-i-1)) & u64(1))
-      
-  # this is LSB to MSB iter
-  def inverse_iter(self) -> Generator[u1]:
-    for i in range(N):
-      yield u1(self >> u64(i))
+    return self.msb_iter_from(0)
 
-  # this is MSB to LSB stringify
-  def to_bitstr(self, bitwidth: int) -> str:
-    return cola_bitstr_uint(u64(self), bitwidth)
+  # starts at idx relative to msb
+  def msb_iter_from(self, idx):
+    for i in range(N-idx):
+      yield u1(self >> UInt[N]((N-idx-i-1)))
+
+  def __eq__(self, other: BitSeq):
+    return BitSeq(self, N) == other
+
+  def __neq__(self, other: BitSeq):
+    return BitSeq(self, N) != other
+
+  def __ge__(self, other: BitSeq):
+    return BitSeq(self, N) >= other
+
+  def __gt__(self, other: BitSeq):
+    return BitSeq(self, N) > other
+
+  def __le__(self, other: BitSeq):
+    return BitSeq(self, N) <= other
+
+  def __lt__(self, other: BitSeq):
+    return BitSeq(self, N) < other
 
 @extend
 class File:

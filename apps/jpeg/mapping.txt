@@ -1,0 +1,4 @@
+JSAMPLE = unsigned char
+JSAMPROW = JSAMPLE* = unsigned char *
+JSAMPARRAY = JSAMPROW* = unsigned char **
+JSAMPIMAGE = JSAMPARRAY* = unsigned char ***

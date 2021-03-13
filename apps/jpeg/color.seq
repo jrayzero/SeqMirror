@@ -1,0 +1,74 @@
+from error import *
+from cola.block import *
+from cola.iter_utils import *
+
+def generate_rgb_ycc_table_rmaj() -> Block:
+  table = Block[int](9,256)
+  fix = lambda x : x * (1<<16) + 0.5
+  for i in range(256):
+    table[0,i] = int(math.floor(fix(0.299) * i))
+    table[1,i] = int(math.floor(fix(0.587) * i))
+    table[2,i] = int(math.floor(fix(0.114) * i + (1<<15)))
+    table[3,i] = int(math.floor(-fix(0.16874) * i))
+    table[4,i] = int(math.floor(-fix(0.33126) * i))
+    table[5,i] = int(math.floor(fix(0.5) * i + (128 << 16) + (1 << 15) - 1))
+    table[6,i] = int(math.floor(fix(0.5) * i + (128 << 16) + (1 << 15) - 1))
+    table[7,i] = int(math.floor(-fix(0.41869) * i))
+    table[8,i] = int(math.floor(-fix(0.08131) * i))
+  return table
+
+def generate_rescale_table(realized_max_val, bounded_max_val=255) -> list:
+  table = list[int](realized_max_val + 1)
+  half_max_val = realized_max_val // 2
+  for v in range(realized_max_val + 1):
+    table[v] = (v * bounded_max_val + half_max_val) // realized_max_val
+  return table
+
+def rgb_ycc_convert_rmaj(input_data: View[T], output_data: View[T], rgb_ycc_table: Block[int], do_level_shift: bool=False):
+  raise NotTestedError()
+  R = input_data[:,:,0]
+  G = input_data[:,:,1]
+  B = input_data[:,:,2]
+  Y = output_data[:,:,0]
+  Cb = output_data[:,:,1]
+  Cr = output_data[:,:,2]
+  shft = T(16)
+  for r,g,b,y,cb,cr in scan(R,G,B,Y,Cb,Cr):
+    y[0] = T((rgb_ycc_table(0,r) + rgb_ycc_table(1,g) + rgb_ycc_table(2,b)) >> shft) - T(128) if do_level_shift else T(0)
+    cb[0] = T((rgb_ycc_table(3,r) + rgb_ycc_table(4,g) + rgb_ycc_table(5,b)) >> shft) - T(128) if do_level_shift else T(0)
+    cr[0] = T((rgb_ycc_table(6,r) + rgb_ycc_table(7,g) + rgb_ycc_table(8,b)) >> shft) - T(128) if do_level_shift else T(0)
+
+def rgb_gray_convert_rmaj(input_data: View[T], output_data: View[T], rgb_ycc_table: Block[int], do_level_shift: bool=False):
+  raise NotTestedError()
+  R = input_data[:,:,0]
+  G = input_data[:,:,1]
+  B = input_data[:,:,2]
+  Y = output_data[:,:,0]
+  shft = T(16)
+  for r,g,b,y in scan(R,G,B,Y):
+    y[0] = T((rgb_ycc_table(0,r) + rgb_ycc_table(1,g) + rgb_ycc_table(2,b)) >> shft) - T(128) if do_level_shift else T(0)
+
+def cmyk_ycck_convert_rmaj(input_data: View[T], output_data: View[T], rgb_ycc_table: Block[int], max_sample: int = 255, do_level_shift: bool=False):
+  raise NotTestedError()
+  C = input_data[:,:,0]
+  M = input_data[:,:,1]
+  Y2 = input_data[:,:,2]
+  K1 = input_data[:,:,3]
+  Y1 = output_data[:,:,0]
+  Cb = output_data[:,:,1]
+  Cr = output_data[:,:,2]
+  K2 = output_data[:,:,4]
+  shft = T(16)
+  for c,m,y1,k1,y2,cb,cr,k2 in scan(C,M,Y1,K1,Y2,Cb,Cr,K2):
+    r = max_sample - int(c())
+    g = max_sample - int(m())
+    b = max_sample - int(y1())
+    y2[0] = T((rgb_ycc_table(0,r) + rgb_ycc_table(1,g) + rgb_ycc_table(2,b)) >> shft) - T(128) if do_level_shift else T(0)
+    cb[0] = T((rgb_ycc_table(3,r) + rgb_ycc_table(4,g) + rgb_ycc_table(5,b)) >> shft) - T(128) if do_level_shift else T(0)
+    cr[0] = T((rgb_ycc_table(6,r) + rgb_ycc_table(7,g) + rgb_ycc_table(8,b)) >> shft) - T(128) if do_level_shift else T(0)
+    k2[0] = k1()
+
+### TESTING
+
+    
+  

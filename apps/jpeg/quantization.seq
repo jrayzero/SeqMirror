@@ -62,7 +62,7 @@ def compute_qdivisors_AAN_idct_short(qtable: Block[int], divisors: Block[u16]):
 	                   u16(8867), u16(12299), u16(11585), u16(10426), u16(8867), u16( 6967), u16(4799), u16(2446),
 	                   u16(4520), u16(6270), u16(5906), u16(5315), u16(4520), u16(3552), u16(2446), u16(1247)])
   for q,s,d in scan(qtable, aan_scales, divisors):
-    d[0] = u16(q()) * s() + (u16(1) << u16(10))) >> u16(11)
+    d[0] = u16(q()) * s() + (u16(1) << u16(10))) >> u16(11))
 
 def compute_qdivisors_AAN_idct_float_rmaj(qtable: Block[int], divisors: Block[float]):
   # TODO I could precompute this table to have 64 elements (and thus all combos if the aan[row] * aan[col]

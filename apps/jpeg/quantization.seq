@@ -1,0 +1,58 @@
+from error import *
+from cola.block import *
+from cola.iter_utils import *
+
+# standard K.1
+jpeg_luma_qtable = Block[int]((8,8), 
+                              [16,  11,  10,  16,  24,  40,  51,  61,
+	                       12,  12,  14,  19,  26,  58,  60,  55,
+	                       14,  13,  16,  24,  40,  57,  69,  56,
+	                       14,  17,  22,  29,  51,  87,  80,  62,
+	                       18,  22,  37,  56,  68, 109, 103,  77,
+	                       24,  35,  55,  64,  81, 104, 113,  92,
+	                       49,  64,  78,  87, 103, 121, 120, 101,
+	                       72,  92,  95,  98, 112, 100, 103,  99])
+
+jpeg_chroma_qtable = Block[int]((8,8), 
+                                [17,  18,  24,  47,  99,  99,  99,  99,
+	                         18,  21,  26,  66,  99,  99,  99,  99,
+	                         24,  26,  56,  99,  99,  99,  99,  99,
+	                         47,  66,  99,  99,  99,  99,  99,  99,
+	                         99,  99,  99,  99,  99,  99,  99,  99,
+	                         99,  99,  99,  99,  99,  99,  99,  99,
+	                         99,  99,  99,  99,  99,  99,  99,  99,
+	                         99,  99,  99,  99,  99,  99,  99,  99])
+
+def quantize_elem[T](elem: T, qval: int) -> T:
+  if elem < 0:
+    elem = -elem
+    elem += qval >> 1
+    elem /= qval
+    elem = -elem
+  else:
+    elem += qval >> 1
+    elem /= qval
+  return elem
+
+# from jpeg-6b
+def scale_quant_table(qtable: Block[int], out_qtable: Block[int], scale_factor: int, force_baseline: bool):
+  raise NotTestedError()
+  for q,sq in scan(qtable, out_qtable):
+    tmp = (q * scale_factor + 50) // 100
+    if tmp <= 0:
+      tmp = 1
+    if tmp > 32767:
+      tmp = 32767
+    if force_baseline and tmp > 255:
+      tmp = 255
+    sq[0] = tmp
+
+def scale_quant_table(qtable: Block[int], scale_factor: int, force_baseline: bool) -> Block[int]:
+  raise NotTestedError()
+  out_qtable = Block(qtable)
+  scale_quant_table(qtable, out_qtable, scale_factor, force_baseline)
+  return out_qtable
+
+def scale_quant_table_inplace(qtable: Block[int], scale_factor: int, force_baseline: bool):
+  raise NotTestedError()
+  scale_quant_table(qtable, qtable, scale_factor, force_baseline)

@@ -4,6 +4,8 @@ import sys
 BITS_IN_JSAMPLE = 8
 MAXJSAMPLE = 2**BITS_IN_JSAMPLE - 1
 ORDERING = 'ROW_MAJOR'
+OUT_SUBSAMP = -1
+OUT_QUAL = -1
 
 def write(fd: File, line: str, newline: bool=True):
   fd.write(line + '\n' if newline else '')
@@ -17,6 +19,8 @@ def generate_config(fn: str = 'config.seq'):
   write(fd, 'BITS_IN_JSAMPLE = ' + str(BITS_IN_JSAMPLE))
   write(fd, 'MAXJSAMPLE = ' + str(MAXJSAMPLE))
   write(fd, 'JSAMPLE = UInt[' + str(BITS_IN_JSAMPLE) + ']')
+  write(fd, 'outSubsamp = ' + str(OUT_SUBSAMP))
+  write(fd, 'outQual = ' + str(OUT_QUAL))
 
 if len(sys.argv) > 1:
   generate_config(sys.argv[1])

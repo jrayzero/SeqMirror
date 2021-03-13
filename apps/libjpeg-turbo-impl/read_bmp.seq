@@ -9,6 +9,11 @@ from cola.iter_utils import *
 
 alpha_index = [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 3, 3, 0, 0, -1]
 
+@extend
+class int:
+  def is_ext_rgb(self) -> bool:
+    return self == JCS_RGB or (self >= JCS_EXT_RGB and self <= JCS_EXT_ARGB)
+
 def read_colormap(fd: File, cmaster: CompressMaster, mapentrysize: int):
   gray = True
   if mapentrysize == 3:

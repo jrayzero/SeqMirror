@@ -1,0 +1,8 @@
+from structs import *
+from etc import *
+
+def jpeg_CreateCompress(cmaster: CompressMaster):
+  cinfo = cmaster.cinfo
+  cinfo.is_decompressor = False
+  cinfo.input_gamma = 1.0
+  cinfo.global_state = CSTATE_START

@@ -1,5 +1,5 @@
 # There are so many different structs passed around so I'd rather wrap them all up into one
-from moreconstants import *
+from etc import *
 from jpeglib import *
 from turbojpeg import *
 from config import *
@@ -7,7 +7,7 @@ from cola.bitseq import *
 from cola.block import *
 
 class jpeg_compress_struct:
-  in_color_space: J_COLOR_SPACE
+  in_color_space: int
   X_density: u16
   Y_density: u16
   density_unit: int
@@ -15,6 +15,18 @@ class jpeg_compress_struct:
   data_precision: int
   image_width: u32
   image_height: u32
+  is_decompressor: bool
+  quant_tbls: list[JQUANT_TBL]
+  dc_huff_tbls: list[JHUFF_TBL]
+  ac_huff_tbls: list[JHUFF_TBL]
+  input_gamma: float
+  global_state: int
+  
+
+  def __init__(self):
+    self.quant_tbls = list[JQUANT_TBL](NUM_QUANT_TBLS)
+    self.dc_huff_tbls = list[JHUFF_TBL](NUM_HUFF_TBLS)
+    self.ac_huff_tbls = list[JHUFF_TBL](NUM_HUFF_TBLS)
 
 class bmp_source_struct:
   bits_per_pixel: int
@@ -31,7 +43,13 @@ class ppm_source_struct:
   maxval: u32  
 
 class common_source_struct:
-  buffer: Optional[View[JSAMPLE]]
+  buffer: Optional[View[JSAMPLE]]  
+
+class tjinstance:
+  init: int
+  headerRead: init
+  errStr: str
+  isInstanceError: bool
 
 class CompressMaster:
   cinfo: jpeg_compress_struct
@@ -39,3 +57,4 @@ class CompressMaster:
   bmpinfo: Optional[bmp_source_struct]
   ppminfo: Optional[ppm_source_struct]
   commoninfo: common_source_struct
+  tjinfo: Optional[tjinstance]

@@ -1,0 +1,44 @@
+from loadimage import *
+from jpeglib import *
+from structs import CompressMaster
+
+bmp = '/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/vgl_6434_0018a.bmp'
+
+DEFAULT_SUBSAMP = TJSAMP_444
+DEFAULT_QUALITY = 95
+subsampName: list[str] = ["4:4:4", "4:2:2", "4:2:0", "Grayscale", "4:4:0", "4:1:1"]
+
+# TODO command line params, but in a config file. set the flags
+flags = 0
+
+### BITMAP EXAMPLE ###
+
+# assumes jpeg output (so no transcoding)
+
+print('reading bmp file')
+out_format = 'jpg'
+cmaster = CompressMaster()
+imgBuf,pixelFormat = tjLoadImage(cmaster, bmp, 1, TJPF_UNKNOWN, 0)
+if outSubsamp < 0:
+  if pixelFormat == TJPF_GRAY:
+    outSubsamp = TJSAMP_GRAY
+  else:
+    outSubsamp = DEFAULT_SUBSAMP
+print('Input image: ' + str(cmaster.cinfo.image_width) + ' x ' + str(cmaster.cinfo.image_height) + ' pixels (WxH)')
+print('Output image: (' + out_format + ') ' + str(cmaster.cinfo.image_width) + ' x ' + str(cmaster.cinfo.image_height) + ' pixels (WxH)', end='')
+
+# compress it
+jpegSize = u64(0)
+if outQual < 0:
+  outQual = DEFAULT_QUALITY
+print(', ' + subsampName[outSubsamp] + ' subsampling, quality = ' + str(outQual))
+print('Initializing compressor')
+tjInitCompress(cmaster)
+print('Compressing')
+tjCompress2(cmaster, imgBuf, pixelFormat, 0, outSubsamp, outQual, flags)
+
+### PPM EXAMPLE ###
+
+#ppm = '/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/testorig.ppm'
+#print('reading ppm file')
+#tjLoadImage(CompressMaster(), ppm, 1, TJPF_UNKNOWN, 0)

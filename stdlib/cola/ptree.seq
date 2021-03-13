@@ -247,6 +247,17 @@ class PTree[T]:
     self._compute_nandtrees()
     return self._generate_andtrees()
 
+  # get a particular andtree
+  def __getitem__(self, idx: int) -> AndPTree[T]:
+    it = iter(self)
+    i = 0
+    while i < idx:
+      next(it)
+      i += 1
+    item = next(it)
+    it.destroy()
+    return item
+
   def _generate_and_subtree(self, cur_depth, andn):
     child = self.children[cur_depth]
     gen = child._generate_andtrees()

@@ -38,6 +38,7 @@ class ExSlice:
       assert ~self.stop >= ~self.start
 
   def adjust(self, full_length: int):
+    assert full_length > 0
     start2 = self.start
     stop2 = self.stop
     take2 = self.take
@@ -45,8 +46,12 @@ class ExSlice:
     if not start2:
       start2 = 0
     if not stop2:
-      assert full_length >= start2
+      assert full_length >= start2      
       stop2 = full_length
+    else:
+      if full_length < stop2:
+        # truncate to actual length
+        stop2 = full_length
     if not take2:
       take2 = 1
     if not skip2:

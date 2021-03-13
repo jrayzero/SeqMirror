@@ -1,0 +1,157 @@
+from partition import *
+from cola.block import *
+from cola.iter_utils import *
+
+# TODO if I could put annotations above the function that give the column-majorness, that
+# would let me write library functions in row major order, but let anyone use them regardless
+# of their majorness
+
+# pads in place by copying out the right edge
+# data shold already be sized for padding
+# TODO it seems like the type checking with generics can't match T and a nested type (i.e. UInt[8]), so I can't
+# have two funcs: one that takes View[T], and one that takes Block[T] and passes it as View(Block[T])
+def expand_right_edge_rmaj[T](data: View[T], ninput_cols: int):  
+  assert ninput_cols <= data.dims()[1]
+  # do padding
+  for r in range(data.dims()[0]):
+    data[r, ninput_cols:] = data(r, ninput_cols-1)    
+
+def expand_lower_edge_rmaj[T](data: View[T], ninput_rows: int):
+  assert ninput_rows <= data.dims()[0]
+  # do padding
+  for r in range(ninput_rows, data.dims()[0]):
+    data[r,:] = data[ninput_rows-1,:]
+
+def expand_edges_rmaj[T](data: View[T], ninput_rows: int, ninput_cols: int):
+  expand_right_edge_rmaj(data, ninput_cols)
+  expand_lower_edge_rmaj(data, ninput_rows)
+
+# downsamples 2:1, 2:1 by just dropping pixels
+def downsample_h2v2[T](data: View[T]) -> View[T]:
+  return data[::2,::2]
+
+# dowsamples 2:1, 2:1 by averaging pixels
+def downsample_h2v2_average[T](data: View[T]) -> Block[T]:
+  assert data.dims()[0] % 2 == 0 and data.dims()[1] % 2 == 0
+  downsampled = Block[T](downsample_h2v2(data))
+  bias = T(1)
+  # here, I split data into 2x2 blocks and iterate through those
+  for ds, NxN in scan(downsampled, NxN_partition_rmaj[2,T](data)[0]):
+     ds[0] = (NxN(0,0) + NxN(0,1) + NxN(1,0) + NxN(1,1) + bias) >> T(2)
+     bias ^= T(3)
+  return downsampled
+
+def downsample_h2v1[T](data: View[T]) -> View[T]:
+  return data[:,::2]
+
+def downsample_h2v1_average[T](data: View[T]) -> Block[T]:
+  assert data.dims()[1] % 2 == 0
+  downsampled = Block[T](downsample_h2v1(data))
+  bias = T(0)  
+  # here, I split data into 1x2 blocks and iterate through those
+  for ds, MxN in scan(downsampled, MxN_partition_rmaj[1,2,T](data)[0]):
+    ds[0] = (MxN(0,0) + MxN(0,1) + bias) >> T(1)
+    bias ^= 1
+  return downsampled
+
+### Tests
+
+@test
+def test_expand_rmaj():
+  height = 11
+  width = 20
+  padded_height = 16
+  padded_width = 24
+  blk = Block[u8](padded_height, padded_width)
+  data = list[u8](11*20)
+  for i in range(11*20):
+    data.append(u8(i))
+  blk[:height,:width] = Block[u8]((height, width), data)
+  ref_data = Block[u8](blk)
+  ref_data[:,:] = blk
+  # expand the ref data
+  for r in range(height):
+    for c in range(width, padded_width):
+      ref_data[r,c] = ref_data(r, width-1)
+  for r in range(height, padded_height):
+    for c in range(padded_width ):
+      ref_data[r,c] = ref_data(height-1, c)
+  expand_edges_rmaj(View(blk), height, width)
+  assert ref_data.buffer_equals(blk)
+
+@test
+def test_downsample_h2v2():
+  height = 16
+  width = 24
+  blk = Block[int](height, width)
+  idx = 0
+  for b in blk:
+    b[0] = idx
+    idx += 1
+  expected1 = [0,2,4,6,8,10,12,14,16,18,20,22,
+               48,50,52,54,56,58,60,62,64,66,68,70,
+               96,98,100,102,104,106,108,110,112,114,116,118,
+               144,146,148,150,152,154,156,158,160,162,164,166,
+               192,194,196,198,200,202,204,206,208,210,212,214,
+               240,242,244,246,248,250,252,254,256,258,260,262,
+               288,290,292,294,296,298,300,302,304,306,308,310,
+               336,338,340,342,344,346,348,350,352,354,356,358]
+
+  expected2 = [12,15,16,19,20,23,24,27,28,31,32,35,
+               60,63,64,67,68,71,72,75,76,79,80,83,
+               108,111,112,115,116,119,120,123,124,127,128,131,
+               156,159,160,163,164,167,168,171,172,175,176,179,
+               204,207,208,211,212,215,216,219,220,223,224,227,
+               252,255,256,259,260,263,264,267,268,271,272,275,
+               300,303,304,307,308,311,312,315,316,319,320,323,
+               348,351,352,355,356,359,360,363,364,367,368,371] 
+    
+  assert downsample_h2v2(View(blk)).buffer_equals(expected1)
+  assert downsample_h2v2_average(View(blk)).buffer_equals(expected2)
+
+@test
+def test_downsample_h2v1():
+  height = 16
+  width = 24
+  blk = Block[int](height, width)
+  idx = 0
+  for b in blk:
+    b[0] = idx
+    idx += 1
+    
+  expected1 = [0,2,4,6,8,10,12,14,16,18,20,22,
+                24,26,28,30,32,34,36,38,40,42,44,46,
+                48,50,52,54,56,58,60,62,64,66,68,70,
+                72,74,76,78,80,82,84,86,88,90,92,94,
+                96,98,100,102,104,106,108,110,112,114,116,118,
+                120,122,124,126,128,130,132,134,136,138,140,142,
+                144,146,148,150,152,154,156,158,160,162,164,166,
+                168,170,172,174,176,178,180,182,184,186,188,190,
+                192,194,196,198,200,202,204,206,208,210,212,214,
+                216,218,220,222,224,226,228,230,232,234,236,238,
+                240,242,244,246,248,250,252,254,256,258,260,262,
+                264,266,268,270,272,274,276,278,280,282,284,286,
+                288,290,292,294,296,298,300,302,304,306,308,310,
+                312,314,316,318,320,322,324,326,328,330,332,334,
+                336,338,340,342,344,346,348,350,352,354,356,358,
+                360,362,364,366,368,370,372,374,376,378,380,382]
+
+  expected2 = [0,3,4,7,8,11,12,15,16,19,20,23,
+                24,27,28,31,32,35,36,39,40,43,44,47,
+                48,51,52,55,56,59,60,63,64,67,68,71,
+                72,75,76,79,80,83,84,87,88,91,92,95,
+                96,99,100,103,104,107,108,111,112,115,116,119,
+                120,123,124,127,128,131,132,135,136,139,140,143,
+                144,147,148,151,152,155,156,159,160,163,164,167,
+                168,171,172,175,176,179,180,183,184,187,188,191,
+                192,195,196,199,200,203,204,207,208,211,212,215,
+                216,219,220,223,224,227,228,231,232,235,236,239,
+                240,243,244,247,248,251,252,255,256,259,260,263,
+                264,267,268,271,272,275,276,279,280,283,284,287,
+                288,291,292,295,296,299,300,303,304,307,308,311,
+                312,315,316,319,320,323,324,327,328,331,332,335,
+                336,339,340,343,344,347,348,351,352,355,356,359,
+                360,363,364,367,368,371,372,375,376,379,380,383]
+  
+  assert downsample_h2v1(View(blk)).buffer_equals(expected1)
+  assert downsample_h2v1_average(View(blk)).buffer_equals(expected2)

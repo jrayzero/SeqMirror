@@ -1,0 +1,38 @@
+class NotTestedError:
+  _hdr: ExcHeader
+  
+  def __init__(self):
+    self._hdr = ('NotTestedError', '', '', '', 0, 0)
+    
+  def __init__(self, message: str):
+    self._hdr = ('NotTestedError', message, '', '', 0, 0)
+    
+  @property
+  def message(self):
+    return self._hdr.msg
+
+class CompressionError:
+  _hdr: ExcHeader
+  
+  def __init__(self):
+    self._hdr = ('CompressionError', '', '', '', 0, 0)
+    
+  def __init__(self, message: str):
+    self._hdr = ('CompressionError', message, '', '', 0, 0)
+    
+  @property
+  def message(self):
+    return self._hdr.msg
+
+class HuffmanError:
+  _hdr: ExcHeader
+  
+  def __init__(self):
+    self._hdr = ('HuffmanError', '', '', '', 0, 0)
+    
+  def __init__(self, message: str):
+    self._hdr = ('HuffmanError', message, '', '', 0, 0)
+    
+  @property
+  def message(self):
+    return self._hdr.msg

@@ -1,0 +1,30 @@
+from cola.traversal import Traversal
+
+# even size traversals
+def zz_even_upper(i):
+  trav = Traversal(2)
+  trav_build trav:
+    if i > 0:
+      link zz_even_upper(i-2)
+      astep (0,1), (1,-1) by i-1, (1,0), (-1,1) by i
+  return trav
+
+def zz_even_lower(i):
+  trav = Traversal(2)
+  trav_build trav:
+    if i > 0:
+      astep (-1,1) by i, (1,0), (1,-1) by i-1, (0,1) 
+      link zz_even_lower(i-2)
+  return trav
+
+def zigzag(N):
+  trav = Traversal(2)
+  trav_build trav:
+    astep (0,0)
+    if N % 2 == 0:
+      link zz_even_upper(N-2)
+      astep (0,1), (1,-1) by N-1, (0,1)
+      link zz_even_lower(N-2)
+    else:
+      raise NotImplementedError()
+  return trav

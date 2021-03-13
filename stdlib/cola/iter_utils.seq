@@ -14,3 +14,17 @@ def scan(a,*items):
     yield yielded
   for it in iters:
     it.destroy()
+
+class repeat[T]:
+  item: T
+  repeat: int
+  
+  def __init__(self, item: T, repeat: int):
+    self.item = item
+    assert repeat > 0
+    self.repeat = repeat
+  
+  def __iter__(self):
+    for i in range(self.repeat):
+      for it in self.item:
+        yield it

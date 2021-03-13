@@ -483,11 +483,18 @@ class Multidim[T]:
     self._write([item])
 
   def _write(self, items: list[T]):
-    assert self.nunits() == len(items)
-    flat = self.flatten()
-    for i in range(flat.nunits()):
-      buffer,linear = flat._map_to_parent_buffer([i])
-      buffer[linear[0]] = items[i]
+    if self.nunits() != len(items):
+      # if it is a single item, we can broadcast it
+      assert len(items) == 1
+      flat = self.flatten()
+      for i in range(flat.nunits()):
+        buffer,linear = flat._map_to_parent_buffer([i])
+        buffer[linear[0]] = items[0]        
+    else:
+      flat = self.flatten()
+      for i in range(flat.nunits()):
+        buffer,linear = flat._map_to_parent_buffer([i])
+        buffer[linear[0]] = items[i]
 
   def _write(self, item: Multidim[T]):
     assert self.nunits() == item.nunits()
@@ -668,11 +675,11 @@ class Block[T]:
   def __init__(self, other):
     self.base = Multidim[T](other, False)
 
-  def __init__(self, dim0, dim1, *dims):
-    self.base = Multidim[T](dim0, dim1, *dims)    
-
   def __init__(self, dims, data: list[T]):
     self.base = Multidim[T](dims, data)
+
+  def __init__(self, dim0, dim1, *dims):
+    self.base = Multidim[T](dim0, dim1, *dims)    
 
   def reshape(self, other) -> View[T]:
     return View(self.base.reshape(other))

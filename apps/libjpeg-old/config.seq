@@ -1,0 +1,8 @@
+# AUTO-GENERATED
+from cola.config import ordering
+ordering.set_order('ROW_MAJOR')
+BITS_IN_SAMPLE = 8
+MAXSAMPLE = 255
+SAMPLE = UInt[8]
+outSubsamp = -1
+outQual = -1

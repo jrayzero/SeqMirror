@@ -1,0 +1,13 @@
+from read_bmp import *
+
+bmp = '/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/vgl_6434_0018a.bmp'
+
+with open(bmp) as fd:
+  # get initial parameters
+  binfo = read_bmp_header(fd, JCS_UNKNOWN, False)
+  # actually read in the data
+  # TODO need to determine the invert (seems like inverted is the most common)
+  read_bmp_data(binfo, fd, binfo.biHeight >= 0)
+  for b in binfo.whole_image:
+    print(str(b()))
+  print(binfo.whole_image.dims())

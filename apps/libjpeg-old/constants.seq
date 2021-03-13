@@ -1,3 +1,5 @@
+# This contains all the different constants that show up
+
 RGB_RED = 0       
 RGB_GREEN = 1       
 RGB_BLUE = 2       

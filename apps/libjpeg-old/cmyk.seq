@@ -1,0 +1,26 @@
+from errors import *
+from config import *
+from cola.block import *
+
+def rgb_to_cmyk(r: SAMPLE, g: SAMPLE, b: SAMPLE, c: View[SAMPLE], m: View[SAMPLE], y: View[SAMPLE], k: View[SAMPLE]):
+  raise NotTestedError()
+  ctmp = 1.0 - (float(r) / 255.0)
+  mtmp = 1.0 - (float(g) / 255.0)
+  ytmp = 1.0 - (float(b) / 255.0)
+  ktmp = min(min(ctmp, mtmp), ytmp)
+  if ktmp == 1.0:
+    ctmp = mtmp = ytmp = 0.0
+  else:
+    ctmp = (ctmp - ktmp) / (1.0 - ktmp)
+    mtmp = (mtmp - ktmp) / (1.0 - ktmp)
+    ytmp = (ytmp - ktmp) / (1.0 - ktmp)
+  c[0] = SAMPLE(255.0 - ctmp * 255.0 + 0.5)
+  m[0] = SAMPLE(255.0 - mtmp * 255.0 + 0.5)
+  y[0] = SAMPLE(255.0 - ytmp * 255.0 + 0.5)
+  k[0] = SAMPLE(255.0 - ktmp * 255.0 + 0.5)
+
+def cmyk_to_rgb(c: SAMPLE, m: SAMPLE, y: SAMPLE, k: SAMPLE, r: View[SAMPLE], g: View[SAMPLE], b: View[SAMPLE]):
+  raise NotTestedError()
+  r[0] = SAMPLE(float(c) * float(k) / 255.0 + 0.5)
+  g[0] = SAMPLE(float(m) * float(k) / 255.0 + 0.5)
+  b[0] = SAMPLE(float(y) * float(k) / 255.0 + 0.5)

@@ -48,8 +48,7 @@ def tjLoadImage(cmaster: CompressMaster, filename: str, align: int, pixelFormat:
     width = cinfo.image_width
     height = cinfo.image_height
     pitch = PAD(u32(width) * u32(tjPixelSize[pixelFormat]), align)
-    dstBufBlock = Block[JSAMPLE](int(height), int(pitch) // cmaster.cinfo.input_components)
-    dstBuf = dstBufBlock.reshape(int(height), int(pitch)) if cmaster.cinfo.input_components == 1 else View(dstBufBlock)
+    dstBuf = Block[JSAMPLE](int(height), int(pitch) // tjPixelSize[pixelFormat], tjPixelSize[pixelFormat])
     get_pixel_rows: Optional[Function[int, CompressMaster, File]] = None    
     if cmaster.filetype.lower() == 'bmp':
       if cmaster.bmpinfo.bits_per_pixel == 8:
@@ -66,10 +65,14 @@ def tjLoadImage(cmaster: CompressMaster, filename: str, align: int, pixelFormat:
       for i in range(nlines):
         row = scanline + u32(i)
         if invert:
+          # why do we even pad commoninfo.buffer if we just ignore the padded stuff?
+          # TODO with negative indexing, could do :-2
+          dstBuf[int(height-row)-1,:,:] = cmaster.commoninfo.buffer[i,:dstBuf.dims()[1],:]          
+        else:
           raise NotImplementedError()
-        # TODO left off here. see if can change read_bmp to use 3d buffer (or 2d for grayscale)
-        # then redo this for that
-      scanline += u32(1)
+      scanline += u32(nlines)
+    for p in dstBuf.flatten():
+      print(p())
     fd.close()
   except IOError:
     raise LoadImageError('Cannot open input file')  

@@ -1,6 +1,8 @@
 # everything bit and built-in-type related
 
-# TODO I might be able to just do LLVM for some of these operations
+# TODO I might be able to just do LLVM for some of these operations (but I can't use UInt[N]/Int[N] since I 
+# don't have a static N). maybe just call this bits and have it represent raw bits then you can just convert
+# it between whatever you want
 
 u1 = UInt[1]
 

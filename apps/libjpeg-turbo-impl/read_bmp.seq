@@ -163,7 +163,6 @@ def get_8bit_row(cmaster: CompressMaster, fd: File) -> int:
   raise NotImplementedError()
 
 def get_24bit_row(cmaster: CompressMaster, fd: File) -> int:
-  print('in get_24bit_row')
   if cmaster.bmpinfo.use_inversion_array:
     raise NotImplementedError()
   else:
@@ -178,7 +177,6 @@ def get_24bit_row(cmaster: CompressMaster, fd: File) -> int:
     if cinfo.in_color_space == JCS_EXT_BGR:
       # components are interleaved
       bmpinfo.buffer[:,:,:] = bmpinfo.iobuffer
-      print(bmpinfo.buffer.flatten())
     elif cinfo.in_color_space == JCS_CMYK:
       raise NotTestedError()
       Rs = bmpinfo.iobuffer[:,:,0]

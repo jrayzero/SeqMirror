@@ -1,0 +1,187 @@
+from error import *
+from zigzag import *
+from cola.bitseq import *
+from cola.iter_utils import *
+from cola.block import *
+
+# stuff to write out jpeg stream, except for the actual data
+
+# Annex B
+SOF0 = 0xFFC0
+SOF1 = 0xFFC1
+SOF2 = 0xFFC2
+SOF3 = 0xFFC3
+SOF5 = 0xFFC5
+SOF6 = 0xFFC6
+SOF7 = 0xFFC7
+JPG = 0xFFC8
+SOF9 = 0xFFC9
+SOF10 = 0xFFCA
+SOF11 = 0xFFCB
+SOF13 = 0xFFCD
+SOF14 = 0xFFCE
+SOF15 = 0xFFCF
+
+DHT = 0xFFC4
+DAC = 0xFFCC
+
+RST0 = 0xFFD0
+RST1 = 0xFFD1
+RST2 = 0xFFD2
+RST3 = 0xFFD3
+RST4 = 0xFFD4
+RST5 = 0xFFD5
+RST6 = 0xFFD6
+RST7 = 0xFFD7
+
+SOI = 0xFFD8
+EOI = 0xFFD9
+SOS = 0xFFDA
+DQT = 0xFFDB
+DNL = 0xFFDC
+DRI = 0xFFDD
+DHP = 0xFFDE
+EXP = 0xFFDF
+APP0 = 0xFFE0
+APP1 = 0xFFE1
+APP2 = 0xFFE2
+APP3 = 0xFFE3
+APP4 = 0xFFE4
+APP5 = 0xFFE5
+APP6 = 0xFFE6
+APP7 = 0xFFE7
+APP8 = 0xFFE8
+APP9 = 0xFFE9
+APP10 = 0xFFEA
+APP11 = 0xFFEB
+APP12 = 0xFFEC
+APP13 = 0xFFED
+APP14 = 0xFFEE
+APP15 = 0xFFEF
+APP_markers = [APP0, APP1, APP2, APP3, APP4, APP5, APP6, APP7, APP8, APP9, APP10, APP11, APP12, APP13, APP14, APP15]
+JPG0 = 0xFFF0
+JPG1 = 0xFFF1
+JPG2 = 0xFFF2
+JPG3 = 0xFFF3
+JPG4 = 0xFFF4
+JPG5 = 0xFFF5
+JPG6 = 0xFFF6
+JPG7 = 0xFFF7
+JPG8 = 0xFFF8
+JPG9 = 0xFFF9
+JPG10 = 0xFFFA
+JPG11 = 0xFFFB
+JPG12 = 0xFFFC
+JPG13 = 0xFFFD
+COM = 0xFFFE
+
+TEM = 0xFF01
+
+def write_SOI_marker(bits: Bits):
+  bits.pack(SOI,16)
+
+def write_EOI_marker(bits: Bits):
+  bits.pack(EOI,16)
+
+def write_SOF_marker[N: int](bits: Bits):
+  if N == 0:
+    bits.pack(SOF0, 16)
+  elif N == 1:
+    bits.pack(SOF1, 16)
+  elif N == 2:
+    bits.pack(SOF2, 16)
+  elif N == 3:
+    bits.pack(SOF3, 16)
+  elif N == 9:
+    bits.pack(SOF9, 16)
+  elif N == 10:
+    bits.pack(SOF10, 16)
+  elif N == 11:
+    bits.pack(SOF11, 16)
+  else:
+    raise JFormatError()
+
+def write_APP_marker[N: int](bits: Bits):
+  if N >= 16:
+    raise JFormatError()
+  bits.pack(APP_markers[N], 16)
+
+def write_frame_header[N: int](bits: Bits, P: int, Y: int, 
+                               X: int, Ci: list[int], Hi: list[int], 
+                               Vi: list[int], Tqi: list[int]):
+  write_SOF_marker[N](bits)
+  Nf = len(Ci)
+  if not (len(Ci) == len(Hi) == len(Vi) == len(Tqi)):
+    raise JFormatError()
+  Lf = 8 + 4 * Nf # hmm the standard says 8+3*NF, but NF has 4 bytes??
+  bits.pack(Lf, 16)
+  bits.pack(P, 8)
+  bits.pack(Y, 16)
+  bits.pack(X, 16)
+  bits.pack(Nf, 8)
+  for c,h,v,tq in scan(Ci,Hi,Vi,Tqi):
+    bits.pack(c, 8)
+    bits.pack((h << 4) | v, 8)
+    bits.pack(tq, 16)
+
+def write_scan_header(bits: Bits, Csj: list[int], Tdj: list[int], 
+                      Taj: list[int], Ss: int, Se: int, Ah: int, Al: int):
+  bits.pack(SOS, 16)
+  Ns = len(Csj)
+  if not (len(Csj) == len(Tdj) == len(Taj) == Ns):
+    raise JFormatError()
+  Ls = 7 + 2 * Ns
+  bits.pack(Ls, 16)
+  bits.pack(Ns, 16)
+  for cs,td,ta in scan(Csj, Tdj, Taj):
+    bits.pack(cs, 8)
+    bits.pack((td << 4) | ta, 8)
+  bits.pack(Ss, 8)
+  bits.pack(Se, 8)
+  bits.pack((Ah << 4) | Al, 8)
+
+def write_qtables_segment(bits: Bits, Pq: int, Tq: int, Qk: View[int]):
+  bits.pack(DQT, 16)
+  Lq = 67 + 64 * Pq
+  bits.pack(Lq, 16)
+
+  bits.pack((Pq << 4) | Tq, 8)
+  if Pq == 0:
+    for q in zigzag[8]()(Qk):
+      bits.pack(q(), 8)
+  elif Pq == 1:
+    for q in zigzag[8]()(Qk):
+      bits.pack(q(), 16)
+  else:
+    raise JFormatError()
+
+# Li = bits table
+# Vij = huffval table
+def write_hufftables_segment(bits: Bits, Tc: int, Th: int, Li: list[int], Vij: list[int]):
+  assert len(Li) == 16
+  bits.pack(DHT, 16)
+  Lh = 2
+  s = 0
+  for l in Li:
+    Lh += l
+    s += l
+  assert len(Vij) == s
+  Lh += 17
+  bits.pack(Lh, 16)
+  bits.pack((Tc << 4) | Th, 8)
+  for l in Li:
+    bits.pack(l, 8)
+  for v in Vij:
+    bits.pack(v, 8)
+
+def write_app_segment[N:int](bits: Bits, Api: list[int]):
+  write_APP_marker[N](bits)
+  Lp = 2 + len(Api)
+  bits.pack(Lp, 16)
+  for api in Api:
+    bits.pack(api, 8)
+  
+def write_nlines_segment(bits: Bits, NL: int):
+  bits.pack(DNL, 16)
+  bits.pack(4, 16)
+  bits.pack(NL, 16)

@@ -1,4 +1,5 @@
 from partition import *
+from cola.iter_utils import *
 
 # Forward DCT stuff from jpeg-6b
 
@@ -6,9 +7,16 @@ from partition import *
 
 # this creates a new 8x8 blk with float type since I can't just overrwrite the input values
 # the values should've already been level shifted (if necessary)
-def fdct_float_rmaj[T](data: View[Int[T]]) -> Block[float]:
+def fdct_float_rmaj[T](data: View[T]) -> Block[float]:
   blk = Block[float](data.dims())
+  # TODO I can't have a scan over multiple different types cause I return a list. I can't return a tuple since I don't
+  # know the sizes (though they could be determined statically). So I manually create a generator to go with row.
+  # One way the compiler could handle this is if it replaces a multi-type call to a generator with individual calls to the iter
+  # and then call next (I could probably do this in the simplify pass before typechecking!)
+  iter_blk = iter(MxN_partition_rmaj[1,8,float](View(blk))[0])
   for row in MxN_partition_rmaj[1,8,T](data)[0]:
+    row = row.flatten()
+    brow = next(iter_blk).flatten()
     tmp0 = row(0) + row(7)
     tmp7 = row(0) - row(7)
     tmp1 = row(1) + row(6)
@@ -17,37 +25,38 @@ def fdct_float_rmaj[T](data: View[Int[T]]) -> Block[float]:
     tmp5 = row(2) - row(5)
     tmp3 = row(3) + row(4)
     tmp4 = row(3) - row(4)
-    
+   
     tmp10 = tmp0 + tmp3
     tmp13 = tmp0 - tmp3
     tmp11 = tmp1 + tmp2
     tmp12 = tmp1 - tmp2
     
-    blk[0] = float(tmp10 + tmp11)
-    blk[4] = float(tmp10 - tmp11)
+    brow[0] = float(tmp10 + tmp11)
+    brow[4] = float(tmp10 - tmp11)
     
-    z1 = (tmp12 + tmp13) * 0.707106781
-    blk[2] = float(tmp13 + z1)
-    blk[6] = float(tmp13 - z1)
+    z1 = float(tmp12 + tmp13) * 0.707106781
+    brow[2] = float(tmp13) + z1
+    brow[6] = float(tmp13) - z1
 
     tmp10 = tmp4 + tmp5
     tmp11 = tmp5 + tmp6
     tmp12 = tmp6 + tmp7
 
-    z5 = (tmp10 - tmp12) * 0.382683433
-    z2 = 0.541196100 * tmp10 + z5
-    z4 = 1.306562965 * tmp12 + z5
-    z3 = tmp11 * 0.707106781
+    z5 = float(tmp10 - tmp12) * 0.382683433
+    z2 = 0.541196100 * float(tmp10) + z5
+    z4 = 1.306562965 * float(tmp12) + z5
+    z3 = float(tmp11) * 0.707106781
 
-    z11 = tmp7 + z3
-    z13 = tmp7 - z3
+    z11 = float(tmp7) + z3
+    z13 = float(tmp7) - z3
     
-    blk[5] = float(z13 + z2)
-    blk[3] = float(z13 - z2)
-    blk[1] = float(z11 + z4)
-    blk[7] = float(z11 - z4)
-
-  for col in MxN_partition_rmaj[8,1,float](blk)[0]:
+    brow[5] = float(z13 + z2)
+    brow[3] = float(z13 - z2)
+    brow[1] = float(z11 + z4)
+    brow[7] = float(z11 - z4)
+  iter_blk.destroy()
+  for col in MxN_partition_rmaj[8,1,float](View(blk))[0]:
+    col = col.flatten()
     tmp0 = col(0) + col(7)
     tmp7 = col(0) - col(7)
     tmp1 = col(1) + col(6)
@@ -87,3 +96,4 @@ def fdct_float_rmaj[T](data: View[Int[T]]) -> Block[float]:
     col[7] = z11 - z4
 
   return blk
+

@@ -22,9 +22,25 @@ def expand_lower_edge_rmaj[T](data: View[T], ninput_rows: int):
   for r in range(ninput_rows, data.dims()[0]):
     data[r,:] = data[ninput_rows-1,:]
 
-def expand_edges_rmaj[T](data: View[T], ninput_rows: int, ninput_cols: int):
+def expand_edges_rmaj2[T](data: View[T], ninput_rows: int, ninput_cols: int):
   expand_right_edge_rmaj(data, ninput_cols)
   expand_lower_edge_rmaj(data, ninput_rows)
+
+# P is what to pad to
+def calculate_padding[P:int](dim: int) -> int:
+  return ((dim-1)|(P-1)) + 1
+
+# N is what to pad to
+def expand_edges_rmaj[T,N:int](data: View[T]) -> Block[T]:
+  h = data.dims()[0]
+  w = data.dims()[1]
+  padded_h = calculate_padding[N](h)
+  padded_w = calculate_padding[N](w)
+  blk = Block[T](padded_h, padded_w)
+  # copy unpadded data
+  blk[:h,:w] = data
+  expand_edges_rmaj2(View(blk), h, w)
+  return blk
 
 # downsamples 2:1, 2:1 by just dropping pixels
 def downsample_h2v2[T](data: View[T]) -> View[T]:
@@ -76,7 +92,7 @@ def test_expand_rmaj():
   for r in range(height, padded_height):
     for c in range(padded_width ):
       ref_data[r,c] = ref_data(height-1, c)
-  expand_edges_rmaj(View(blk), height, width)
+  expand_edges_rmaj2(View(blk), height, width)
   assert ref_data.buffer_equals(blk)
 
 @test

@@ -17,7 +17,7 @@ def zz_even_lower(i):
       link zz_even_lower(i-2)
   return trav
 
-def zigzag(N):
+def zigzag[N: int]():
   trav = Traversal(2)
   trav_build trav:
     astep (0,0)

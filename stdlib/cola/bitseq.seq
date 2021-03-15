@@ -14,17 +14,19 @@ class Bits:
   # number of bits in the accum_buffer
   accum_sz: int
   fd: File
+  
+  def __init__(self):
+    assert False 
 
   def __init__(self, fd: File):
-    self.output_buffer = Ptr[byte](64)
+    self.output_buffer = Ptr[byte](64) #[byte(0)] * 64
     self.output_sz = 0
     self.accum_buffer = UInt[64](0)
     self.accum_sz = 0
     self.fd = fd
 
   # pack towards LSB (its always right aligned tho starting at the MSB)
-  def pack(self, val: int, nbits):
-    print(nbits)
+  def pack(self, val: int, nbits, stuff: bool = False):
     assert nbits <= 32
     uval = UInt[64](val)
     uval &= UInt[64]((1 << nbits)-1)
@@ -32,9 +34,9 @@ class Bits:
     uval <<= UInt[64](64-self.accum_sz)
     uval |= self.accum_buffer
     self.accum_buffer = uval
-    self.put_if()
+    self.put_if(jpeg_stuff_zero_byte = stuff)
 
-  def pack[T: int](self, val: Int[T], nbits):
+  def pack[T: int](self, val: Int[T], nbits, stuff: bool = False):
     assert nbits <= 32
     uval = UInt[64](val)
     uval &= UInt[64]((1 << nbits)-1)
@@ -42,9 +44,9 @@ class Bits:
     uval <<= UInt[64](64-self.accum_sz)
     uval |= self.accum_buffer
     self.accum_buffer = uval
-    self.put_if()
+    self.put_if(jpeg_stuff_zero_byte = stuff)
 
-  def pack[T: int](self, val: UInt[T], nbits):
+  def pack[T: int](self, val: UInt[T], nbits, stuff: bool = False):
     assert nbits <= 32
     uval = UInt[64](val)
     uval &= UInt[64]((1 << nbits)-1)
@@ -52,9 +54,9 @@ class Bits:
     uval <<= UInt[64](64-self.accum_sz)
     uval |= self.accum_buffer
     self.accum_buffer = uval
-    self.put_if()
+    self.put_if(jpeg_stuff_zero_byte = stuff)
 
-  def pack[T: int](self, val: Int[T]):
+  def pack[T: int](self, val: Int[T], stuff: bool = False):
     assert T <= 32
     nbits = T
     uval = UInt[64](val)
@@ -63,9 +65,9 @@ class Bits:
     uval <<= UInt[64](64-self.accum_sz)
     uval |= self.accum_buffer
     self.accum_buffer = uval
-    self.put_if()
+    self.put_if(jpeg_stuff_zero_byte = stuff)
 
-  def pack[T: int](self, val: UInt[T]):
+  def pack[T: int](self, val: UInt[T], stuff: bool = False):
     assert T <= 32
     nbits = T
     uval = UInt[64](val)
@@ -74,16 +76,17 @@ class Bits:
     uval <<= UInt[64](64-self.accum_sz)
     uval |= self.accum_buffer
     self.accum_buffer = uval
-    self.put_if()
+    self.put_if(jpeg_stuff_zero_byte = stuff)
 
   # see if we need to move bits from accum_buffer to output_buffer
-  def put_if(self, bound: int = 32, stuff_zero_byte: bool = False):
+  def put_if(self, bound: int = 32, jpeg_stuff_zero_byte: bool = False):
     # need to flush to no more than 32 bits
     while self.accum_sz > bound:
       # we move 1 byte at a time from MSB to LSB
       bt = (self.accum_buffer >> UInt[64](56)) & UInt[64](0xFF)
-      # idk, jpeg does this
-      if bt == UInt[64](0xFF) and stuff_zero_byte:
+      # this is a special case for when the byte is 0xFF b/c that is usually a marker in JPEG,
+      # so jpeg expects a zero byte after to differentiate it from a marker
+      if bt == UInt[64](0xFF) and jpeg_stuff_zero_byte:
         self.output_buffer[self.output_sz] = byte(0)
         self.output_sz += 1
         self.flush_output_if()
@@ -104,18 +107,46 @@ class Bits:
   def flush_all(self):
     # pack on 1s if we have partial bytes
     partial = self.accum_sz & 7
-    nbits = 64 - partial
-    val = (1 << nbits) - 1
-    uval = UInt[64](val)
-    uval &= UInt[64]((1 << nbits)-1)
-    self.accum_sz += nbits
-    uval <<= UInt[64](64-self.accum_sz)
-    uval |= self.accum_buffer
-    self.accum_buffer = uval
-    self.put_if(0)    
-    assert _C.fwrite(self.output_buffer, 1, self.output_sz, self.fd.fp) == self.output_sz
+    if partial > 0:
+      nbits = 8 - partial
+      val = (1 << nbits) - 1
+      uval = UInt[64](val)
+      uval &= UInt[64]((1 << nbits)-1)
+      self.accum_sz += nbits
+      uval <<= UInt[64](64-self.accum_sz)
+      uval |= self.accum_buffer
+      self.accum_buffer = uval
+    # flush everything to the output_buffer
+    self.put_if(0)
+    assert  _C.fwrite(self.output_buffer, 1, self.output_sz, self.fd.fp) == self.output_sz
     self.output_sz = 0
     self.fd.flush()
+
+@extend
+class UInt[N: int]:
+
+  def __new__(val) -> UInt[N]:
+    UInt[N].process(val)
+
+  def process[T: int](val: UInt[T]) -> UInt[N]:
+    if T == N:
+      return UInt[N].process_eq(val)
+    elif T < N:
+      return UInt[N].process_ext(val)
+    else:
+      return UInt[N].process_trunc(val)
+  @llvm
+  def process_trunc[T: int](val: UInt[T]) -> UInt[N]:
+    %0 = trunc i{=T} %val to i{=N}
+    ret i{=N} %0
+  @llvm
+  def process_ext[T: int](val: UInt[T]) -> UInt[N]:
+    %0 = zext i{=T} %val to i{=N}
+    ret i{=N} %0
+  @llvm
+  def process_eq[T: int](val: UInt[T]) -> UInt[N]:
+    ret i{=N} %val
+
       
 @extend
 class byte:

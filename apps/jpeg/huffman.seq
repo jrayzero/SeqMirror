@@ -1,6 +1,7 @@
 from error import *
 from zigzag import *
 from cola.bitseq import *
+from cola.block import *
 
 # standard Huffman tables from K.3
 # I made these ints so I don't need to cast each element within them
@@ -54,49 +55,65 @@ val_ac_chrominance = [0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21,
                       0xf9, 0xfa]
   
 # jchuff.c
-def make_derived_huffman_table(htable_bits: list[int], htable_val: list[int], is_dc: bool) -> Tuple[list[int], list[int]]
+def make_derived_huffman_table(htable_bits: list[int], htable_val: list[int], is_dc: bool) -> Tuple[list[int], list[int]]:
   p = 0
-  huffsize = list[int](257)
-  huffcode = list[int](257)
-  for l in range(1, 17):
-    i = htable_bits[l]
-    if i < 0 or p + 1 > 256:
-      raise HuffmanError()
-    while i > 0:
-      huffsize[p] = l
-      p += 1
-      i -= 1
-  huffsize[p] = 0
-  lastp = p
+  huffsize = [0] * 257
+  huffcode = [0] * 257
 
+  k = 0
+  i = 1
+  j = 1
+  while i <= 16:
+    if j > htable_bits[i]:
+      i += 1
+      j = 1
+    else:
+      huffsize[k] = i
+      k += 1
+      j += 1
+  huffsize[k] = 0
+  lastk = k 
   code = 0
   si = huffsize[0]
-  p = 0
-  while huffsize[p] > 0:
-    while huffsize[p] == si:
-      huffcode[p] = code
-      p += 1
+  k = 0
+
+  while True:
+    while huffsize[k] == si:
+      huffcode[k] = code
       code += 1
-    if code >= (1 << si):
-      raise HuffmanError()
-    code <<= 1
-    si += 1
-  
-  ehufsi = list[int](256)
-  ehufco = list[int](256)
+      k += 1
+    if huffsize[k] == 0:
+      break
+    else:
+      code <<= 1
+      si += 1
+      while huffsize[k] != si:
+        code <<= 1
+        si += 1    
+
+#  while huffsize[k] == si:
+#    huffcode[k] = code
+#    code += 1
+#    k += 1
+#    if huffsize[k] != si:
+#      if huffsize[k] == 0:
+#        break
+#      else:
+#        code <<= 1
+#        si += 1
+  ehufsi = [0] * 256
+  ehufco = [0] * 256
   
   max_symbol = 15 if is_dc else 255
-  for p in range(lastp):
-    i = htable[val]
-    if i < 0 or i > max_symbol or ehufsi[i] == 0:
-      raise HuffmanError()
-    ehufco[i] = huffcode[p]
-    ehufsi[i] = huffsize[p]
-    
+  print(lastk)
+  for k in range(lastk):
+    i = htable_val[k]
+    ehufco[i] = huffcode[k]
+    ehufsi[i] = huffsize[k]
   return ehufco, ehufsi
 
-def encode[T](blk: View[T], ehufco_dc: list[int], ehufco_ac: list[int], 
-              ehufsi_dc: list[int], ehufsi_ac: list[int], last_dc: T, max_coeff_bits: int = 10) -> BitSeq:
+def encode[T](bits: Bits, blk: View[T], ehufco_dc: list[int], ehufco_ac: list[int], 
+              ehufsi_dc: list[int], ehufsi_ac: list[int], last_dc: T, max_coeff_bits: int = 10):
   tmp = tmp2 = int(blk(0,0)) - int(last_dc)
   if tmp < 0:
     tmp = -tmp
@@ -110,41 +127,40 @@ def encode[T](blk: View[T], ehufco_dc: list[int], ehufco_ac: list[int],
   if nbits > max_coeff_bits:
     raise HuffmanError()
 
-  bitseq = BitSeq(ehufco_dc[nbits], ehufsi_dc[nbits])
-  bitseq.pack(temp2, nbits)
+  bits.pack(ehufco_dc[nbits], ehufsi_dc[nbits])
+  bits.pack(tmp2, nbits)
   
   r = 0
-  zz = iter(zigzag(blk))
-  next(zz) # skip over DC coeffecient
+  zz = iter(zigzag[8]()(blk))
+  next(zz) # skip over DC coefficient
   for _ac in zz:
     ac = _ac()
-    if ac == 0:
+    if ac == T(0):
       r += 1
     else:
       while r > 15:
-        bitseq.pack(ehufsi_ac[0xF0], ehufsi_ac[0xF0])
+        bits.pack(ehufsi_ac[0xF0], ehufsi_ac[0xF0])
         r -= 16
       ac2 = ac
-      if ac < 0:
+      if ac < T(0):
         ac = -ac
-        ac2 -= 1
+        ac2 -= T(1)
       nbits = 1
-      ac >>= 1
+      ac >>= T(1)
       nbits = 1
-      while ac > 0:
+      while ac > T(0):
         nbits += 1
-        ac >>= 1
+        ac >>= T(1)
       if nbits > max_coeff_bits:
         raise HuffmanError()
       i = (r << 4) + nbits
-      bitseq.pack(efhuco_ac[i], ehufsi_ac[i])
-      bitseq.pack(ac2, nbits)
+      bits.pack(ehufco_ac[i], ehufsi_ac[i])
+      bits.pack(ac2, nbits)
       r = 0
 
   if r > 0:
-    bitseq.pack(ehufco_ac[0], ehufsi_ac[0])
+    bits.pack(ehufco_ac[0], ehufsi_ac[0])
 
-  return bitseq
 
 def generate_optimal_htable(freqs: list[int]) -> Tuple[list[int], list[int]]:
   assert len(freqs) >= 257
@@ -159,22 +175,22 @@ def generate_optimal_htable(freqs: list[int]) -> Tuple[list[int], list[int]]:
     c1 = -1
     v = 1000000000
     for i in range(257):
-      if freq[i] > 0 and freq[i] <= v:
-        v = freq[i]
+      if freqs[i] > 0 and freqs[i] <= v:
+        v = freqs[i]
         c1 = i
 
     c2 = -1
     v = 1000000000
     for i in range(257):
-      if freq[i] > 0 and freq[i] <= v and i != c1:
-        v = freq[i]
+      if freqs[i] > 0 and freqs[i] <= v and i != c1:
+        v = freqs[i]
         c2 = i
 
     if c2 < 0:
       break
 
-    freq[c1] += freq[c2]
-    freq[c2] = 0
+    freqs[c1] += freqs[c2]
+    freqs[c2] = 0
     codesize[c1] += 1
     while others[c1] >= 0:
       c1 = others[c1]
@@ -199,7 +215,7 @@ def generate_optimal_htable(freqs: list[int]) -> Tuple[list[int], list[int]]:
         bits[i-1] += 1
         bits[j+1] += 2
         bits[j] -= 1
-
+    i = 32
     while bits[i] == 0:
       i -= 1
     bits[i] -= 1

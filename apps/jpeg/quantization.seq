@@ -25,11 +25,22 @@ jpeg_chroma_qtable = Block[int]((8,8),
 
 # from jpeg-6b
 
+# convert 0-100 quality factor to scaling factor
+def quality_to_scaling(quality: int):
+  if quality <= 0:
+    quality = 1
+  elif quality > 100:
+    quality = 100
+  if quality < 50:
+    return 5000 // quality
+  else:
+    return 200 - quality * 2
+
 ### scale actual quantization tables
 
-def scale_quant_table(qtable: Block[int], out_qtable: Block[int], scale_factor: int, force_baseline: bool):
+def scale_quant_table2(qtable: Block[int], out_qtable: Block[int], scale_factor: int, force_baseline: bool):
   for q,sq in scan(qtable, out_qtable):
-    tmp = (q * scale_factor + 50) // 100
+    tmp = (q() * scale_factor + 50) // 100
     if tmp <= 0:
       tmp = 1
     if tmp > 32767:
@@ -40,11 +51,11 @@ def scale_quant_table(qtable: Block[int], out_qtable: Block[int], scale_factor: 
 
 def scale_quant_table(qtable: Block[int], scale_factor: int, force_baseline: bool) -> Block[int]:
   out_qtable = Block(qtable)
-  scale_quant_table(qtable, out_qtable, scale_factor, force_baseline)
+  scale_quant_table2(qtable, out_qtable, scale_factor, force_baseline)
   return out_qtable
 
 def scale_quant_table_inplace(qtable: Block[int], scale_factor: int, force_baseline: bool):
-  scale_quant_table(qtable, qtable, scale_factor, force_baseline)
+  scale_quant_table2(qtable, qtable, scale_factor, force_baseline)
 
 ### from a quantization table, compute actual quantization values (i.e. divisor)
 
@@ -62,16 +73,18 @@ def compute_qdivisors_AAN_idct_short(qtable: Block[int], divisors: Block[u16]):
 	                   u16(8867), u16(12299), u16(11585), u16(10426), u16(8867), u16( 6967), u16(4799), u16(2446),
 	                   u16(4520), u16(6270), u16(5906), u16(5315), u16(4520), u16(3552), u16(2446), u16(1247)])
   for q,s,d in scan(qtable, aan_scales, divisors):
-    d[0] = u16(q()) * s() + (u16(1) << u16(10))) >> u16(11))
+    d[0] = (u16(q()) * s() + (u16(1) << u16(10))) >> u16(11)
 
-def compute_qdivisors_AAN_idct_float_rmaj(qtable: Block[int], divisors: Block[float]):
+def compute_qdivisors_AAN_idct_float_rmaj(qtable: Block[int]) -> Block[float]:
+  divisors = Block[float](qtable.dims())
   # TODO I could precompute this table to have 64 elements (and thus all combos if the aan[row] * aan[col]
   # and that would get rid of the need for the rmaj specific stuff
   aan_scales = Block[float]((8,), 
                             [1.0, 1.387039845, 1.306562965, 1.175875602, 1.0, 0.785694958, 0.541196100, 0.275899379])
   for row in range(8):
     for col in range(8):
-      divisors[r,c] = 1.0 / (float(qtable(row,col)) * aan_scales(row) * aan_scales(col) * 8.0)
+      divisors[row,col] = 1.0 / (float(qtable(row,col)) * aan_scales(row) * aan_scales(col) * 8.0)
+  return divisors
 
 ### different ways to quantize
 
@@ -87,7 +100,7 @@ def quantize[T](elem: T, qval: int) -> T:
   return elem
 
 # this basically just rounds
-def quantize(elem: float, qval: float) -> int:
+def fquantize(elem: float, qval: float) -> int:
   elem *= qval
   return int(elem + 16384.5) - 16384
   

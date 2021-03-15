@@ -1,7 +1,6 @@
 from exslice import ExSlice
 import random,string
 
-# TODO fix list inits
 # TODO make dims and stuff like that be uints (and exslices stop be int sand allow ti to be negative)
 
 class Multidim[T]:

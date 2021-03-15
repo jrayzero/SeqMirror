@@ -11,3 +11,29 @@ class StubError:
     @property
     def message(self):
         return self._hdr.msg
+
+class ColaNotImplemented():
+    _hdr: ExcHeader
+
+    def __init__(self):
+        self._hdr = ('ColaNotImplemented', '', '', '', 0, 0)
+
+    def __init__(self, message: str):
+        self._hdr = ('ColaNotImplemented', message, '', '', 0, 0)
+
+    @property
+    def message(self):
+        return self._hdr.msg
+
+class ColaNotTested():
+    _hdr: ExcHeader
+
+    def __init__(self):
+        self._hdr = ('ColaNotTested', '', '', '', 0, 0)
+
+    def __init__(self, message: str):
+        self._hdr = ('ColaNotTested', message, '', '', 0, 0)
+
+    @property
+    def message(self):
+        return self._hdr.msg

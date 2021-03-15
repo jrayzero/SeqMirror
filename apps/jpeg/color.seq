@@ -25,21 +25,28 @@ def generate_rescale_table(realized_max_val, bounded_max_val=255) -> list[int]:
     table[v] = (v * bounded_max_val + half_max_val) // realized_max_val
   return table
 
-# You can do the level shifts here if you are using signed values as the input data. Otherwise it doesn't really make sense
-def rgb_ycc_convert_rmaj[T](input_data: View[T], output_data: View[T], rgb_ycc_table: Block[int], shift: int = 16):
+def rgb_ycc_convert_rmaj[T](input_data: View[T], output_data: View[T], rgb_ycc_table: Block[int], shift: int = 16, interleaved_rgb: bool = True):
   R = input_data[:,:,0]
   G = input_data[:,:,1]
   B = input_data[:,:,2]
-  Y = output_data[:,:,0]
-  Cb = output_data[:,:,1]
-  Cr = output_data[:,:,2]
-  shft = T(shift)
+  Y = output_data
+  Cb = output_data
+  Cr = output_data
+  if interleaved_rgb:
+    Y = output_data[:,:,0]
+    Cb = output_data[:,:,1]
+    Cr = output_data[:,:,2]
+  else:
+    Y = output_data[0,:,:]
+    Cb = output_data[1,:,:]
+    Cr = output_data[2,:,:]
   for _r,_g,_b,y,cb,cr in scan(R,G,B,Y,Cb,Cr):
     r,g,b = int(_r()), int(_g()), int(_b())
-    y[0] = T(rgb_ycc_table(0,r) + rgb_ycc_table(1,g) + rgb_ycc_table(2,b))# >> shft
-    cb[0] = T(rgb_ycc_table(3,r) + rgb_ycc_table(4,g) + rgb_ycc_table(5,b) + 128)# >> shft
-    cr[0] = T(rgb_ycc_table(6,r) + rgb_ycc_table(7,g) + rgb_ycc_table(8,b) + 128)# >> shft
+    y[0] = T((rgb_ycc_table(0,r) + rgb_ycc_table(1,g) + rgb_ycc_table(2,b)) >> shift)
+    cb[0] = T((rgb_ycc_table(3,r) + rgb_ycc_table(4,g) + rgb_ycc_table(5,b)) >> shift)
+    cr[0] = T((rgb_ycc_table(6,r) + rgb_ycc_table(7,g) + rgb_ycc_table(8,b)) >> shift)
 
+# TODO fix these shifts to match the ycc one above
 def rgb_gray_convert_rmaj[T](input_data: View[T], output_data: View[T], rgb_ycc_table: Block[int], shift: int = 16):
   raise NotTestedError()
   R = input_data[:,:,0]

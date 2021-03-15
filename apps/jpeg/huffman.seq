@@ -91,16 +91,6 @@ def make_derived_huffman_table(htable_bits: list[int], htable_val: list[int], is
         code <<= 1
         si += 1    
 
-#  while huffsize[k] == si:
-#    huffcode[k] = code
-#    code += 1
-#    k += 1
-#    if huffsize[k] != si:
-#      if huffsize[k] == 0:
-#        break
-#      else:
-#        code <<= 1
-#        si += 1
   ehufsi = [0] * 256
   ehufco = [0] * 256
   

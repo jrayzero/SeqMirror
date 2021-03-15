@@ -1,5 +1,7 @@
 from cola.traversal import Traversal
 
+### ROW MAJOR
+
 # even size traversals
 def zz_even_upper(i):
   trav = Traversal(2)

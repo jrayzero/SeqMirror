@@ -25,15 +25,12 @@ def fdct_float_rmaj[T](data: View[T]) -> Block[float]:
     tmp5 = row(2) - row(5)
     tmp3 = row(3) + row(4)
     tmp4 = row(3) - row(4)
-   
     tmp10 = tmp0 + tmp3
     tmp13 = tmp0 - tmp3
     tmp11 = tmp1 + tmp2
     tmp12 = tmp1 - tmp2
-    
     brow[0] = float(tmp10 + tmp11)
     brow[4] = float(tmp10 - tmp11)
-    
     z1 = float(tmp12 + tmp13) * 0.707106781
     brow[2] = float(tmp13) + z1
     brow[6] = float(tmp13) - z1

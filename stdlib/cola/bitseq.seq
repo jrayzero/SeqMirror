@@ -84,17 +84,17 @@ class Bits:
     while self.accum_sz > bound:
       # we move 1 byte at a time from MSB to LSB
       bt = (self.accum_buffer >> UInt[64](56)) & UInt[64](0xFF)
+      self.output_buffer[self.output_sz] = byte(bt)
+      self.output_sz += 1      
+      self.accum_buffer <<= UInt[64](8) # get rid of the byte we just did
+      self.accum_sz -= 8
+      self.flush_output_if()
       # this is a special case for when the byte is 0xFF b/c that is usually a marker in JPEG,
       # so jpeg expects a zero byte after to differentiate it from a marker
       if bt == UInt[64](0xFF) and jpeg_stuff_zero_byte:
         self.output_buffer[self.output_sz] = byte(0)
         self.output_sz += 1
         self.flush_output_if()
-      self.output_buffer[self.output_sz] = byte(bt)
-      self.output_sz += 1      
-      self.accum_buffer <<= UInt[64](8) # get rid of the byte we just did
-      self.accum_sz -= 8
-      self.flush_output_if()
 
   # see if we need to flush our output buffer to file
   def flush_output_if(self):

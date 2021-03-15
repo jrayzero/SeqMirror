@@ -10,6 +10,7 @@ class Multidim[T]:
   buffer: Optional[list[T]]
   parent: Optional[Multidim[T]]
   unique_id: str
+  is_reshape: bool
 
 class View[T]:
   base: Multidim[T]
@@ -24,6 +25,7 @@ class Multidim[T]:
 
   def __init__(self):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
+    self.is_reshape = False
     
   def __init__(self, other: Block[T], set_as_parent: bool):
     self.__init__()
@@ -156,13 +158,13 @@ class Multidim[T]:
       # 1) a reshaping: we linearize with respect to ourselves and delinearize wrt the parent
       # 2) a slicing: same ndims, but need to take into account and take/skip values 
       assert self.parent
-      if len(coord) != len(self.parent.dims):
+      if self.is_reshape:
         # reshaping
         l = Multidim._linearize(self.dims, coord)
         return self.parent._map_to_parent_buffer(Multidim._delinearize(self.parent.dims, l), linearize_last)
       else:
         # slicing
-        new_coord = []  
+        new_coord = []
         for pm,c in zip(self.parent_mapping, coord):
           # NOTE: since these are mapping ExSlices, they should already be adjusted
           start = ~pm.start
@@ -291,6 +293,7 @@ class Multidim[T]:
     md = Multidim[T]()
     md.dims = [dim]
     md.parent = self
+    md.is_reshape = True
     return md
 
   def reshape(self, dim: Block[T]) -> Multidim[T]:
@@ -298,6 +301,7 @@ class Multidim[T]:
     md = Multidim[T]()
     md.dims = [d for d in dim.dims()]
     md.parent = self
+    md.is_reshape = True
     return md
 
   def reshape(self, dim: View[T]) -> Multidim[T]:
@@ -305,6 +309,7 @@ class Multidim[T]:
     md = Multidim[T]()
     md.dims = [d for d in dim.dims()]
     md.parent = self
+    md.is_reshape = True
     return md
 
   def reshape(self, dim0, dim1, *dims) -> Multidim[T]:
@@ -315,6 +320,7 @@ class Multidim[T]:
       md.dims += [Multidim._convert_to_S[int](d) for d in dims]
     assert self.nunits() == md.nunits()
     md.parent = self
+    md.is_reshape = True
     return md
 
   def reshape(self, dims) -> Multidim[T]:
@@ -323,6 +329,7 @@ class Multidim[T]:
     md.dims = [Multidim._convert_to_S[int](d) for d in dims]
     assert self.nunits() == md.nunits()
     md.parent = self
+    md.is_reshape = True
     return md
 
   ### __GETITEM__ AND ASSOCIATED FUNCTIONS

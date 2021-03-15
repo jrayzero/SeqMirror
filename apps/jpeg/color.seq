@@ -36,9 +36,9 @@ def rgb_ycc_convert_rmaj[T](input_data: View[T], output_data: View[T], rgb_ycc_t
   shft = T(shift)
   for _r,_g,_b,y,cb,cr in scan(R,G,B,Y,Cb,Cr):
     r,g,b = int(_r()), int(_g()), int(_b())
-    y[0] = T(rgb_ycc_table(0,r) + rgb_ycc_table(1,g) + rgb_ycc_table(2,b)) >> shft
-    cb[0] = T(rgb_ycc_table(3,r) + rgb_ycc_table(4,g) + rgb_ycc_table(5,b)) >> shft
-    cr[0] = T(rgb_ycc_table(6,r) + rgb_ycc_table(7,g) + rgb_ycc_table(8,b)) >> shft
+    y[0] = T(rgb_ycc_table(0,r) + rgb_ycc_table(1,g) + rgb_ycc_table(2,b))# >> shft
+    cb[0] = T(rgb_ycc_table(3,r) + rgb_ycc_table(4,g) + rgb_ycc_table(5,b) + 128)# >> shft
+    cr[0] = T(rgb_ycc_table(6,r) + rgb_ycc_table(7,g) + rgb_ycc_table(8,b) + 128)# >> shft
 
 def rgb_gray_convert_rmaj[T](input_data: View[T], output_data: View[T], rgb_ycc_table: Block[int], shift: int = 16):
   raise NotTestedError()

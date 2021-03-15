@@ -106,15 +106,16 @@ def write_APP_marker[N: int](bits: Bits):
     raise JFormatError()
   bits.pack(APP_markers[N], 16)
 
-def write_jfif_header_no_thumbnail(bits: Bits, X_density: int, Y_density: int):
+def write_jfif_header_no_thumbnail(bits: Bits):
   write_APP_marker[0](bits)
   bits.pack(16, 16)
-  bits.pack(0x4A4649460, 32)
+  bits.pack(0x4A46, 16)
+  bits.pack(0x4946, 16)
   bits.pack(0x00, 8)
-  bits.pack(0x0102, 16)
+  bits.pack(0x0101, 16)
   bits.pack(0, 8)
-  bits.pack(X_density, 16)
-  bits.pack(Y_density, 16)
+  bits.pack(1, 16)
+  bits.pack(1, 16)
   bits.pack(0, 8)
   bits.pack(0, 8)
 
@@ -123,9 +124,10 @@ def write_jfif_frame_header[N: int](bits: Bits, P: int, Y: int,
                                     Vi: list[int], Tqi: list[int]):
   write_SOF_marker[N](bits)
   Nf = len(Hi)
-  if (Nf != 1 or Nf != 3) or not (len(Hi) == len(Vi) == len(Tqi)):
+  if (Nf != 1 and Nf != 3) or not (len(Hi) == len(Vi) == len(Tqi)):
     raise JFormatError()
-  Lf = 8 + 4 * Nf # hmm the standard says 8+3*NF, but NF has 4 bytes??
+  Lf = 8 + 3 * Nf
+  print(Lf)
   bits.pack(Lf, 16)
   bits.pack(P, 8)
   bits.pack(Y, 16)
@@ -135,7 +137,7 @@ def write_jfif_frame_header[N: int](bits: Bits, P: int, Y: int,
   for c,h,v,tq in scan(Ci,Hi,Vi,Tqi):
     bits.pack(c, 8)
     bits.pack((h << 4) | v, 8)
-    bits.pack(tq, 16)
+    bits.pack(tq, 8)
 
 def write_scan_header(bits: Bits, Csj: list[int], Tdj: list[int], 
                       Taj: list[int], Ss: int, Se: int, Ah: int, Al: int):
@@ -143,9 +145,9 @@ def write_scan_header(bits: Bits, Csj: list[int], Tdj: list[int],
   Ns = len(Csj)
   if not (len(Csj) == len(Tdj) == len(Taj) == Ns):
     raise JFormatError()
-  Ls = 7 + 2 * Ns
+  Ls = 6 + 2 * Ns
   bits.pack(Ls, 16)
-  bits.pack(Ns, 16)
+  bits.pack(Ns, 8)
   for cs,td,ta in scan(Csj, Tdj, Taj):
     bits.pack(cs, 8)
     bits.pack((td << 4) | ta, 8)

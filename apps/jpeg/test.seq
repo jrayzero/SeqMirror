@@ -37,11 +37,9 @@ bits = Bits(output_fd)
 fn = '/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/vgl_6434_0018a.bmp'
 fd = open(fn, 'rb')
 print('read bmp')
-_image_data,precision,unpad_w = read_bmp(fd)
+image_data,precision = read_bmp(fd)
 # rip off any padded data from the bmp.
 # we don't just return a View here because the Block then goes out of scope
-image_data = _image_data[:,:unpad_w,:]
-print(image_data.dims())
 rgb_table = generate_rgb_ycc_table_rmaj()
 ycc_data = Block(image_data)
 rgb_ycc_convert_rmaj(View(image_data), View(ycc_data), rgb_table)
@@ -60,23 +58,14 @@ Y = _Y
 Cb = _Cb
 Cr = _Cr
 
-#if p_h == h and p_w == w:
-#  Y = Y.reshape(p_h, p_w)
-#  Cb = Cb.reshape(p_h, p_w)
-#  Cr = Cr.reshape(p_h, p_w)
-#else:
-Y2 = expand_edges_rmaj[u8,8](Y)#.reshape(p_h,p_w)
-print('Y2 id' +  Y2.base.unique_id)
-print(Y2.dims())
-x = Y2.reshape(p_h,p_w)
-Cb = expand_edges_rmaj[u8,8](Cb).reshape(p_h,p_w)
-Cr = expand_edges_rmaj[u8,8](Cr).reshape(p_h,p_w)  
-if not x.base.parent:
-  print('wtf')
-print('parnet id ' + x.base.parent.unique_id)
-print(x)
-assert False
-
+if p_h == h and p_w == w:
+  Y = Y.reshape(p_h, p_w)
+  Cb = Cb.reshape(p_h, p_w)
+  Cr = Cr.reshape(p_h, p_w)
+else:
+  Y = expand_edges_rmaj[u8,8](Y).reshape(p_h,p_w)
+  Cb = expand_edges_rmaj[u8,8](Cb).reshape(p_h,p_w)
+  Cr = expand_edges_rmaj[u8,8](Cr).reshape(p_h,p_w)  
 
 print('write soi')
 write_SOI_marker(bits)
@@ -84,8 +73,8 @@ print('write jfif header')
 write_jfif_header_no_thumbnail(bits)
 # These can either be written in one segment, or as separate segments (like I do here)
 print('write qtables')
-write_qtables_segment(bits, 0, 0, View(l_qtable))
-write_qtables_segment(bits, 0, 1, View(c_qtable))
+write_qtables_segment(bits, 0, 0, View(jpeg_luma_qtable))
+write_qtables_segment(bits, 0, 1, View(jpeg_chroma_qtable))
 
 # write size before padding
 # TODO if downsample, update sampling factors
@@ -99,8 +88,6 @@ write_hufftables_segment(bits, 1, 0, bits_ac_luminance[1:], val_ac_luminance)
 write_hufftables_segment(bits, 0, 1, bits_dc_chrominance[1:], val_dc_chrominance)
 write_hufftables_segment(bits, 1, 1, bits_ac_chrominance[1:], val_ac_chrominance)
 
-print(Y)
-
 interleave = False
 if interleave:
   raise NotImplementedError()
@@ -108,47 +95,65 @@ else:
   # processing Y then Cb then Cr
   # mcu isn't really the right name since we aren't interleaved, but w/e
 
-  # Y
-
+  print('Y Coding')
   # since not interleaved, writes one component scan at a time
-  write_scan_header(bits, [1], [0], [0], 0, 63, 0, 0)
+  write_scan_header(bits, [1,2,3], [0,1,1], [0,1,1], 0, 63, 0, 0)
   last_dc = u8(0)
   for mcu in NxN_partition_rmaj[8,u8](Y)[0]:
     # level shift everything
     shift_mcu = Block[i8](mcu.dims())
-    print('iter')
     miter = iter(mcu)
-    print(mcu.base.unique_id)
-    print(mcu)
     for m2 in shift_mcu:
-      print('in m2')
       m1 = next(miter)
-      print('wtf')
-      if not m1.base.parent:
-        assert False
-      print(m1())
-      assert False
-      #m2[0] = i8(m1()) #- i8(128)
-    #miter.destroy()
-#    fmcu = fdct_float_rmaj(View(shift_mcu))
-#    qmcu = Block[u8](fmcu.dims())
-#    qiter = iter(qmcu)
-#    for p,q in scan(fmcu,l_divisors):
-#      qi = next(qiter)
-#      qi[0] = u8(fquantize(p(), q()))
-#    qiter.destroy()
-#    encode(bits, View(qmcu), l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi, last_dc)
-#    last_dc = qmcu(0,0)
-#  for mcu in NxN_partition_rmaj[8,u8](Cb)[0]:
-#    fmcu = fdct_float_rmaj(mcu)
-#    for p,q in scan(fmcu,c_divisors):
-#      p[0] = fquantize(p(), q())
-#  for mcu in NxN_partition_rmaj[8,u8](Cr)[0]:
-#    fmcu = fdct_float_rmaj(mcu)    
-#    for p,q in scan(fmcu,c_divisors):
-#      p[0] = fquantize(p(), q())
-#write_nlines_segment()
-
+      m2[0] = i8(m1()) - i8(128)
+    miter.destroy()
+    fmcu = fdct_float_rmaj(View(shift_mcu))
+    qmcu = Block[u8](fmcu.dims())
+    qiter = iter(qmcu)
+    for p,q in scan(fmcu,l_divisors):
+      qi = next(qiter)
+      qi[0] = u8(fquantize(p(), q()))
+    qiter.destroy()
+    encode(bits, View(qmcu), l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi, last_dc)
+    last_dc = qmcu(0,0)
+  print('Cb coding')
+  # TODO refactor this since each components basically does the same thing
+  last_dc = u8(0)
+  for mcu in NxN_partition_rmaj[8,u8](Cb)[0]:
+    shift_mcu = Block[i8](mcu.dims())
+    miter = iter(mcu)
+    for m2 in shift_mcu:
+      m1 = next(miter)
+      m2[0] = i8(m1()) - i8(128)
+    miter.destroy()
+    fmcu = fdct_float_rmaj(View(shift_mcu))
+    qmcu = Block[u8](fmcu.dims())
+    qiter = iter(qmcu)
+    for p,q in scan(fmcu,c_divisors):
+      qi = next(qiter)
+      qi[0] = u8(fquantize(p(), q()))
+    qiter.destroy()
+    encode(bits, View(qmcu), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, last_dc)
+    last_dc = qmcu(0,0)
+  print('Cr coding')
+  # TODO refactor this since each components basically does the same thing
+  last_dc = u8(0)
+  for mcu in NxN_partition_rmaj[8,u8](Cr)[0]:
+    shift_mcu = Block[i8](mcu.dims())
+    miter = iter(mcu)
+    for m2 in shift_mcu:
+      m1 = next(miter)
+      m2[0] = i8(m1()) - i8(128)
+    miter.destroy()
+    fmcu = fdct_float_rmaj(View(shift_mcu))
+    qmcu = Block[u8](fmcu.dims())
+    qiter = iter(qmcu)
+    for p,q in scan(fmcu,c_divisors):
+      qi = next(qiter)
+      qi[0] = u8(fquantize(p(), q()))
+    qiter.destroy()
+    encode(bits, View(qmcu), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, last_dc)
+    last_dc = qmcu(0,0)
 
 write_EOI_marker(bits)
 bits.flush_all()

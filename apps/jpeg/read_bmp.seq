@@ -3,7 +3,7 @@ from cola.bitseq import *
 from cola.iter_utils import *
 from cola.block import *
 
-def read_bmp(fd: File) -> Tuple[Block[u8],int]:
+def read_bmp(fd: File) -> Tuple[View[u8],int]:
   ### header
   mb = fd.read(2)
   if mb != 'BM':
@@ -57,7 +57,8 @@ def read_bmp(fd: File) -> Tuple[Block[u8],int]:
       bb[0] = fd.read_u[1]()
       bg[0] = fd.read_u[1]()
       br[0] = fd.read_u[1]()
-    return bmp_data,bits_per_pixel
+      # ignore any bmp padding for the remaining computations
+    return bmp_data[:,:width,:],bits_per_pixel//3
   else:
     # think this would be either rgb+alpha, grayscale, or single value
     raise NotImplementedError()

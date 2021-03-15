@@ -56,9 +56,8 @@ types::TypePtr TypecheckVisitor::realizeType(types::ClassType *type) {
     if (!m.type)
       return nullptr;
 
-  // TODO: disallow later?!
-  //  if (startswith(type->name, "Callable.N") && !type->getFunc())
-  //    error("realizing trait");
+  if (startswith(type->name, TYPE_CALLABLE))
+    error("realizing trait");
 
   auto realizedName = type->realizedTypeName();
   try {
@@ -209,9 +208,13 @@ types::TypePtr TypecheckVisitor::realizeFunc(types::FuncType *type) {
           unify(type->args[0], ctx->findInternal("void"));
       }
       // Realize the return type.
-      if (auto t = realize(type->args[0]))
+      if (auto t = realize(type->args[0])) {
+        //        LOG("{} {}", type->args[0]->debugString(1), t->debugString(1));
+        //        if (auto x = t->getFunc())
+        //          LOG("{:x} {:x} {:x} {}", size_t(type), size_t(t.get()),
+        //              size_t(x->funcParent.get()), t->getUnbounds().size());
         unify(type->args[0], t);
-      else
+      } else
         type = nullptr; // Not realized! Roll-back!
       // Create and store a realized AST to be used during the code generation.
       seqassert(!type || ast->args.size() == type->args.size() - 1,
@@ -285,11 +288,13 @@ pair<int, StmtPtr> TypecheckVisitor::inferTypes(StmtPtr &&stmt, bool keepLast) {
         for (auto &ub : ctx->activeUnbounds)
           if (ub.first->getLink()->id >= minUnbound) {
             v[ub.first->getLink()->id] = {ub.first->getSrcInfo(), ub.second};
+            LOG_TYPECHECK("dangling ?{} ({})", ub.first->getLink()->id, minUnbound);
           }
-        for (auto &ub : v)
+        for (auto &ub : v) {
           seq::compilationError(format("cannot infer the type of {}", ub.second.second),
                                 ub.second.first.file, ub.second.first.line,
                                 ub.second.first.col, /*terminate=*/false);
+        }
         error("cannot typecheck the program");
       }
       prevSize = newUnbounds;
@@ -424,7 +429,7 @@ seq::ir::types::Type *TypecheckVisitor::getLLVMType(const types::ClassType *t) {
   } else if (name == "Optional") {
     assert(types.size() == 1 && statics.empty());
     handle = module->unsafeGetOptionalType(types[0]);
-  } else if (startswith(name, TYPE_FUNCTION) || startswith(name, TYPE_CALLABLE)) {
+  } else if (startswith(name, TYPE_FUNCTION)) {
     types.clear();
     for (auto &m : const_cast<ClassType *>(t)->getRecord()->args)
       types.push_back(getLLVM(m));

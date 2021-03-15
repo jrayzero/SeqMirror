@@ -3,6 +3,8 @@
 #include "util/common.h"
 #include "llvm/CodeGen/CommandFlags.def"
 #include <algorithm>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <utility>
 
 #include "sir/dsl/codegen.h"
@@ -57,7 +59,7 @@ std::string getDebugNameForVariable(const Var *x) {
   }
 }
 
-const SrcInfo *getSrcInfo(const IRNode *x) {
+const SrcInfo *getSrcInfo(const Node *x) {
   if (auto *srcInfo = x->getAttribute<SrcInfoAttribute>()) {
     return &srcInfo->info;
   } else {
@@ -70,18 +72,18 @@ llvm::Value *getDummyVoidValue(LLVMContext &context) {
   return llvm::ConstantTokenNone::get(context);
 }
 
-llvm::TargetMachine *getTargetMachine(llvm::Triple triple, llvm::StringRef cpuStr,
-                                      llvm::StringRef featuresStr,
-                                      const llvm::TargetOptions &options) {
+std::unique_ptr<llvm::TargetMachine>
+getTargetMachine(llvm::Triple triple, llvm::StringRef cpuStr,
+                 llvm::StringRef featuresStr, const llvm::TargetOptions &options) {
   std::string err;
   const llvm::Target *target = llvm::TargetRegistry::lookupTarget(MArch, triple, err);
 
   if (!target)
     return nullptr;
 
-  return target->createTargetMachine(triple.getTriple(), cpuStr, featuresStr, options,
-                                     getRelocModel(), getCodeModel(),
-                                     llvm::CodeGenOpt::Aggressive);
+  return std::unique_ptr<llvm::TargetMachine>(target->createTargetMachine(
+      triple.getTriple(), cpuStr, featuresStr, options, getRelocModel(), getCodeModel(),
+      llvm::CodeGenOpt::Aggressive));
 }
 
 /**
@@ -133,13 +135,13 @@ llvm::DIFile *LLVMVisitor::DebugInfo::getFile(const std::string &path) {
 LLVMVisitor::LLVMVisitor(bool debug, const std::string &flags)
     : util::ConstIRVisitor(), context(), builder(context), module(), func(nullptr),
       block(nullptr), value(nullptr), vars(), funcs(), coro(), loops(), trycatch(),
-      db(debug, flags) {
+      db(debug, flags), machine() {
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
   resetOMPABI();
 }
 
-void LLVMVisitor::setDebugInfoForNode(const IRNode *x) {
+void LLVMVisitor::setDebugInfoForNode(const Node *x) {
   if (x && func) {
     auto *srcInfo = getSrcInfo(x);
     builder.SetCurrentDebugLocation(llvm::DILocation::get(
@@ -149,7 +151,7 @@ void LLVMVisitor::setDebugInfoForNode(const IRNode *x) {
   }
 }
 
-void LLVMVisitor::process(const IRNode *x) {
+void LLVMVisitor::process(const Node *x) {
   setDebugInfoForNode(x);
   x->accept(*this);
 }
@@ -159,12 +161,7 @@ void LLVMVisitor::verify() {
   assert(!broken);
 }
 
-void LLVMVisitor::dump(const std::string &filename) {
-  auto fo = fopen(filename.c_str(), "w");
-  llvm::raw_fd_ostream fout(fileno(fo), true);
-  fout << *module;
-  fout.close();
-}
+void LLVMVisitor::dump(const std::string &filename) { writeToLLFile(filename); }
 
 void LLVMVisitor::applyDebugTransformations() {
   if (db.debug) {
@@ -231,7 +228,6 @@ void LLVMVisitor::runLLVMOptimizationPasses() {
 
   llvm::Triple moduleTriple(module->getTargetTriple());
   std::string cpuStr, featuresStr;
-  llvm::TargetMachine *machine = nullptr;
   const llvm::TargetOptions options = InitTargetOptionsFromCodeGenFlags();
   llvm::TargetLibraryInfoImpl tlii(moduleTriple);
   pm->add(new llvm::TargetLibraryInfoWrapperPass(tlii));
@@ -242,15 +238,14 @@ void LLVMVisitor::runLLVMOptimizationPasses() {
     machine = getTargetMachine(moduleTriple, cpuStr, featuresStr, options);
   }
 
-  std::unique_ptr<llvm::TargetMachine> tm(machine);
   setFunctionAttributes(cpuStr, featuresStr, *module);
-  pm->add(llvm::createTargetTransformInfoWrapperPass(tm ? tm->getTargetIRAnalysis()
-                                                        : llvm::TargetIRAnalysis()));
-  fpm->add(llvm::createTargetTransformInfoWrapperPass(tm ? tm->getTargetIRAnalysis()
-                                                         : llvm::TargetIRAnalysis()));
+  pm->add(llvm::createTargetTransformInfoWrapperPass(
+      machine ? machine->getTargetIRAnalysis() : llvm::TargetIRAnalysis()));
+  fpm->add(llvm::createTargetTransformInfoWrapperPass(
+      machine ? machine->getTargetIRAnalysis() : llvm::TargetIRAnalysis()));
 
-  if (tm) {
-    auto &ltm = dynamic_cast<llvm::LLVMTargetMachine &>(*tm);
+  if (machine) {
+    auto &ltm = dynamic_cast<llvm::LLVMTargetMachine &>(*machine);
     llvm::Pass *tpc = ltm.createPassConfig(*pm);
     pm->add(tpc);
   }
@@ -274,8 +269,8 @@ void LLVMVisitor::runLLVMOptimizationPasses() {
     pmb.OptLevel = 0;
   }
 
-  if (tm) {
-    tm->adjustPassManager(pmb);
+  if (machine) {
+    machine->adjustPassManager(pmb);
   }
 
   llvm::addCoroutinePassesToExtensionPoints(pmb);
@@ -310,13 +305,118 @@ void LLVMVisitor::runLLVMPipeline() {
   verify();
 }
 
-void LLVMVisitor::compile(const std::string &filename) {
-  runLLVMPipeline();
+void LLVMVisitor::writeToObjectFile(const std::string &filename) {
+  auto &llvmtm = static_cast<llvm::LLVMTargetMachine &>(*machine);
+  auto *mmi = new llvm::MachineModuleInfo(&llvmtm);
+  llvm::legacy::PassManager pm;
+
+  llvm::Triple moduleTriple(module->getTargetTriple());
+  llvm::TargetLibraryInfoImpl tlii(moduleTriple);
+  pm.add(new llvm::TargetLibraryInfoWrapperPass(tlii));
+
+  std::error_code err;
+  auto out =
+      std::make_unique<llvm::ToolOutputFile>(filename, err, llvm::sys::fs::F_None);
+  if (err) {
+    compilationError(err.message());
+  }
+  llvm::raw_pwrite_stream *os = &out->os();
+  assert(!machine->addPassesToEmitFile(pm, *os, llvm::TargetMachine::CGFT_ObjectFile,
+                                       /*DisableVerify=*/true, mmi));
+  pm.run(*module);
+  out->keep();
+}
+
+void LLVMVisitor::writeToBitcodeFile(const std::string &filename) {
   std::error_code err;
   llvm::raw_fd_ostream stream(filename, err, llvm::sys::fs::F_None);
   llvm::WriteBitcodeToFile(module.get(), stream);
   if (err) {
-    throw std::runtime_error(err.message());
+    compilationError(err.message());
+  }
+}
+
+void LLVMVisitor::writeToLLFile(const std::string &filename) {
+  auto fo = fopen(filename.c_str(), "w");
+  llvm::raw_fd_ostream fout(fileno(fo), true);
+  fout << *module;
+  fout.close();
+}
+
+namespace {
+void executeCommand(const std::vector<std::string> &args) {
+  std::vector<const char *> cArgs;
+  for (auto &arg : args) {
+    cArgs.push_back(arg.c_str());
+  }
+  cArgs.push_back(nullptr);
+
+  if (fork() == 0) {
+    int status = execvp(cArgs[0], (char *const *)&cArgs[0]);
+    exit(status);
+  } else {
+    int status;
+    if (wait(&status) < 0) {
+      compilationError("process for '" + args[0] + "' encountered an error in wait");
+    }
+
+    if (WEXITSTATUS(status) != 0) {
+      compilationError("process for '" + args[0] + "' exited with status " +
+                       std::to_string(WEXITSTATUS(status)));
+    }
+  }
+}
+
+void addEnvVarPathsToLinkerArgs(std::vector<std::string> &args,
+                                const std::string &var) {
+  if (const char *path = getenv(var.c_str())) {
+    llvm::StringRef pathStr(path);
+    llvm::SmallVector<llvm::StringRef, 16> split;
+    pathStr.split(split, ":");
+
+    for (const auto &subPath : split) {
+      args.push_back(("-L" + subPath).str());
+    }
+  }
+}
+} // namespace
+
+void LLVMVisitor::writeToExecutable(const std::string &filename) {
+  std::vector<std::string> command = {"clang"};
+  addEnvVarPathsToLinkerArgs(command, "LIBRARY_PATH");
+  addEnvVarPathsToLinkerArgs(command, "LD_LIBRARY_PATH");
+  addEnvVarPathsToLinkerArgs(command, "DYLD_LIBRARY_PATH");
+  addEnvVarPathsToLinkerArgs(command, "SEQ_LIBRARY_PATH");
+
+  const std::string objFile = filename + ".o";
+  writeToObjectFile(objFile);
+  std::vector<std::string> extraArgs = {"-lseqrt", "-lomp", "-lpthread", "-ldl",
+                                        "-lz",     "-lm",   "-lc",       "-o",
+                                        filename,  objFile};
+  for (const auto &arg : extraArgs) {
+    command.push_back(arg);
+  }
+
+  executeCommand(command);
+
+#if __APPLE__
+  if (db.debug) {
+    executeCommand({"dsymutil", filename});
+  }
+#endif
+}
+
+void LLVMVisitor::compile(const std::string &filename) {
+  runLLVMPipeline();
+  llvm::StringRef f(filename);
+  if (f.endswith(".ll")) {
+    writeToLLFile(filename);
+  } else if (f.endswith(".bc")) {
+    writeToBitcodeFile(filename);
+  } else if (f.endswith(".o") || f.endswith(".obj")) {
+    writeToObjectFile(filename);
+  } else {
+    writeToExecutable(filename);
   }
 }
 
@@ -340,7 +440,7 @@ void LLVMVisitor::run(const std::vector<std::string> &args,
   std::string err;
   for (auto &lib : libs) {
     if (llvm::sys::DynamicLibrary::LoadLibraryPermanently(lib.c_str(), &err)) {
-      throw std::runtime_error(err);
+      compilationError(err);
     }
   }
 
@@ -484,7 +584,7 @@ LLVMVisitor::TryCatchData *LLVMVisitor::getInnermostTryCatchBeforeLoop() {
  * General values, module, functions, vars
  */
 
-void LLVMVisitor::visit(const IRModule *x) {
+void LLVMVisitor::visit(const Module *x) {
   module = std::make_unique<llvm::Module>("seq", context);
   module->setTargetTriple(
       llvm::EngineBuilder().selectTarget()->getTargetTriple().str());
@@ -975,7 +1075,7 @@ void LLVMVisitor::visit(const LLVMFunc *x) {
     std::string bufStr;
     llvm::raw_string_ostream buf(bufStr);
     err.print("LLVM", buf);
-    throw std::runtime_error(buf.str());
+    compilationError(buf.str());
   }
   sub->setDataLayout(module->getDataLayout());
 
@@ -1171,7 +1271,7 @@ void LLVMVisitor::visit(const VarValue *x) {
     assert(value);
   } else {
     llvm::Value *varPtr = vars[x->getVar()];
-    assert(varPtr);
+    seqassert(varPtr, "{}", *x);
     builder.SetInsertPoint(block);
     value = builder.CreateLoad(varPtr);
   }
@@ -1415,22 +1515,22 @@ llvm::DIType *LLVMVisitor::getDIType(types::Type *t) {
  * Constants
  */
 
-void LLVMVisitor::visit(const IntConstant *x) {
+void LLVMVisitor::visit(const IntConst *x) {
   builder.SetInsertPoint(block);
   value = builder.getInt64(x->getVal());
 }
 
-void LLVMVisitor::visit(const FloatConstant *x) {
+void LLVMVisitor::visit(const FloatConst *x) {
   builder.SetInsertPoint(block);
   value = llvm::ConstantFP::get(builder.getDoubleTy(), x->getVal());
 }
 
-void LLVMVisitor::visit(const BoolConstant *x) {
+void LLVMVisitor::visit(const BoolConst *x) {
   builder.SetInsertPoint(block);
   value = builder.getInt8(x->getVal() ? 1 : 0);
 }
 
-void LLVMVisitor::visit(const StringConstant *x) {
+void LLVMVisitor::visit(const StringConst *x) {
   builder.SetInsertPoint(block);
   std::string s = x->getVal();
   auto *strVar = new llvm::GlobalVariable(
@@ -1446,7 +1546,7 @@ void LLVMVisitor::visit(const StringConstant *x) {
   value = str;
 }
 
-void LLVMVisitor::visit(const dsl::CustomConstant *x) {
+void LLVMVisitor::visit(const dsl::CustomConst *x) {
   x->getBuilder()->buildValue(this);
 }
 

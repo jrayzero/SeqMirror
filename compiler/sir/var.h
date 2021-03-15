@@ -46,7 +46,7 @@ public:
   int replaceUsedValue(int id, Value *newValue) final {
     return doReplaceUsedValue(id, newValue);
   }
-  using IRNode::replaceUsedValue;
+  using Node::replaceUsedValue;
 
   std::vector<types::Type *> getUsedTypes() const final {
     return getActual()->doGetUsedTypes();
@@ -54,7 +54,7 @@ public:
   int replaceUsedType(const std::string &name, types::Type *newType) final {
     return getActual()->doReplaceUsedType(name, newType);
   }
-  using IRNode::replaceUsedType;
+  using Node::replaceUsedType;
 
   std::vector<Var *> getUsedVariables() final { return doGetUsedVariables(); }
   std::vector<const Var *> getUsedVariables() const final {
@@ -64,7 +64,7 @@ public:
   int replaceUsedVariable(int id, Var *newVar) final {
     return getActual()->doReplaceUsedVariable(id, newVar);
   }
-  using IRNode::replaceUsedVariable;
+  using Node::replaceUsedVariable;
 
   /// @return the type
   types::Type *getType() const { return getActual()->type; }
@@ -83,12 +83,7 @@ public:
                        getActual()->getId());
   }
 
-  /// @return a clone of the value
-  Var *clone() const;
-
 private:
-  virtual Var *doClone() const;
-
   std::ostream &doFormat(std::ostream &os) const override;
 
 protected:
@@ -134,8 +129,6 @@ private:
 
   std::vector<Var *> doGetUsedVariables() const override { return {val}; }
   int doReplaceUsedVariable(int id, Var *newVar) override;
-
-  Value *doClone() const override;
 };
 
 /// Value that represents a pointer.
@@ -170,8 +163,6 @@ private:
 
   std::vector<Var *> doGetUsedVariables() const override { return {val}; }
   int doReplaceUsedVariable(int id, Var *newVar) override;
-
-  Value *doClone() const override;
 };
 
 } // namespace ir

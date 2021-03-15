@@ -29,7 +29,6 @@ public:
 private:
   std::ostream &doFormat(std::ostream &os) const override { return os << "any"; }
   types::Type *doGetType() const override { return getModule()->getVoidType(); }
-  Value *doClone() const override { return getModule()->Nr<AnyValue>(getName()); }
 };
 
 /// Any flow.
@@ -40,7 +39,6 @@ public:
 
 private:
   std::ostream &doFormat(std::ostream &os) const override { return os << "any"; }
-  Value *doClone() const override { return getModule()->Nr<AnyFlow>(getName()); }
 };
 
 /// Any variable.
@@ -51,10 +49,6 @@ public:
 
 private:
   std::ostream &doFormat(std::ostream &os) const override { return os << "any"; }
-  Var *doClone() const override {
-    return getModule()->Nr<AnyVar>(const_cast<types::Type *>(getType()), isGlobal(),
-                                   getName());
-  }
 };
 
 /// Any function.
@@ -65,7 +59,6 @@ public:
 
 private:
   std::ostream &doFormat(std::ostream &os) const override { return os << "any"; }
-  Var *doClone() const override { return getModule()->Nr<AnyFunc>(getName()); }
   std::string getUnmangledName() const override { return "any"; }
 };
 
@@ -74,7 +67,7 @@ private:
 /// @param b the second IR node
 /// @param checkNames whether or not to check the node names
 /// @return true if the nodes are equal
-bool match(IRNode *a, IRNode *b, bool checkNames = false);
+bool match(Node *a, Node *b, bool checkNames = false);
 
 } // namespace util
 } // namespace ir

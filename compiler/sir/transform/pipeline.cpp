@@ -1,6 +1,8 @@
 #include "pipeline.h"
+#include "sir/util/cloning.h"
 #include "sir/util/irtools.h"
 #include "sir/util/matching.h"
+#include <iterator>
 
 namespace seq {
 namespace ir {
@@ -135,7 +137,8 @@ struct PrefetchFunctionTransformer : public util::LambdaValueVisitor {
     auto *yield = M->Nr<YieldInstr>();
     auto *replacement = util::series(prefetch, yield);
 
-    auto *clone = x->clone();
+    util::CloneVisitor cv(M);
+    auto *clone = cv.clone(x);
     see(clone); // avoid infinite loop on clone
     x->replaceAll(M->Nr<FlowInstr>(replacement, clone));
   }
@@ -177,11 +180,12 @@ void PipelineOptimizations::applyPrefetchOptimizations(PipelineFlow *p) {
   auto *M = p->getModule();
   PrefetchFunctionTransformer pft;
   PipelineFlow::Stage *prev = nullptr;
+  util::CloneVisitor cv(M);
   for (auto it = p->begin(); it != p->end(); ++it) {
     if (auto *func = cast<BodiedFunc>(util::getFunc(it->getFunc()))) {
       if (!it->isGenerator() && util::hasAttribute(func, "prefetch")) {
         // transform prefetch'ing function
-        auto *clone = cast<BodiedFunc>(func->clone());
+        auto *clone = cast<BodiedFunc>(cv.forceClone(func));
         util::setReturnType(clone, M->getGeneratorType(util::getReturnType(clone)));
         clone->setGenerator();
         clone->getBody()->accept(pft);
@@ -193,13 +197,14 @@ void PipelineOptimizations::applyPrefetchOptimizations(PipelineFlow *p) {
 
         // vars
         auto *statesType = M->getArrayType(coroType->getReturnType());
-        auto *width = M->getIntConstant(SCHED_WIDTH_PREFETCH);
+        assert((SCHED_WIDTH_PREFETCH & (SCHED_WIDTH_PREFETCH - 1)) == 0); // power of 2
+        auto *width = M->getInt(SCHED_WIDTH_PREFETCH);
 
         auto *init = M->Nr<SeriesFlow>();
         auto *parent = cast<BodiedFunc>(getParentFunc());
         assert(parent);
-        auto *filled = util::makeVar(M->getIntConstant(0), init, parent);
-        auto *next = util::makeVar(M->getIntConstant(0), init, parent);
+        auto *filled = util::makeVar(M->getInt(0), init, parent);
+        auto *next = util::makeVar(M->getInt(0), init, parent);
         auto *states = util::makeVar(
             M->Nr<StackAllocInstr>(statesType, SCHED_WIDTH_PREFETCH), init, parent);
         insertBefore(init);
@@ -240,13 +245,25 @@ void PipelineOptimizations::applyPrefetchOptimizations(PipelineFlow *p) {
         std::vector<PipelineFlow::Stage> drainStages = {
             {util::call(drainFunc, args), {}, /*generator=*/true, /*parallel=*/false}};
         *it = stage;
-        for (++it; it != p->end(); ++it) {
-          drainStages.push_back(it->clone());
+
+        if (std::distance(it, p->end()) == 1 &&
+            !util::getReturnType(func)->is(M->getVoidType())) {
+          Func *dummyFunc =
+              M->getOrRealizeFunc("_dummy_prefetch_terminal_stage",
+                                  {stage.getOutputElementType()}, {}, prefetchModule);
+          assert(dummyFunc);
+          p->push_back({M->Nr<VarValue>(dummyFunc),
+                        {nullptr},
+                        /*generator=*/false,
+                        /*parallel=*/false});
         }
 
-        auto *drain =
-            util::series(M->Nr<AssignInstr>(next->getVar(), M->getIntConstant(0)),
-                         M->Nr<PipelineFlow>(drainStages));
+        for (++it; it != p->end(); ++it) {
+          drainStages.push_back(cv.clone(*it));
+        }
+
+        auto *drain = util::series(M->Nr<AssignInstr>(next->getVar(), M->getInt(0)),
+                                   M->Nr<PipelineFlow>(drainStages));
         insertAfter(drain);
 
         break; // at most one prefetch transformation per pipeline
@@ -271,7 +288,7 @@ struct InterAlignTypes {
   operator bool() const { return seq && cigar && align && params && pair && yield; }
 };
 
-InterAlignTypes gatherInterAlignTypes(IRModule *M) {
+InterAlignTypes gatherInterAlignTypes(Module *M) {
   return {M->getOrRealizeType("seq", {}, seqModule),
           M->getOrRealizeType("CIGAR", {}, alignModule),
           M->getOrRealizeType("Alignment", {}, alignModule),
@@ -420,13 +437,14 @@ void PipelineOptimizations::applyInterAlignOptimizations(PipelineFlow *p) {
   if (!types) // bio module not loaded; nothing to do
     return;
   PipelineFlow::Stage *prev = nullptr;
+  util::CloneVisitor cv(M);
   for (auto it = p->begin(); it != p->end(); ++it) {
     if (auto *func = cast<BodiedFunc>(util::getFunc(it->getFunc()))) {
       if (!it->isGenerator() && util::hasAttribute(func, "inter_align") &&
           util::getReturnType(func)->is(M->getVoidType())) {
         // transform aligning function
         InterAlignFunctionTransformer aft(&types);
-        auto *clone = cast<BodiedFunc>(func->clone());
+        auto *clone = cast<BodiedFunc>(cv.forceClone(func));
         util::setReturnType(clone, M->getGeneratorType(types.yield));
         clone->setGenerator();
         clone->getBody()->accept(aft);
@@ -465,10 +483,10 @@ void PipelineOptimizations::applyInterAlignOptimizations(PipelineFlow *p) {
             util::makeVar(util::alloc(M->getByteType(), LEN_LIMIT * W), init, parent);
         auto *hist = util::makeVar(util::alloc(i32, MAX_SEQ_LEN8 + MAX_SEQ_LEN16 + 32),
                                    init, parent);
-        auto *filled = util::makeVar(M->getIntConstant(0), init, parent);
+        auto *filled = util::makeVar(M->getInt(0), init, parent);
         insertBefore(init);
 
-        auto *width = M->getIntConstant(W);
+        auto *width = M->getInt(W);
         auto *params = aft.getParams();
 
         std::vector<types::Type *> stageArgTypes;

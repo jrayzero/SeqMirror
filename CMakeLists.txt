@@ -131,7 +131,7 @@ set(SEQ_HPPFILES
         compiler/sir/analyze/analysis.h
         compiler/sir/attribute.h
         compiler/sir/base.h
-        compiler/sir/constant.h
+        compiler/sir/const.h
         compiler/sir/dsl/codegen.h
         compiler/sir/dsl/nodes.h
         compiler/sir/flow.h
@@ -147,7 +147,9 @@ set(SEQ_HPPFILES
         compiler/sir/transform/pass.h
         compiler/sir/transform/pipeline.h
         compiler/sir/types/types.h
+        compiler/sir/util/cloning.h
         compiler/sir/util/context.h
+        compiler/sir/util/format.h
         compiler/sir/util/irtools.h
         compiler/sir/util/iterators.h
         compiler/sir/util/lambda_visitor.h
@@ -192,7 +194,7 @@ set(SEQ_CPPFILES
         compiler/parser/visitors/visitor.cpp
         compiler/sir/attribute.cpp
         compiler/sir/base.cpp
-        compiler/sir/constant.cpp
+        compiler/sir/const.cpp
         compiler/sir/dsl/nodes.cpp
         compiler/sir/flow.cpp
         compiler/sir/func.cpp
@@ -204,6 +206,8 @@ set(SEQ_CPPFILES
         compiler/sir/transform/manager.cpp
         compiler/sir/transform/pipeline.cpp
         compiler/sir/types/types.cpp
+        compiler/sir/util/cloning.cpp
+        compiler/sir/util/format.cpp
         compiler/sir/util/irtools.cpp
         compiler/sir/util/matching.cpp
         compiler/sir/util/visitor.cpp

@@ -66,8 +66,6 @@ public:
 private:
   std::ostream &doFormat(std::ostream &os) const override;
 
-  Value *doClone() const override;
-
 protected:
   std::vector<Value *> doGetUsedValues() const override {
     return std::vector<Value *>(series.begin(), series.end());
@@ -111,8 +109,6 @@ public:
 
 private:
   std::ostream &doFormat(std::ostream &os) const override;
-
-  Value *doClone() const override;
 
 protected:
   std::vector<Value *> doGetUsedValues() const override { return {cond, body}; }
@@ -169,8 +165,6 @@ public:
 
 private:
   std::ostream &doFormat(std::ostream &os) const override;
-
-  Value *doClone() const override;
 
 protected:
   std::vector<Value *> doGetUsedValues() const override { return {iter, body}; }
@@ -229,8 +223,6 @@ public:
 
 private:
   std::ostream &doFormat(std::ostream &os) const override;
-
-  Value *doClone() const override;
 
 protected:
   std::vector<Value *> doGetUsedValues() const override;
@@ -354,8 +346,6 @@ public:
 private:
   std::ostream &doFormat(std::ostream &os) const override;
 
-  Value *doClone() const override;
-
 protected:
   std::vector<Value *> doGetUsedValues() const override;
   int doReplaceUsedValue(int id, Value *newValue) override;
@@ -448,15 +438,13 @@ public:
     types::Type *getOutputType() const;
     /// @return the output element type of this stage
     types::Type *getOutputElementType() const;
-    /// @return deep copy of this stage; used to clone pipelines
-    Stage clone() const;
 
     friend class PipelineFlow;
   };
 
 private:
   /// pipeline stages
-  std::vector<Stage> stages;
+  std::list<Stage> stages;
 
 public:
   static const char NodeId;
@@ -465,7 +453,7 @@ public:
   /// @param stages vector of pipeline stages
   /// @param name the name
   explicit PipelineFlow(std::vector<Stage> stages = {}, std::string name = "")
-      : AcceptorExtend(std::move(name)), stages(std::move(stages)) {}
+      : AcceptorExtend(std::move(name)), stages(stages.begin(), stages.end()) {}
 
   /// @return an iterator to the first stage
   auto begin() { return stages.begin(); }
@@ -507,8 +495,6 @@ public:
 
 private:
   std::ostream &doFormat(std::ostream &os) const override;
-
-  Value *doClone() const override;
 
 protected:
   std::vector<Value *> doGetUsedValues() const override;

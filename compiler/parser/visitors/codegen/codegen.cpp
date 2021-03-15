@@ -13,6 +13,8 @@
 #include "parser/visitors/codegen/codegen.h"
 #include "parser/visitors/codegen/codegen_ctx.h"
 
+#include "sir/util/cloning.h"
+
 using fmt::format;
 using std::function;
 using std::get;
@@ -82,6 +84,7 @@ CodegenVisitor::initializeContext(shared_ptr<CodegenContext> ctx) {
         if (in(ast->attributes, ATTR_INTERNAL)) {
           vector<ir::types::Type *> types;
           auto p = t->funcParent;
+          //          LOG("{}", t->realizedName());
           assert(in(ast->attributes, ATTR_PARENT_CLASS));
           if (!in(ast->attributes, ATTR_NOT_STATIC)) { // hack for non-generic types
             for (auto &x :
@@ -138,13 +141,15 @@ CodegenVisitor::initializeContext(shared_ptr<CodegenContext> ctx) {
           fn->setGlobal();
         }
       }
-      if (!ctx->find(f.first))
+      if (!ctx->find(f.first)) {
+        //        LOG("real {}", f.first);
         ctx->addFunc(f.first, ctx->functions[f.first].first);
+      }
     }
   return ret;
 }
 
-IRModule *CodegenVisitor::apply(shared_ptr<Cache> cache, StmtPtr stmts) {
+Module *CodegenVisitor::apply(shared_ptr<Cache> cache, StmtPtr stmts) {
   auto *module = cache->module;
   auto *main = cast<BodiedFunc>(module->getMainFunc());
 
@@ -164,23 +169,23 @@ IRModule *CodegenVisitor::apply(shared_ptr<Cache> cache, StmtPtr stmts) {
 }
 
 void CodegenVisitor::visit(BoolExpr *expr) {
-  result = make<BoolConstant>(expr, expr->value,
-                              realizeType(expr->getType()->getClass().get()));
+  result = make<BoolConst>(expr, expr->value,
+                           realizeType(expr->getType()->getClass().get()));
 }
 
 void CodegenVisitor::visit(IntExpr *expr) {
-  result = make<IntConstant>(expr, expr->intValue,
-                             realizeType(expr->getType()->getClass().get()));
+  result = make<IntConst>(expr, expr->intValue,
+                          realizeType(expr->getType()->getClass().get()));
 }
 
 void CodegenVisitor::visit(FloatExpr *expr) {
-  result = make<FloatConstant>(expr, expr->value,
-                               realizeType(expr->getType()->getClass().get()));
+  result = make<FloatConst>(expr, expr->value,
+                            realizeType(expr->getType()->getClass().get()));
 }
 
 void CodegenVisitor::visit(StringExpr *expr) {
-  result = make<StringConstant>(expr, expr->value,
-                                realizeType(expr->getType()->getClass().get()));
+  result = make<StringConst>(expr, expr->value,
+                             realizeType(expr->getType()->getClass().get()));
 }
 
 void CodegenVisitor::visit(IdExpr *expr) {
@@ -311,15 +316,17 @@ void CodegenVisitor::visit(PipeExpr *expr) {
   }
 
   if (sugar) {
-    result = stages[0].getFunc()->clone();
+    util::CloneVisitor cv(ctx->getModule());
+
+    result = cv.clone(stages[0].getFunc());
 
     for (auto i = 1; i < stages.size(); ++i) {
       auto &stage = stages[i];
       std::vector<Value *> newArgs;
       for (auto *arg : stage) {
-        newArgs.push_back(arg ? arg->clone() : result);
+        newArgs.push_back(arg ? cv.clone(arg) : result);
       }
-      result = make<CallInstr>(expr, stage.getFunc()->clone(), newArgs);
+      result = make<CallInstr>(expr, cv.clone(stage.getFunc()), newArgs);
     }
     return;
   }
@@ -341,11 +348,11 @@ void CodegenVisitor::visit(SuiteStmt *stmt) {
 void CodegenVisitor::visit(PassStmt *stmt) {}
 
 void CodegenVisitor::visit(BreakStmt *stmt) {
-  ctx->getSeries()->push_back(make<BreakInstr>(stmt, ctx->getLoop()));
+  ctx->getSeries()->push_back(make<BreakInstr>(stmt));
 }
 
 void CodegenVisitor::visit(ContinueStmt *stmt) {
-  ctx->getSeries()->push_back(make<ContinueInstr>(stmt, ctx->getLoop()));
+  ctx->getSeries()->push_back(make<ContinueInstr>(stmt));
 }
 
 void CodegenVisitor::visit(ExprStmt *stmt) {
@@ -631,7 +638,7 @@ void CodegenVisitor::visit(FunctionStmt *stmt) {
         auto *external = cast<ir::ExternalFunc>(f);
         assert(external);
         external->setUnmangledName(ctx->cache->reverseIdentifierLookup[stmt->name]);
-      } else if (!in(ast->attributes, "internal")) {
+      } else if (!in(ast->attributes, ATTR_INTERNAL)) {
         ctx->addScope();
         for (auto i = 0; i < names.size(); ++i) {
           auto *var = f->getArgVar(names[i]);

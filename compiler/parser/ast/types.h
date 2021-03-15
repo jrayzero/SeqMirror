@@ -87,8 +87,12 @@ public:
   virtual vector<shared_ptr<Type>> getUnbounds() const;
   /// True if a type is realizable.
   virtual bool canRealize() const = 0;
+  /// True if a type is completely instantiated (has no unbounds or generics).
+  virtual bool isInstantiated() const = 0;
   /// Pretty-print facility.
-  virtual string toString() const = 0;
+  string toString() const;
+  /// Pretty-print facility.
+  virtual string debugString(bool debug) const = 0;
   /// Print the realization string.
   /// Similar to toString, but does not print the data unnecessary for realization
   /// (e.g. the function return type).
@@ -152,7 +156,8 @@ public:
   TypePtr follow() override;
   vector<TypePtr> getUnbounds() const override;
   bool canRealize() const override;
-  string toString() const override;
+  bool isInstantiated() const override;
+  string debugString(bool debug) const override;
   string realizedName() const override;
 
   shared_ptr<LinkType> getLink() override {
@@ -229,7 +234,8 @@ public:
 public:
   vector<TypePtr> getUnbounds() const override;
   bool canRealize() const override;
-  string toString() const override;
+  bool isInstantiated() const override;
+  string debugString(bool debug) const override;
   string realizedName() const override;
   /// True if a class is a trait or has a generic that is a trait.
   virtual bool hasTrait() const;
@@ -263,7 +269,8 @@ public:
 public:
   vector<TypePtr> getUnbounds() const override;
   bool canRealize() const override;
-  string toString() const override;
+  bool isInstantiated() const override;
+  string debugString(bool debug) const override;
 
   shared_ptr<RecordType> getRecord() override {
     return std::static_pointer_cast<RecordType>(shared_from_this());
@@ -298,7 +305,8 @@ public:
 public:
   vector<TypePtr> getUnbounds() const override;
   bool canRealize() const override;
-  string toString() const override;
+  bool isInstantiated() const override;
+  string debugString(bool debug) const override;
   string realizedName() const override;
 
   shared_ptr<FuncType> getFunc() override {
@@ -369,7 +377,8 @@ public:
 public:
   vector<TypePtr> getUnbounds() const override;
   bool canRealize() const override;
-  string toString() const override;
+  bool isInstantiated() const override;
+  string debugString(bool debug) const override;
   string realizedName() const override;
 
   shared_ptr<StaticType> getStatic() override {

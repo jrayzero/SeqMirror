@@ -35,6 +35,7 @@ void Type::Unification::undo() {
 }
 TypePtr Type::follow() { return shared_from_this(); }
 vector<shared_ptr<Type>> Type::getUnbounds() const { return {}; }
+string Type::toString() const { return debugString(false); }
 bool Type::is(const string &s) { return getClass() && getClass()->name == s; }
 
 LinkType::LinkType(Kind kind, int id, int level, TypePtr type, bool isStatic,
@@ -82,7 +83,7 @@ int LinkType::unify(Type *typ, Unification *undo) {
     // ⚠️ Unification: destructive part.
     seqassert(!type, "type has been already unified or is in inconsistent state");
     if (undo) {
-      LOG_TYPECHECK("[unify] {} := {}", id, typ->toString());
+      LOG_TYPECHECK("[unify] {} := {}", id, typ->debugString(true));
       // Link current type to typ and ensure that this modification is recorded in undo.
       undo->linked.push_back(this);
       kind = Link;
@@ -140,11 +141,15 @@ bool LinkType::canRealize() const {
   else
     return type->canRealize();
 }
-string LinkType::toString() const {
+bool LinkType::isInstantiated() const {
+  return kind == Link ? type->isInstantiated() : false;
+}
+string LinkType::debugString(bool debug) const {
   if (kind == Unbound || kind == Generic)
-    return genericName.empty() ? "?" : genericName;
+    return debug ? fmt::format("{}{}", kind == Unbound ? '?' : '#', id)
+                 : (genericName.empty() ? "?" : genericName);
   else
-    return type->toString();
+    return type->debugString(debug);
 }
 string LinkType::realizedName() const {
   if (kind == Unbound)
@@ -253,11 +258,15 @@ bool ClassType::canRealize() const {
   return std::all_of(generics.begin(), generics.end(),
                      [](auto &t) { return !t.type || t.type->canRealize(); });
 }
-string ClassType::toString() const {
+bool ClassType::isInstantiated() const {
+  return std::all_of(generics.begin(), generics.end(),
+                     [](auto &t) { return !t.type || t.type->isInstantiated(); });
+}
+string ClassType::debugString(bool debug) const {
   vector<string> gs;
   for (auto &a : generics)
     if (!a.name.empty())
-      gs.push_back(a.type->toString());
+      gs.push_back(a.type->debugString(debug));
   // Special formatting for Partials, Functions and Tuples
   if (startswith(name, TYPE_PARTIAL)) {
     vector<string> as;
@@ -387,8 +396,13 @@ bool RecordType::canRealize() const {
                      [](auto &a) { return a->canRealize(); }) &&
          this->ClassType::canRealize();
 }
-string RecordType::toString() const {
-  return fmt::format("{}", this->ClassType::toString());
+bool RecordType::isInstantiated() const {
+  return std::all_of(args.begin(), args.end(),
+                     [](auto &a) { return a->isInstantiated(); }) &&
+         this->ClassType::isInstantiated();
+}
+string RecordType::debugString(bool debug) const {
+  return fmt::format("{}", this->ClassType::debugString(debug));
 }
 shared_ptr<RecordType> RecordType::getHeterogenousTuple() {
   seqassert(canRealize(), "{} not realizable", toString());
@@ -408,6 +422,8 @@ FuncType::FuncType(const shared_ptr<RecordType> &baseType, string funcName,
     : RecordType(*baseType), funcName(move(funcName)), funcGenerics(move(funcGenerics)),
       funcParent(move(funcParent)) {}
 int FuncType::unify(Type *typ, Unification *us) {
+  if (this == typ)
+    return 0;
   int s1 = 2, s = 0;
   if (auto t = typ->getFunc()) {
     // Check if names and parents match.
@@ -481,16 +497,30 @@ bool FuncType::canRealize() const {
                      [](auto &a) { return !a.type || a.type->canRealize(); }) &&
          (!funcParent || funcParent->canRealize());
 }
-string FuncType::toString() const {
+bool FuncType::isInstantiated() const {
+  TypePtr removed = nullptr;
+  if (args[0]->getFunc() && args[0]->getFunc()->funcParent.get() == this) {
+    removed = args[0]->getFunc()->funcParent;
+    args[0]->getFunc()->funcParent = nullptr;
+  }
+  auto ret = std::all_of(funcGenerics.begin(), funcGenerics.end(),
+                         [](auto &a) { return !a.type || a.type->isInstantiated(); }) &&
+             (!funcParent || funcParent->isInstantiated()) &&
+             this->RecordType::isInstantiated();
+  if (removed)
+    args[0]->getFunc()->funcParent = removed;
+  return ret;
+}
+string FuncType::debugString(bool debug) const {
   vector<string> gs;
   for (auto &a : funcGenerics)
     if (!a.name.empty())
-      gs.push_back(a.type->toString());
+      gs.push_back(a.type->debugString(debug));
   string s = join(gs, ",");
   vector<string> as;
   // Important: return type does not have to be realized.
-  for (int ai = 1; ai < args.size(); ai++)
-    as.push_back(args[ai]->toString());
+  for (int ai = debug ? 0 : 1; ai < args.size(); ai++)
+    as.push_back(args[ai]->debugString(debug));
   string a = join(as, ",");
   s = s.empty() ? a : join(vector<string>{s, a}, ";");
   return fmt::format("{}{}", funcName, s.empty() ? "" : fmt::format("[{}]", s));
@@ -608,7 +638,8 @@ bool StaticType::canRealize() const {
         return false;
   return true;
 }
-string StaticType::toString() const {
+bool StaticType::isInstantiated() const { return staticEvaluation.first; }
+string StaticType::debugString(bool debug) const {
   if (staticEvaluation.first)
     return fmt::format("{}", staticEvaluation.second);
   return fmt::format("Static[{}]",

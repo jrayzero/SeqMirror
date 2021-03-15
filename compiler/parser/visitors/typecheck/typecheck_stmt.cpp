@@ -102,7 +102,6 @@ void TypecheckVisitor::visit(AssignStmt *stmt) {
   } else { // Case 2: Normal assignment
     if (stmt->type && stmt->type->getType()->getClass()) {
       auto t = ctx->instantiate(stmt->type.get(), stmt->type->getType());
-      LOG_TYPECHECK("[inst] {} -> {}", stmt->lhs->toString(), t->toString());
       unify(stmt->lhs->type, t);
       wrapOptionalIfNeeded(stmt->lhs->getType(), stmt->rhs);
       unify(stmt->lhs->type, stmt->rhs->type);
@@ -152,7 +151,6 @@ void TypecheckVisitor::visit(UpdateStmt *stmt) {
       c->args[0].value->isId(string(stmt->lhs->getId()->value))) {
     auto ptrTyp =
         ctx->instantiateGeneric(stmt->lhs.get(), ctx->findInternal("Ptr"), {lhsClass});
-    LOG_TYPECHECK("[inst] {} -> {}", stmt->lhs->toString(), ptrTyp->toString());
     c->args[1].value = transform(c->args[1].value);
     auto rhsTyp = c->args[1].value->getType()->getClass();
     if (auto method = ctx->findBestMethod(
@@ -171,7 +169,6 @@ void TypecheckVisitor::visit(UpdateStmt *stmt) {
   if (stmt->isAtomic && lhsClass && rhsClass) {
     auto ptrType =
         ctx->instantiateGeneric(stmt->lhs.get(), ctx->findInternal("Ptr"), {lhsClass});
-    LOG_TYPECHECK("[inst] {} -> {}", stmt->lhs->toString(), ptrType->toString());
     if (auto m = ctx->findBestMethod(stmt->lhs.get(), "__atomic_xchg__",
                                      {{"", ptrType}, {"", rhsClass}})) {
       resultStmt = transform(N<ExprStmt>(N<CallExpr>(
@@ -205,7 +202,6 @@ void TypecheckVisitor::visit(AssignMemberStmt *stmt) {
     if (lhsClass->getRecord())
       error("tuple element '{}' is read-only", stmt->member);
     auto typ = ctx->instantiate(stmt->lhs.get(), member, lhsClass.get());
-    LOG_TYPECHECK("[inst] {} -> {}", stmt->lhs->toString(), typ->toString());
     wrapOptionalIfNeeded(typ, stmt->rhs);
     unify(stmt->rhs->type, typ);
     stmt->done = stmt->rhs->done;
@@ -232,7 +228,6 @@ void TypecheckVisitor::visit(YieldStmt *stmt) {
   auto t = ctx->instantiateGeneric(stmt->expr ? stmt->expr.get()
                                               : N<IdExpr>("<yield>").get(),
                                    ctx->findInternal("Generator"), {baseTyp});
-  LOG_TYPECHECK("[inst] {} -> {}", stmt->toString(), t->toString());
   unify(ctx->bases.back().returnType, t);
   stmt->done = stmt->expr ? stmt->expr->done : true;
 }
@@ -385,9 +380,10 @@ void TypecheckVisitor::visit(FunctionStmt *stmt) {
         in(stmt->attributes, ATTR_EXTERN_C)) {
       if (!t->canRealize())
         error("builtins and external functions must be realizable");
+
       auto typ = ctx->instantiate(N<IdExpr>(stmt->name).get(), t);
-      LOG_TYPECHECK("[inst] fn {} -> {}", stmt->name, typ->toString());
-      unify(typ, realize(typ->getFunc()));
+      auto r = realize(typ->getFunc());
+      unify(typ, r);
     }
     stmt->done = true;
     return;
@@ -417,7 +413,7 @@ void TypecheckVisitor::visit(FunctionStmt *stmt) {
   // Add function arguments.
   auto baseType =
       ctx->instantiate(N<IdExpr>(stmt->name).get(),
-                       ctx->find(generateCallableStub(stmt->args.size()))->type)
+                       ctx->find(generateFunctionStub(stmt->args.size()))->type)
           ->getRecord();
   {
     ctx->typecheckLevel++;
@@ -472,16 +468,16 @@ void TypecheckVisitor::visit(FunctionStmt *stmt) {
   ctx->bases[ctx->findBase(attributes[ATTR_PARENT_FUNCTION])]
       .visitedAsts[stmt->name] = {TypecheckItem::Func, typ};
   ctx->add(TypecheckItem::Func, stmt->name, typ);
-  LOG_REALIZE("[stmt] added func {}: {} (base={})", stmt->name, typ->toString(),
+  LOG_REALIZE("[stmt] added func {}: {} (base={}})", stmt->name, typ->debugString(1),
               ctx->getBase());
 }
 
 void TypecheckVisitor::visit(ClassStmt *stmt) {
-  if (ctx->findInVisited(stmt->name).second && !in(stmt->attributes, "extend"))
+  if (ctx->findInVisited(stmt->name).second && !in(stmt->attributes, ATTR_EXTEND))
     return;
 
   auto &attributes = const_cast<ClassStmt *>(stmt)->attributes;
-  bool extension = in(attributes, "extend");
+  bool extension = in(attributes, ATTR_EXTEND);
   ClassTypePtr typ = nullptr;
   if (!extension) {
     if (stmt->isRecord())

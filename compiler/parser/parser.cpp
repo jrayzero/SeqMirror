@@ -22,7 +22,8 @@
 #include "sir/sir.h"
 #include "util/fmt/format.h"
 
-#include "sir/util/matching.h"
+#include "sir/util/format.h"
+#include <fstream>
 
 int _ocaml_time = 0;
 int _ll_time = 0;
@@ -32,9 +33,9 @@ bool _isTest = false;
 
 namespace seq {
 
-ir::IRModule *parse(const string &argv0, const string &file, const string &code,
-                    bool isCode, int isTest, int startLine,
-                    const std::unordered_map<std::string, std::string> &defines) {
+ir::Module *parse(const string &argv0, const string &file, const string &code,
+                  bool isCode, int isTest, int startLine,
+                  const std::unordered_map<std::string, std::string> &defines) {
   try {
     auto d = getenv("SEQ_DEBUG");
     if (d) {
@@ -106,6 +107,13 @@ ir::IRModule *parse(const string &argv0, const string &file, const string &code,
       LOG_TIME("[T] codegen   = {:.1f}",
                duration_cast<milliseconds>(high_resolution_clock::now() - t).count() /
                    1000.0);
+    if (_dbg_level) {
+      auto out = seq::ir::util::format(module);
+      std::ofstream os("_dump_sir.lisp");
+      os << out;
+      os.close();
+    }
+
     _isTest = isTest;
     return module;
   } catch (exc::SeqException &e) {

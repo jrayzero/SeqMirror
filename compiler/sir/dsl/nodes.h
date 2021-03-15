@@ -3,11 +3,16 @@
 #include <memory>
 
 #include "sir/base.h"
-#include "sir/constant.h"
+#include "sir/const.h"
 #include "sir/instr.h"
 
 namespace seq {
 namespace ir {
+
+namespace util {
+class CloneVisitor;
+} // namespace util
+
 namespace dsl {
 
 namespace codegen {
@@ -36,7 +41,7 @@ public:
 } // namespace types
 
 /// DSL constant.
-class CustomConstant : public AcceptorExtend<CustomConstant, Constant> {
+class CustomConst : public AcceptorExtend<CustomConst, Const> {
 public:
   static const char NodeId;
 
@@ -48,6 +53,10 @@ public:
   /// @param v the other node
   /// @return true if they match
   virtual bool match(const Value *v) const = 0;
+  /// Clones the value.
+  /// @param cv the clone visitor
+  /// @return a clone of the object
+  virtual Value *doClone(util::CloneVisitor &cv) const = 0;
 };
 
 /// DSL flow.
@@ -63,6 +72,10 @@ public:
   /// @param v the other node
   /// @return true if they match
   virtual bool match(const Value *v) const = 0;
+  /// Clones the value.
+  /// @param cv the clone visitor
+  /// @return a clone of the object
+  virtual Value *doClone(util::CloneVisitor &cv) const = 0;
 };
 
 /// DSL instruction.
@@ -78,6 +91,10 @@ public:
   /// @param v the other node
   /// @return true if they match
   virtual bool match(const Value *v) const = 0;
+  /// Clones the value.
+  /// @param cv the clone visitor
+  /// @return a clone of the object
+  virtual Value *doClone(util::CloneVisitor &cv) const = 0;
 };
 
 } // namespace dsl

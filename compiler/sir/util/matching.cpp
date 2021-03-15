@@ -30,7 +30,7 @@ private:
   bool checkName;
   const char *nodeId = nullptr;
   bool result = false;
-  const IRNode *other = nullptr;
+  const Node *other = nullptr;
 
 public:
   explicit MatchVisitor(bool checkName = true) : checkName(checkName) {}
@@ -130,24 +130,24 @@ public:
     result = x->match(y);
   }
 
-  VISIT(IntConstant);
-  void handle(const IntConstant *x, const IntConstant *y) {
+  VISIT(IntConst);
+  void handle(const IntConst *x, const IntConst *y) {
     result = process(x->getType(), y->getType()) && x->getVal() == y->getVal();
   }
-  VISIT(FloatConstant);
-  void handle(const FloatConstant *x, const FloatConstant *y) {
+  VISIT(FloatConst);
+  void handle(const FloatConst *x, const FloatConst *y) {
     result = process(x->getType(), y->getType()) && x->getVal() == y->getVal();
   }
-  VISIT(BoolConstant);
-  void handle(const BoolConstant *x, const BoolConstant *y) {
+  VISIT(BoolConst);
+  void handle(const BoolConst *x, const BoolConst *y) {
     result = process(x->getType(), y->getType()) && x->getVal() == y->getVal();
   }
-  VISIT(StringConstant);
-  void handle(const StringConstant *x, const StringConstant *y) {
+  VISIT(StringConst);
+  void handle(const StringConst *x, const StringConst *y) {
     result = process(x->getType(), y->getType()) && x->getVal() == y->getVal();
   }
-  VISIT(dsl::CustomConstant);
-  void handle(const dsl::CustomConstant *x, const dsl::CustomConstant *y) {
+  VISIT(dsl::CustomConst);
+  void handle(const dsl::CustomConst *x, const dsl::CustomConst *y) {
     result = x->match(y);
   }
 
@@ -190,13 +190,9 @@ public:
              process(x->getFalseValue(), y->getFalseValue());
   }
   VISIT(BreakInstr);
-  void handle(const BreakInstr *x, const BreakInstr *y) {
-    result = process(x->getTarget(), y->getTarget());
-  }
+  void handle(const BreakInstr *x, const BreakInstr *y) { result = true; }
   VISIT(ContinueInstr);
-  void handle(const ContinueInstr *x, const ContinueInstr *y) {
-    result = process(x->getTarget(), y->getTarget());
-  }
+  void handle(const ContinueInstr *x, const ContinueInstr *y) { result = true; }
   VISIT(ReturnInstr);
   void handle(const ReturnInstr *x, const ReturnInstr *y) {
     result = process(x->getValue(), y->getValue());
@@ -269,7 +265,7 @@ public:
     result = x->match(y);
   }
 
-  bool process(const IRNode *x, const IRNode *y) const {
+  bool process(const Node *x, const Node *y) const {
     if (!x && !y)
       return true;
     else if ((!x && y) || (x && !y))
@@ -315,7 +311,7 @@ const char AnyVar::NodeId = 0;
 
 const char AnyFunc::NodeId = 0;
 
-bool match(IRNode *a, IRNode *b, bool checkNames) {
+bool match(Node *a, Node *b, bool checkNames) {
   return MatchVisitor(checkNames).process(a, b);
 }
 

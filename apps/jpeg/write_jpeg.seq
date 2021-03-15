@@ -106,12 +106,24 @@ def write_APP_marker[N: int](bits: Bits):
     raise JFormatError()
   bits.pack(APP_markers[N], 16)
 
-def write_frame_header[N: int](bits: Bits, P: int, Y: int, 
-                               X: int, Ci: list[int], Hi: list[int], 
-                               Vi: list[int], Tqi: list[int]):
+def write_jfif_header_no_thumbnail(bits: Bits, X_density: int, Y_density: int):
+  write_APP_marker[0](bits)
+  bits.pack(16, 16)
+  bits.pack(0x4A4649460, 32)
+  bits.pack(0x00, 8)
+  bits.pack(0x0102, 16)
+  bits.pack(0, 8)
+  bits.pack(X_density, 16)
+  bits.pack(Y_density, 16)
+  bits.pack(0, 8)
+  bits.pack(0, 8)
+
+def write_jfif_frame_header[N: int](bits: Bits, P: int, Y: int, 
+                                    X: int, Hi: list[int], 
+                                    Vi: list[int], Tqi: list[int]):
   write_SOF_marker[N](bits)
-  Nf = len(Ci)
-  if not (len(Ci) == len(Hi) == len(Vi) == len(Tqi)):
+  Nf = len(Hi)
+  if (Nf != 1 or Nf != 3) or not (len(Hi) == len(Vi) == len(Tqi)):
     raise JFormatError()
   Lf = 8 + 4 * Nf # hmm the standard says 8+3*NF, but NF has 4 bytes??
   bits.pack(Lf, 16)
@@ -119,6 +131,7 @@ def write_frame_header[N: int](bits: Bits, P: int, Y: int,
   bits.pack(Y, 16)
   bits.pack(X, 16)
   bits.pack(Nf, 8)
+  Ci = [1,2,3]
   for c,h,v,tq in scan(Ci,Hi,Vi,Tqi):
     bits.pack(c, 8)
     bits.pack((h << 4) | v, 8)

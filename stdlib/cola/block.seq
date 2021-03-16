@@ -1,13 +1,17 @@
 from exslice import ExSlice
 import random,string
 
+@extend
+class Array[T]:
+  def __str__(self) -> str:
+    return '[' + ','.join([str(self[i]) for i in range(self.len)])
+
 # TODO make dims and stuff like that be uints (and exslices stop be int sand allow ti to be negative)
 
 class Multidim[T]:
   dims: list[int]
   parent_mapping: Optional[list[ExSlice]]
-  # TODO there is list[T](self, capacity: int) that we can use for prealloc
-  buffer: Optional[list[T]]
+  buffer: Optional[Array[T]]
   parent: Optional[Multidim[T]]
   unique_id: str
   is_reshape: bool
@@ -34,7 +38,7 @@ class Multidim[T]:
       self.parent = other.base
       self.parent_mapping = [ExSlice(0,d) for d in self.dims]
     else:
-      self.buffer = [T(0)] * self.nunits()
+      self.buffer = Array[T](self.nunits())
 
   def __init__(self, other: View[T], set_as_parent: bool):
     self.__init__()
@@ -43,17 +47,17 @@ class Multidim[T]:
       self.parent = other.base
       self.parent_mapping = [ExSlice(0,d) for d in self.dims]
     else:
-      self.buffer = [T(0)] * self.nunits()
+      self.buffer = Array[T](self.nunits())
 
   def __init__(self, other: int, _:bool):
     self.__init__()
     self.dims = [other]
-    self.buffer = [T(0)] * other
+    self.buffer = Array[T](other)
 
   def __init__(self, dims: list[int]):
     self.__init__()
     self.dims = [d for d in dims]
-    self.buffer = [T(0)] * self.nunits()
+    self.buffer = Array[T](self.nunits())
 
   # dimensions can be integers or a Multidim[int]/Block[int]/View[int] of size 1
   # for specifying something like Block[T](10,11,12,...)
@@ -65,21 +69,27 @@ class Multidim[T]:
     self.dims = [Multidim._convert_to_S[int](dim0), Multidim._convert_to_S[int](dim1)]
     if staticlen(dims) > 0:
       self.dims += [Multidim._convert_to_S[int](d) for d in dims]
-    self.buffer = [T(0)] * self.nunits()
+    self.buffer = Array[T](self.nunits())
 
   # fall back that catches manually specified collection such as [10,11,12] or (10,view,12) etc
   def __init__(self, dims, _:bool): # gets a bool so it works with the generic init in block
     self.__init__()
     assert isinstance(dims, list) or isinstance(dims, tuple)
     self.dims = [Multidim._convert_to_S[int](d) for d in dims]
-    self.buffer = [T(0)] * self.nunits()
+    self.buffer = Array[T](self.nunits())#[T(0)] * self.nunits()
 
-  # init dims and fill immediately
+  # init dims and fill immediately (MAKES A SHALLOW COPY)
+  def __init__(self, dims, data: Array[T]):
+    self.__init__()
+    assert isinstance(dims, list) or isinstance(dims, tuple)
+    self.dims = [Multidim._convert_to_S[int](d) for d in dims]
+    self.buffer = data
+
   def __init__(self, dims, data: list[T]):
     self.__init__()
     assert isinstance(dims, list) or isinstance(dims, tuple)
     self.dims = [Multidim._convert_to_S[int](d) for d in dims]
-    self.buffer = [d for d in data]
+    self.buffer = data.arr
 
   # this is called from the __getitem__ functions, so the ExSlices should already be adjusted
   def __init__(self, parent: Multidim[T], dims: list[int], parent_mapping: list[ExSlice]):
@@ -145,7 +155,7 @@ class Multidim[T]:
 
   # This takes a coordinate and remaps it all the way up the chain of parents' until the first buffer is found.
   # Then it linearizes that value. It is the main workhorse of all the other functions
-  def _map_to_parent_buffer(self, coord: list[int], linearize_last: bool = True) -> Tuple[list[T], list[int]]:
+  def _map_to_parent_buffer(self, coord: list[int], linearize_last: bool = True) -> Tuple[Array[T], list[int]]:
     assert len(self.dims) == len(coord)
     if self.buffer:
       # Base case. Found the first buffer. Just linearize the coordinate

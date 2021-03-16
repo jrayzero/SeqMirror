@@ -29,6 +29,7 @@ c_dc_ehufco, c_dc_ehufsi = make_derived_huffman_table(bits_dc_chrominance, val_d
 l_ac_ehufco, l_ac_ehufsi = make_derived_huffman_table(bits_ac_luminance, val_ac_luminance, False)
 c_ac_ehufco, c_ac_ehufsi = make_derived_huffman_table(bits_ac_chrominance, val_ac_chrominance, False)
 
+
 output_fn = 'output.jfif.jpg'
 output_fd = open(output_fn, 'wb')
 bits = Bits(output_fd)
@@ -98,74 +99,50 @@ write_hufftables_segment(bits, 1, 0, bits_ac_luminance[1:], val_ac_luminance)
 write_hufftables_segment(bits, 0, 1, bits_dc_chrominance[1:], val_dc_chrominance)
 write_hufftables_segment(bits, 1, 1, bits_ac_chrominance[1:], val_ac_chrominance)
 
+def jpeg_core_inner(component, divisors):
+  shift_component = Block[int](component.dims())
+  miter = iter(component)
+  for m2 in shift_component:      
+    m1 = next(miter)
+    m2[0] = int(m1()) - 128
+  miter.destroy()
+  dctd = fdct_float_rmaj(View(shift_component))
+  quantized = Block[int](dctd.dims())
+  qiter = iter(quantized)
+  for p,q in scan(dctd,divisors):
+    qi = next(qiter)
+    qi[0] = fquantize(p(), q())
+  qiter.destroy()
+  return quantized
+
+# stores interleaved format for no downsampling (Y then Cb then Cr)
+def jpeg_core_interleaved_full(Y,Cb,Cr):
+  Y_split, Cb_split, Cr_split = NxN_partition_rmaj[8,u8](Y)[0], NxN_partition_rmaj[8,u8](Cb)[0], NxN_partition_rmaj[8,u8](Cr)[0]
+  Y_last_dc, Cb_last_dc, Cr_last_dc = 0, 0, 0
+  for y,cb,cr in scan(Y_split, Cb_split, Cr_split):
+    # level shift everything
+    # cast to an int otherwise an i8 can overflow in the dct computation
+    # when added together
+    y_quant = jpeg_core_inner(y, l_divisors)
+    cb_quant = jpeg_core_inner(cb, c_divisors)
+    cr_quant = jpeg_core_inner(cr, c_divisors)
+    encode(bits, View(y_quant), l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi, Y_last_dc)
+    encode(bits, View(cb_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cb_last_dc)
+    encode(bits, View(cr_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cr_last_dc)
+    Y_last_dc = y_quant(0,0)
+    Cr_last_dc = cb_quant(0,0)
+    Cb_last_dc = cr_quant(0,0)
+
 interleave = False
 if interleave:
   raise NotImplementedError()
 else:
-  # processing Y then Cb then Cr
-  # mcu isn't really the right name since we aren't interleaved, but w/e
-
-  print('Y Coding')
-  # since not interleaved, writes one component scan at a time
   write_scan_header(bits, [1,2,3], [0,1,1], [0,1,1], 0, 63, 0, 0)
-  last_dc = 0
-  for mcu in NxN_partition_rmaj[8,u8](Y)[0]:
-    # level shift everything
-    # we cast to an int otherwise an i8 can overflow in the dct computation
-    # when added together
-    shift_mcu = Block[int](mcu.dims())
-    miter = iter(mcu)
-    for m2 in shift_mcu:      
-      m1 = next(miter)
-      m2[0] = int(m1()) - 128
-    miter.destroy()
-    fmcu = fdct_float_rmaj(View(shift_mcu))
-    qmcu = Block[int](fmcu.dims())
-    qiter = iter(qmcu)
-    for p,q in scan(fmcu,l_divisors):
-      qi = next(qiter)
-      qi[0] = fquantize(p(), q())
-    qiter.destroy()
-#    encode(bits, View(qmcu), l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi, last_dc)
-    last_dc = qmcu(0,0)
-  print('Cb coding')
-  # TODO refactor this since each components basically does the same thing
-#  last_dc = u8(0)
-#  for mcu in NxN_partition_rmaj[8,u8](Cb)[0]:
-#    shift_mcu = Block[i8](mcu.dims())
-#    miter = iter(mcu)
-#    for m2 in shift_mcu:
-#      m1 = next(miter)
-#      m2[0] = i8(m1()) - i8(128)
-#    miter.destroy()
-#    fmcu = fdct_float_rmaj(View(shift_mcu))
-#    qmcu = Block[u8](fmcu.dims())
-#    qiter = iter(qmcu)
-#    for p,q in scan(fmcu,c_divisors):
-#      qi = next(qiter)
-#      qi[0] = u8(fquantize(p(), q()))
-#    qiter.destroy()
-#    encode(bits, View(qmcu), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, last_dc)
-#    last_dc = qmcu(0,0)
-#  print('Cr coding')
-#  # TODO refactor this since each components basically does the same thing
-#  last_dc = u8(0)
-#  for mcu in NxN_partition_rmaj[8,u8](Cr)[0]:
-#    shift_mcu = Block[i8](mcu.dims())
-#    miter = iter(mcu)
-#    for m2 in shift_mcu:
-#      m1 = next(miter)
-#      m2[0] = i8(m1()) - i8(128)
-#    miter.destroy()
-#    fmcu = fdct_float_rmaj(View(shift_mcu))
-#    qmcu = Block[u8](fmcu.dims())
-#    qiter = iter(qmcu)
-#    for p,q in scan(fmcu,c_divisors):
-#      qi = next(qiter)
-#      qi[0] = u8(fquantize(p(), q()))
-#    qiter.destroy()
-#    encode(bits, View(qmcu), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, last_dc)
-#    last_dc = qmcu(0,0)
+  # since not interleaved, writes one component scan at a time
+  jpeg_core_interleaved_full(Y, Cb, Cr)
+#  jpeg_core(Y, l_divisors, l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi)
+#  jpeg_core(Cb, c_divisors, c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi)
+#  jpeg_core(Cr, c_divisors, c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi)
 
 write_EOI_marker(bits)
 bits.flush_all()

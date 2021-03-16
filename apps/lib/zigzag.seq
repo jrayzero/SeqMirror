@@ -1,5 +1,7 @@
 from cola.traversal import Traversal
 
+### ROW MAJOR
+
 # even size traversals
 def zz_even_upper(i):
   trav = Traversal(2)
@@ -17,7 +19,7 @@ def zz_even_lower(i):
       link zz_even_lower(i-2)
   return trav
 
-def make_zigzag(N):
+def zigzag[N: int]():
   trav = Traversal(2)
   trav_build trav:
     astep (0,0)

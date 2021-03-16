@@ -1,5 +1,5 @@
-def scan(a,*items):
-  iters = [iter(item) for item in items]
+def scan(a,b,*items):
+  iters = [b] + [iter(item) for item in items]
   for i in a:
     yielded = [i]
     done = False
@@ -15,16 +15,19 @@ def scan(a,*items):
   for it in iters:
     it.destroy()
 
-class repeat[T]:
-  item: T
-  repeat: int
+def scan(a):
+  return iter(a)
+
+#class repeat[T]:
+#  item: T
+#  repeat: int
   
-  def __init__(self, item: T, repeat: int):
-    self.item = item
-    assert repeat > 0
-    self.repeat = repeat
+#  def __init__(self, item: T, repeat: int):
+#    self.item = item
+#    assert repeat > 0
+#    self.repeat = repeat
   
-  def __iter__(self):
-    for i in range(self.repeat):
-      for it in self.item:
-        yield it
+#  def __iter__(self):
+#    for i in range(self.repeat):
+#      for it in self.item:
+#        yield it

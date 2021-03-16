@@ -1,22 +1,22 @@
-def scan(a,b,*items):
-  iters = [b] + [iter(item) for item in items]
-  for i in a:
-    yielded = [i]
-    done = False
-    for it in iters:            
-      if it.done():
-        done = True
+def scan(a,*items):
+  if staticlen(items) == 0:
+    return iter(a)
+  else:
+    iters = [iter(item) for item in items]
+    for i in a:
+      yielded = [i]
+      done = False
+      for it in iters:            
+        if it.done():
+          done = True
+          break
+        else:
+          yielded.append(it.next())
+      if done:
         break
-      else:
-        yielded.append(it.next())
-    if done:
-      break
-    yield yielded
-  for it in iters:
-    it.destroy()
-
-def scan(a):
-  return iter(a)
+      yield yielded
+    for it in iters:
+      it.destroy()
 
 #class repeat[T]:
 #  item: T

@@ -332,6 +332,27 @@ class Multidim[T]:
     md.is_reshape = True
     return md
 
+  def shuffle_dims(self, order0, order1, *orders) -> Multidim[T]:
+    assert isinstance(orders, tuple)
+    l = 2 + staticlen(orders)
+    assert l == len(self.dims)
+    all_orders = [Multidim._convert_to_S[int](order0), Multidim._convert_to_S[int](order1)]
+    if staticlen(orders) > 0:
+      all_orders += [Multidim._convert_to_S[int](d) for d in orders]
+    reshape_dims = [0] * len(self.dims)
+    for idx,i in enumerate(all_orders):
+      reshape_dims[idx] = self.dims[i]
+    return self.reshape(reshape_dims)
+
+  def shuffle_dims(self, orders) -> Multidim[T]:
+    assert isinstance(orders, list) or isinstance(orders, tuple)
+    assert len(orders) == len(self.dims)
+    all_orders = [Multidim._convert_to_S[int](d) for d in orders]
+    reshape_dims = [0] * len(self.dims)
+    for idx,i in enumerate(all_orders):
+      reshape_dims[idx] = self.dims[i]
+    return self.reshape(reshape_dims)
+
   ### __GETITEM__ AND ASSOCIATED FUNCTIONS
   
   def __getitem__(self, idx: int) -> Multidim[T]:
@@ -693,6 +714,12 @@ class Block[T]:
   def reshape(self, dim0, dim1, *dims) -> View[T]:
     return View(self.base.reshape(dim0, dim1, *dims))
 
+  def shuffle_dims(self, other) -> View[T]:
+    return View(self.base.shuffle_dims(other))
+
+  def shuffle_dims(self, dim0, dim1, *dims) -> View[T]:
+    return View(self.base.shuffle_dims(dim0, dim1, *dims))
+
   def shorthand(self):
     return self.base.shorthand()
 
@@ -832,6 +859,12 @@ class View[T]:
 
   def reshape(self, dim0, dim1, *dims) -> View[T]:
     return View(self.base.reshape(dim0, dim1, *dims))
+
+  def shuffle_dims(self, other) -> View[T]:
+    return View(self.base.shuffle_dims(other))
+
+  def shuffle_dims(self, dim0, dim1, *dims) -> View[T]:
+    return View(self.base.shuffle_dims(dim0, dim1, *dims))
 
   def shorthand(self):
     return self.base.shorthand()

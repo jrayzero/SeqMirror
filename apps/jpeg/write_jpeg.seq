@@ -127,7 +127,6 @@ def write_jfif_frame_header[N: int](bits: Bits, P: int, Y: int,
   if (Nf != 1 and Nf != 3) or not (len(Hi) == len(Vi) == len(Tqi)):
     raise JFormatError()
   Lf = 8 + 3 * Nf
-  print(Lf)
   bits.pack(Lf, 16)
   bits.pack(P, 8)
   bits.pack(Y, 16)

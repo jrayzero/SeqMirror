@@ -95,7 +95,6 @@ def make_derived_huffman_table(htable_bits: list[int], htable_val: list[int], is
   ehufco = [0] * 256
   
   max_symbol = 15 if is_dc else 255
-  print(lastk)
   for k in range(lastk):
     i = htable_val[k]
     ehufco[i] = huffcode[k]

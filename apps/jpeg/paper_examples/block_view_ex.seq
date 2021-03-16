@@ -1,0 +1,54 @@
+from read_bmp import *
+from partition import *
+from color import *
+from sample import *
+from forward_xform import *
+from quantization import *
+from huffman import *
+from write_jpeg import *
+
+print('BEGIN')
+tick = _C.seq_time()
+
+fn = '/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/vgl_6434_0018a.bmp'
+fd = open(fn, 'rb')
+
+
+quality = 75
+scale = quality_to_scaling(quality)
+l_qtable = scale_quant_table(jpeg_luma_qtable, scale, True)
+c_qtable = scale_quant_table(jpeg_chroma_qtable, scale, True)
+l_divisors = compute_qdivisors_AAN_idct_float_rmaj(jpeg_luma_qtable)
+c_divisors = compute_qdivisors_AAN_idct_float_rmaj(jpeg_chroma_qtable)
+rgb_table = generate_rgb_ycc_table_rmaj()
+
+# read in data
+RGB_data,_ = read_bmp(fd)
+h,w,c = RGB_data.dims()
+# pull out RGB components (interleaved)
+R,G,B = RGB_data[:,:,0],RGB_data[:,:,1],RGB_data[:,:,2]
+# create a new Block with same location, then reshape
+ycc_data = Block(image_data).reshape(c,h,w)
+# pull out Y,Cb,Cr components (non-interleaved)
+Y = ycc_data[0,:,:]
+Cb = output_data[1,:,:]
+Cr = output_data[2,:,:]
+# iterate through in raster order
+for _r,_g,_b,y,cb,cr in scan(R,G,B,Y,Cb,Cr):
+  # realize r,g,b values from their Views
+  r,g,b = int(_r()), int(_g()), int(_b())
+  # do color conversion and write to y,cb,cr, which write through to Y,Cb,Cr,
+  # which then write through to ycc_data
+  y[0] = T((rgb_ycc_table(0,r) + rgb_ycc_table(1,g) + rgb_ycc_table(2,b)) >> shift)
+  cb[0] = T((rgb_ycc_table(3,r) + rgb_ycc_table(4,g) + rgb_ycc_table(5,b)) >> shift)
+  cr[0] = T((rgb_ycc_table(6,r) + rgb_ycc_table(7,g) + rgb_ycc_table(8,b)) >> shift)
+
+_Y = ycc_data[0,:,:].reshape(h,w)
+_Cb = ycc_data[1,:,:].reshape(h,w)
+_Cr = ycc_data[2,:,:].reshape(h,w)
+p_h = calculate_padding[8](h)
+p_w = calculate_padding[8](w)
+
+Y = expand_edges_rmaj[u8,8](Y).reshape(p_h,p_w)
+Cb = expand_edges_rmaj[u8,8](Cb).reshape(p_h,p_w)
+Cr = expand_edges_rmaj[u8,8](Cr).reshape(p_h,p_w)  

@@ -126,7 +126,7 @@ class Bits:
 class UInt[N: int]:
 
   def __new__(val) -> UInt[N]:
-    UInt[N].process(val)
+    return UInt[N].process(val)
 
   def process[T: int](val: UInt[T]) -> UInt[N]:
     if T == N:

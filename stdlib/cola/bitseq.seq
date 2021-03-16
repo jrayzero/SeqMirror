@@ -25,6 +25,8 @@ class Bits:
     self.accum_sz = 0
     self.fd = fd
 
+  # TODo remove the stuff parameter and move that to the user side (they can check if the value
+  # is FF). It's too JPEG-specific to have in here
   # pack towards LSB (its always right aligned tho starting at the MSB)
   def pack(self, val: int, nbits, stuff: bool = False):
     assert nbits <= 32

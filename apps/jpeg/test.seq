@@ -36,7 +36,7 @@ bits = Bits(output_fd)
 
 # Now do the actual compression of a file
 
-fn = '/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/vgl_6434_0018a.bmp'
+fn = '/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/vgl_6548_0026a.bmp'
 fd = open(fn, 'rb')
 print('read bmp')
 image_data,precision = read_bmp(fd)
@@ -126,12 +126,15 @@ def jpeg_core_interleaved_full(Y,Cb,Cr):
     y_quant = jpeg_core_inner(y, l_divisors)
     cb_quant = jpeg_core_inner(cb, c_divisors)
     cr_quant = jpeg_core_inner(cr, c_divisors)
-    encode(bits, View(y_quant), l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi, Y_last_dc)
-    encode(bits, View(cb_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cb_last_dc)
-    encode(bits, View(cr_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cr_last_dc)
+    bp = encode(bits, View(y_quant), l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi, Y_last_dc)
+    print('bits packed after y ' + str(bp))
+    bp = encode(bits, View(cb_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cb_last_dc)
+    print('bits packed after cb ' + str(bp))
+    bp = encode(bits, View(cr_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cr_last_dc)
+    print('bits packed after cr ' + str(bp))
     Y_last_dc = y_quant(0,0)
-    Cr_last_dc = cb_quant(0,0)
-    Cb_last_dc = cr_quant(0,0)
+    Cb_last_dc = cb_quant(0,0)
+    Cr_last_dc = cr_quant(0,0)
 
 interleave = False
 if interleave:

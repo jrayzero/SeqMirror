@@ -1,5 +1,5 @@
 from error import *
-from zigzag import *
+from ..lib.zigzag import zigzag_rmaj as zigzag
 from cola.bitseq import *
 from cola.iter_utils import *
 from cola.block import *

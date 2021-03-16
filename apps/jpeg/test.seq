@@ -1,3 +1,4 @@
+# Now do the actual compression of a file
 from read_bmp import *
 from partition import *
 from color import *
@@ -6,41 +7,42 @@ from forward_xform import *
 from quantization import *
 from huffman import *
 from write_jpeg import *
+import sys
 
-print('BEGIN')
-tick = _C.seq_time()
+assert len(sys.argv) == 3
+infile = sys.argv[1]
+outfile = sys.argv[2]
 
 # setup the various tables we are going to use
 
 # quantization
 quality = 75
 scale = quality_to_scaling(quality)
-print('scale ' + str(scale))
 l_qtable = scale_quant_table(jpeg_luma_qtable, scale, True)
 c_qtable = scale_quant_table(jpeg_chroma_qtable, scale, True)
 # I'm using float DCT, so float divisors
 l_divisors = compute_qdivisors_AAN_idct_float_rmaj(jpeg_luma_qtable)
 c_divisors = compute_qdivisors_AAN_idct_float_rmaj(jpeg_chroma_qtable)
 
-print('huffman')
-# huffman (chroma tables not used in baseline)
 l_dc_ehufco, l_dc_ehufsi = make_derived_huffman_table(bits_dc_luminance, val_dc_luminance, True)
 c_dc_ehufco, c_dc_ehufsi = make_derived_huffman_table(bits_dc_chrominance, val_dc_chrominance, True)
 l_ac_ehufco, l_ac_ehufsi = make_derived_huffman_table(bits_ac_luminance, val_ac_luminance, False)
 c_ac_ehufco, c_ac_ehufsi = make_derived_huffman_table(bits_ac_chrominance, val_ac_chrominance, False)
 
 
-output_fn = 'output.jfif.jpg'
-output_fd = open(output_fn, 'wb')
+output_fd = open(outfile, 'wb')
 bits = Bits(output_fd)
 
-# Now do the actual compression of a file
+fd = open(infile, 'rb')
 
-fn = '/Users/jray/ColaProjects/SeqMirror/apps/libjpeg-turbo-impl/libjpeg-turbo/testimages/vgl_6548_0026a.bmp'
-fd = open(fn, 'rb')
-print('read bmp')
+print('BEGIN')
+tick = _C.seq_time_monotonic()
+
 image_data,precision = read_bmp(fd)
+tock_read = _C.seq_time_monotonic()
 
+print('BMP read time is ' + str((tock_read-tick)) + 'ns')
+exit(38)
 # rip off any padded data from the bmp.
 # we don't just return a View here because the Block then goes out of scope
 rgb_table = generate_rgb_ycc_table_rmaj()
@@ -52,6 +54,7 @@ c = image_data.dims()[2]
 
 ycc_data = Block(image_data).shuffle_dims(2,0,1)
 rgb_ycc_convert_rmaj(View(image_data), View(ycc_data), rgb_table, interleaved_rgb = False)
+tock_conv = _C.seq_time_monotonic()
 
 #for r,g,b in scan(ycc_data[0,:,:], ycc_data[1,:,:], ycc_data[2,:,:]):
 #  print('r ' + str(r()) + ' g ' + str(g()) + ' b ' + str(b()))
@@ -76,28 +79,22 @@ else:
   Cb = expand_edges_rmaj[u8,8](Cb).reshape(p_h,p_w)
   Cr = expand_edges_rmaj[u8,8](Cr).reshape(p_h,p_w)  
 
-print('write soi')
-write_SOI_marker(bits)
+tock_pad = _C.seq_time_monotonic()
 
-print('write jfif header')
+write_SOI_marker(bits)
 write_jfif_header_no_thumbnail(bits)
 # These can either be written in one segment, or as separate segments (like I do here)
-
-print('write qtables')
 write_qtables_segment(bits, 0, 0, View(jpeg_luma_qtable))
 write_qtables_segment(bits, 0, 1, View(jpeg_chroma_qtable))
-
-# write size before padding
 # TODO if downsample, update sampling factors
-print('write jfif header 2')
 write_jfif_frame_header[0](bits, precision, h, w, [1,1,1], [1,1,1], [0,1,1])
 
 # These can either be written in one segment, or as separate segments (like I do here)
-print('write hufftables')
 write_hufftables_segment(bits, 0, 0, bits_dc_luminance[1:], val_dc_luminance)
 write_hufftables_segment(bits, 1, 0, bits_ac_luminance[1:], val_ac_luminance)
 write_hufftables_segment(bits, 0, 1, bits_dc_chrominance[1:], val_dc_chrominance)
 write_hufftables_segment(bits, 1, 1, bits_ac_chrominance[1:], val_ac_chrominance)
+tock_headers = _C.seq_time_monotonic()
 
 def jpeg_core_inner(component, divisors):
   shift_component = Block[int](component.dims())
@@ -124,14 +121,11 @@ def jpeg_core_interleaved_full(Y,Cb,Cr):
     # cast to an int otherwise an i8 can overflow in the dct computation
     # when added together
     y_quant = jpeg_core_inner(y, l_divisors)
-    cb_quant = jpeg_core_inner(cb, c_divisors)
-    cr_quant = jpeg_core_inner(cr, c_divisors)
     bp = encode(bits, View(y_quant), l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi, Y_last_dc)
-    print('bits packed after y ' + str(bp))
+    cb_quant = jpeg_core_inner(cb, c_divisors)
     bp = encode(bits, View(cb_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cb_last_dc)
-    print('bits packed after cb ' + str(bp))
+    cr_quant = jpeg_core_inner(cr, c_divisors)
     bp = encode(bits, View(cr_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cr_last_dc)
-    print('bits packed after cr ' + str(bp))
     Y_last_dc = y_quant(0,0)
     Cb_last_dc = cb_quant(0,0)
     Cr_last_dc = cr_quant(0,0)
@@ -143,13 +137,13 @@ else:
   write_scan_header(bits, [1,2,3], [0,1,1], [0,1,1], 0, 63, 0, 0)
   # since not interleaved, writes one component scan at a time
   jpeg_core_interleaved_full(Y, Cb, Cr)
-#  jpeg_core(Y, l_divisors, l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi)
-#  jpeg_core(Cb, c_divisors, c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi)
-#  jpeg_core(Cr, c_divisors, c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi)
 
 write_EOI_marker(bits)
 bits.flush_all()
 
 output_fd.close()
-tock = _C.seq_time()
+tock = _C.seq_time_monotonic()
 print('Total time is ' + str((tock-tick)/1e9) + 's')
+print('Color convert read time is ' + str((tock_conv-tock_read)/1e9) + 's')
+print('Pad and expand read time is ' + str((tock_pad-tock_conv)/1e9) + 's')
+print('Write headers time is ' + str((tock_headers-tock_pad)/1e9) + 's')

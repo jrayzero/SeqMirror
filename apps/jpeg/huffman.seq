@@ -1,5 +1,5 @@
 from error import *
-from zigzag import *
+from ..lib.zigzag import zigzag_rmaj as zigzag
 from cola.bitseq import *
 from cola.block import *
 
@@ -103,7 +103,6 @@ def make_derived_huffman_table(htable_bits: list[int], htable_val: list[int], is
 
 def encode[T](bits: Bits, blk: View[T], ehufco_dc: list[int], ehufco_ac: list[int], 
               ehufsi_dc: list[int], ehufsi_ac: list[int], last_dc: T, max_coeff_bits: int = 10):
-  print('LAST DC VAL ' + str(int(last_dc)) + ' CUR DC ' + str(int(blk(0,0))))
   tmp = tmp2 = int(blk(0,0)) - int(last_dc)
   if tmp < 0:
     tmp = -tmp
@@ -122,8 +121,6 @@ def encode[T](bits: Bits, blk: View[T], ehufco_dc: list[int], ehufco_ac: list[in
   bits.pack(UInt[32](tmp2), nbits, True)
   bits_packed += ehufsi_dc[nbits]
   bits_packed += nbits
-  print('dc ' + str(ehufco_dc[nbits]) + ' ' +  str(ehufsi_dc[nbits]))
-  print('dc ' + str((UInt[32](tmp2))) + ' ' +  str(nbits))
   r = 0
   zz = iter(zigzag[8]()(blk))
   next(zz) # skip over DC coefficient
@@ -133,7 +130,6 @@ def encode[T](bits: Bits, blk: View[T], ehufco_dc: list[int], ehufco_ac: list[in
       r += 1
     else:
       while r > 15:
-        print('pack r: ' + str(ehufsi_ac[0xF0]))
         bits.pack(ehufco_ac[0xF0], ehufsi_ac[0xF0], True)
         r -= 16
       temp2 = temp
@@ -152,10 +148,8 @@ def encode[T](bits: Bits, blk: View[T], ehufco_dc: list[int], ehufco_ac: list[in
       bits.pack(UInt[32](temp2), nbits, True)
       bits_packed += ehufsi_ac[i]
       bits_packed += nbits
-      print(str(ehufco_ac[i]) + ' ' + str(ehufsi_ac[i]) + ' ' + str(UInt[32](temp2)) + ' ' + str(nbits) + ' ' + str(i))
       r = 0
   if r > 0:
-    print('pack r > 0, ' + str(ehufsi_ac[0]))
     bits.pack(ehufco_ac[0], ehufsi_ac[0], True)
     bits_packed += ehufsi_ac[0]
   return bits_packed

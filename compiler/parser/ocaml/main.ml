@@ -111,6 +111,7 @@ let print_token t =
   | PTREE_BUILD -> "PT_BUILD"
   | LEAF -> "PT_LEAF"
   | TRAV_BUILD -> "TRAV_BUILD"
+  | TPARAMS -> "T_PARAMS"
   | RROT -> "RROT"
   | AROT -> "AROT"
   | RSTEP -> "RSTEP"

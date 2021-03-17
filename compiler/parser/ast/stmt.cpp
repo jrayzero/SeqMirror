@@ -362,6 +362,11 @@ CustomStmt::CustomStmt(seq::ast::ExprPtr head, vector<seq::ast::ExprPtr> args, s
   Stmt(), head(move(head)), args(move(args)), suite(move(suite)) { }
 CustomStmt::CustomStmt(seq::ast::ExprPtr head, vector<seq::ast::ExprPtr> args) :
   Stmt(), head(move(head)), args(move(args)) { }
+CustomStmt::CustomStmt(seq::ast::ExprPtr head, seq::ast::ExprPtr arg0, seq::ast::ExprPtr arg1) :
+  Stmt(), head(move(head)) {
+  this->args.push_back(move(arg0));
+  this->args.push_back(move(arg1));
+}
 CustomStmt::CustomStmt(const CustomStmt &stmt)
     : Stmt(stmt), head(ast::clone(stmt.head)), args(ast::clone(stmt.args)), suite(ast::clone(stmt.suite)) {}
 string CustomStmt::toString() const {

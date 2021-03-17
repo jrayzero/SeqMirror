@@ -473,6 +473,16 @@ void SimplifyVisitor::visit(CallExpr *expr) {
     return;
   }
   // 7. COLA things
+  if (expr->expr->getDot()) {
+    auto dot = expr->expr->getDot();
+    if (dot->expr->getId()) {
+      if (dot->expr->getId()->value == "Traversal" && dot->member == "__init__") {
+        if (!ctx->travEmpty()) {
+          error("user calls to Traversal.__init__(...) are not allowed");
+        }
+      }
+    }
+  }
 //  if (expr->expr->isId("pt_leaf")) {
 //    // sanity check
 //    seqassert(!ctx->ptbEmpty(), "ptb context is empty");

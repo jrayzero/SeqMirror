@@ -494,6 +494,8 @@ private:
   //    Python: __to_py__, __from_py__
   StmtPtr codegenMagic(const string &op, const Expr *typExpr, const vector<Param> &args,
                        bool isRecord);
+  /// COLA do stuff for traversals
+  StmtPtr transformTraversalDefinition(FunctionStmt *traversal);
   // Return a list of all function statements within a given class suite. Checks each
   // suite recursively, and assumes that each statement is either a function or a
   // doc-string.

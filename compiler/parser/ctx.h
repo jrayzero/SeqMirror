@@ -148,7 +148,7 @@ public:
 
   void pushTrav(string trav) { trav_stack.push_back(trav); }
 
-  string travPop() { string trav = trav_stack.back(); trav_stack.pop_back(); return trav; }
+  string popTrav() { string trav = trav_stack.back(); trav_stack.pop_back(); return trav; }
 
   string travPeekBack() const { return !travEmpty() ? trav_stack.back() : ""; }
 

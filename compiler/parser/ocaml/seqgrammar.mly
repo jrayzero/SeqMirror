@@ -28,7 +28,7 @@
 %token<string> PIPE PPIPE SPIPE B_AND B_OR B_XOR B_NOT B_LSH B_RSH
 %token<string> LSHEQ RSHEQ ANDEQ OREQ XOREQ
 /* COLA custom */
-%token PTREE_BUILD LEAF TRAV_BUILD RROT AROT RSTEP ASTEP SEEK LINK BY
+%token PTREE_BUILD LEAF TRAV_BUILD RROT AROT RSTEP ASTEP SEEK LINK BY TPARAMS
 /* operator precedence */
 %left B_OR
 %left B_XOR
@@ -190,6 +190,7 @@ small_statement:
   | ASTEP FLNE(COMMA, by_expr) { [$loc, AStep ($2)] }
   | SEEK FLNE(COMMA, expr) { [$loc, Seek ($2)] }
   | LINK FLNE(COMMA, expr) { [$loc, Link ($2)] }
+  | TPARAMS FLNE(COMMA, expr) { [$loc, TParams ($2)] }
   | import_statement { $1 }
   | assign_statement { $1 }
 small_single_statement:

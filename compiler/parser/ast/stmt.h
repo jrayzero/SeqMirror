@@ -31,6 +31,9 @@ struct ClassStmt;
 struct ExprStmt;
 struct SuiteStmt;
 struct FunctionStmt;
+struct IfStmt;
+struct ForStmt;
+struct CustomStmt;
 
 /**
  * A Seq AST statement.
@@ -67,6 +70,9 @@ public:
   virtual const ExprStmt *getExpr() const { return nullptr; }
   virtual const SuiteStmt *getSuite() const { return nullptr; }
   virtual const FunctionStmt *getFunction() const { return nullptr; }
+  virtual const IfStmt *getIf() const { return nullptr; }
+  virtual const ForStmt *getFor() const { return nullptr; }
+  virtual const CustomStmt *getCustom() const { return nullptr; }
 
   /// @return the first statement in a suite; if a statement is not a suite, returns the
   /// statement itself
@@ -106,6 +112,7 @@ struct SuiteStmt : public Stmt {
   /// Flatten all nested SuiteStmt objects that do not own a block in the statement
   /// vector. This is shallow flattening.
   static void flatten(StmtPtr s, vector<StmtPtr> &stmts);
+
 };
 
 /// Pass statement.
@@ -276,6 +283,9 @@ struct ForStmt : public Stmt {
 
   string toString() const override;
   ACCEPT(ASTVisitor);
+
+  const ForStmt *getFor() const override { return this; }
+
 };
 
 /// If block statement (if cond: suite; (elif cond: suite)...).
@@ -306,6 +316,9 @@ struct IfStmt : public Stmt {
 
   string toString() const override;
   ACCEPT(ASTVisitor);
+
+  const IfStmt *getIf() const override { return this; }
+
 };
 
 /// Match statement (match what: (case pattern: case)...).
@@ -522,10 +535,14 @@ struct CustomStmt : public Stmt {
   CustomStmt(ExprPtr head, ExprPtr arg, StmtPtr suite);
   CustomStmt(ExprPtr head, vector<ExprPtr> args, StmtPtr suite);
   CustomStmt(ExprPtr head, vector<ExprPtr> args);
+  CustomStmt(ExprPtr head, ExprPtr arg0, ExprPtr arg1);
   CustomStmt(const CustomStmt &stmt);
 
   string toString() const override;
   ACCEPT(ASTVisitor);
+
+  const CustomStmt *getCustom() const override { return this; }
+
 };
 
 /// The following nodes are created after the simplify stage.

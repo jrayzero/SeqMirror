@@ -124,6 +124,9 @@ void SimplifyVisitor::visit(PrintStmt *stmt) {
 void SimplifyVisitor::visit(ReturnStmt *stmt) {
   if (!ctx->getLevel() || ctx->bases.back().isType())
     error("expected function body");
+  if (!ctx->travEmpty()) {
+    error("user-specified returns not allowed in traversal definition");
+  }
   resultStmt = N<ReturnStmt>(transform(stmt->expr));
 }
 
@@ -401,7 +404,38 @@ void SimplifyVisitor::visit(ImportStmt *stmt) {
   }
 }
 
+//StmtPtr SimplifyVisitor::transformTraversalDefinition(seq::ast::FunctionStmt *traversal) {
+//  string name = traversal->name;
+//  // call transform on suite to flatten it out
+//  StmtPtr body = transform(traversal->suite);
+//
+//
+//
+////  // there are only certain types of statements allowed in the traversal definition, so verify that
+////  // the statements are valid
+////  for (auto &s : body->getSuite()->stmts) {
+////    if (s->getIf()) {
+////
+////    } else if (s->getFor()) {
+////
+////    } else if (s->getCustom()) {
+////
+////    } else if (s->getExpr()) {
+////
+////    }
+////  }
+//
+//}
+
 void SimplifyVisitor::visit(FunctionStmt *stmt) {
+  if (in(stmt->attributes, "traversal")) {
+    string trav = ctx->cache->getTemporaryVar("trav");
+    ctx->pushTrav(trav);
+    // for the most part, the stuff in a traversal definition can be normal code
+    // but there should NOT be any return statements or manual calls to Traversal.__init__(). These are added
+    // by me here
+
+  }
   if (in(stmt->attributes, ATTR_EXTERN_PYTHON)) {
     // Handle Python code separately
     resultStmt = transformPythonDefinition(stmt->name, stmt->args, stmt->ret.get(),
@@ -491,6 +525,16 @@ void SimplifyVisitor::visit(FunctionStmt *stmt) {
     else
       suite = SimplifyVisitor(ctx, preamble).transform(stmt->suite);
     ctx->popBlock();
+  }
+
+  if (in(stmt->attributes, "traversal")) {
+    // stick on a return statement
+    StmtPtr ret = N<ReturnStmt>(N<IdExpr>(ctx->travPeekBack()));
+    std::vector<StmtPtr> full_body;
+    full_body.push_back(move(suite));
+    full_body.push_back(move(ret));
+    suite = N<SuiteStmt>(move(full_body));
+    ctx->popTrav();
   }
 
   // Now fill the internal attributes that will be used later...
@@ -763,20 +807,40 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
       suite.emplace_back(N<ExprStmt>(N<CallExpr>(N<DotExpr>(N<IdExpr>(parent), "add_child"), transform(leaf))));
     }
     resultStmt = N<SuiteStmt>(move(suite));
-  } else if (head == "trav_build") {
-    seqassert(stmt->args.size() == 1, "arg to trav_build is nullptr (or has multiple args)");
-    string trav = ctx->cache->getTemporaryVar("trav");
-    ctx->pushTrav(trav);
-    StmtPtr trav_assign = N<AssignStmt>(N<IdExpr>(trav), transform(stmt->args[0]));
+  } else if (head == "tparams") {
+    seqassert(stmt->args.size() == 2, "tparams should have 2 arguments (ndims, origin) ");
+    seqassert(!ctx->travEmpty(), "not in a traversal build function");
+    string trav = ctx->travPeekBack();
+//    ctx->pushTrav(trav);
+    // create a traversal from the parameters
+    ExprPtr create_trav = transform(N<CallExpr>(N<IdExpr>("Traversal"), transform(stmt->args[0]), transform(stmt->args[1])));
+//      N<CallExpr>(N<DotExpr>(N<IdExpr>("Traversal"), "__init__"), transform(stmt->args[0]), transform(stmt->args[1]));
+    StmtPtr trav_assign = N<AssignStmt>(N<IdExpr>(trav), move(create_trav));
+    // process the body to create the traversal
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
-    ctx->travPop();
+//    ctx->popTrav();
     vector<StmtPtr> stmts;
     stmts.reserve(2);
     stmts.push_back(move(trav_assign));
     stmts.push_back(move(suite));
     resultStmt = N<SuiteStmt>(move(stmts));
+
+  } else if (head == "trav_build") {
+    seqassert(false, "not supported this way anymore");
+//    seqassert(stmt->args.size() == 1, "arg to trav_build is nullptr (or has multiple args)");
+//    string trav = ctx->cache->getTemporaryVar("trav");
+//    ctx->pushTrav(trav);
+//    StmtPtr trav_assign = N<AssignStmt>(N<IdExpr>(trav), transform(stmt->args[0]));
+//    StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
+//    ctx->popTrav();
+//    vector<StmtPtr> stmts;
+//    stmts.reserve(2);
+//    stmts.push_back(move(trav_assign));
+//    stmts.push_back(move(suite));
+//    resultStmt = N<SuiteStmt>(move(stmts));
   } else if (head == "rrot" || head == "arot" || head == "rstep" || head == "astep" || head == "aseek" || head == "link") {
     seqassert(!ctx->travEmpty(), "not in a traversal build block");
+    std::cerr << "FOUND " << head << std::endl;
     string movement = "add_" + head;
     string trav = ctx->travPeekBack();
     vector<StmtPtr> suite;

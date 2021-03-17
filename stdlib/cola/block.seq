@@ -4,17 +4,19 @@ import random,string
 @extend
 class Array[T]:
   def __str__(self) -> str:
-    return '[' + ','.join([str(self[i]) for i in range(self.len)])
+    return '[' + ','.join([str(self[i]) for i in range(self.len)]) + ']'
 
 # TODO make dims and stuff like that be uints (and exslices stop be int sand allow ti to be negative)
 
 class Multidim[T]:
   dims: list[int]
-  parent_mapping: Optional[list[ExSlice]]
-  buffer: Optional[Array[T]]
-  parent: Optional[Multidim[T]]
+  parent_mapping: list[ExSlice] # the mapping to your immediate parent
+  # views contain a pointer to their referenced buffer
+  buffer: Array[T]
+  parent: Multidim[T]
   unique_id: str
   is_reshape: bool
+  is_backing_buffer: bool  
 
 class View[T]:
   base: Multidim[T]
@@ -30,6 +32,7 @@ class Multidim[T]:
   def __init__(self):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
     self.is_reshape = False
+    self.is_backing_buffer = False
     
   def __init__(self, other: Block[T], set_as_parent: bool):
     self.__init__()
@@ -37,8 +40,11 @@ class Multidim[T]:
     if set_as_parent:
       self.parent = other.base
       self.parent_mapping = [ExSlice(0,d) for d in self.dims]
+      self.buffer = other.base.buffer
     else:
+      self.parent = other.base
       self.buffer = Array[T](self.nunits())
+      self.is_backing_buffer = True
 
   def __init__(self, other: View[T], set_as_parent: bool):
     self.__init__()
@@ -46,18 +52,23 @@ class Multidim[T]:
     if set_as_parent:
       self.parent = other.base
       self.parent_mapping = [ExSlice(0,d) for d in self.dims]
+      self.buffer = other.base.buffer
     else:
+      self.parent = other.base
       self.buffer = Array[T](self.nunits())
+      self.is_backing_buffer = True
 
   def __init__(self, other: int, _:bool):
     self.__init__()
     self.dims = [other]
     self.buffer = Array[T](other)
+    self.is_backing_buffer = True
 
   def __init__(self, dims: list[int]):
     self.__init__()
     self.dims = [d for d in dims]
     self.buffer = Array[T](self.nunits())
+    self.is_backing_buffer = True
 
   # dimensions can be integers or a Multidim[int]/Block[int]/View[int] of size 1
   # for specifying something like Block[T](10,11,12,...)
@@ -70,6 +81,7 @@ class Multidim[T]:
     if staticlen(dims) > 0:
       self.dims += [Multidim._convert_to_S[int](d) for d in dims]
     self.buffer = Array[T](self.nunits())
+    self.is_backing_buffer = True
 
   # fall back that catches manually specified collection such as [10,11,12] or (10,view,12) etc
   def __init__(self, dims, _:bool): # gets a bool so it works with the generic init in block
@@ -77,6 +89,7 @@ class Multidim[T]:
     assert isinstance(dims, list) or isinstance(dims, tuple)
     self.dims = [Multidim._convert_to_S[int](d) for d in dims]
     self.buffer = Array[T](self.nunits())#[T(0)] * self.nunits()
+    self.is_backing_buffer = True
 
   # init dims and fill immediately (MAKES A SHALLOW COPY)
   def __init__(self, dims, data: Array[T]):
@@ -84,12 +97,14 @@ class Multidim[T]:
     assert isinstance(dims, list) or isinstance(dims, tuple)
     self.dims = [Multidim._convert_to_S[int](d) for d in dims]
     self.buffer = data
+    self.is_backing_buffer = True
 
   def __init__(self, dims, data: list[T]):
     self.__init__()
     assert isinstance(dims, list) or isinstance(dims, tuple)
     self.dims = [Multidim._convert_to_S[int](d) for d in dims]
     self.buffer = data.arr
+    self.is_backing_buffer = True
 
   # this is called from the __getitem__ functions, so the ExSlices should already be adjusted
   def __init__(self, parent: Multidim[T], dims: list[int], parent_mapping: list[ExSlice]):
@@ -97,6 +112,7 @@ class Multidim[T]:
     self.parent = parent
     self.parent_mapping = parent_mapping
     self.dims = [d for d in dims]
+    self.buffer = parent.buffer
 
   ### INTERNAL STATIC UTILITY FUNCTIONS
   def _linearize(dims: list[int], coord: list[int]) -> int:
@@ -121,6 +137,7 @@ class Multidim[T]:
 
   def _convert_to_S[S](item: S) -> S:
     return item
+
 
   def _convert_to_S[S](item: Block[S]) -> S:
     return item()
@@ -157,17 +174,16 @@ class Multidim[T]:
   # Then it linearizes that value. It is the main workhorse of all the other functions
   def _map_to_parent_buffer(self, coord: list[int], linearize_last: bool = True) -> Tuple[Array[T], list[int]]:
     assert len(self.dims) == len(coord)
-    if self.buffer:
+    if self.is_backing_buffer:
       # Base case. Found the first buffer. Just linearize the coordinate
       if linearize_last:
-        return ~self.buffer,[Multidim._linearize(self.dims, coord)] # wrap in list so have consistent return type
+        return self.buffer,[Multidim._linearize(self.dims, coord)] # wrap in list so have consistent return type
       else:
-        return ~self.buffer,coord
+        return self.buffer,coord
     else:
       # figure out how to map the current coordinate. There are 2 possibilities:
       # 1) a reshaping: we linearize with respect to ourselves and delinearize wrt the parent
       # 2) a slicing: same ndims, but need to take into account and take/skip values 
-      assert self.parent
       if self.is_reshape:
         # reshaping
         l = Multidim._linearize(self.dims, coord)
@@ -201,7 +217,7 @@ class Multidim[T]:
   # gets local origin relative to parent
   def origin(self) -> list[int]:
     if self.parent_mapping:
-      return [~p.start for p in ~self.parent_mapping]
+      return [~p.start for p in self.parent_mapping]
     else:
       return [0] * len(self.dims)
 
@@ -304,6 +320,7 @@ class Multidim[T]:
     md.dims = [dim]
     md.parent = self
     md.is_reshape = True
+    md.buffer = md.parent.buffer
     return md
 
   def reshape(self, dim: Block[T]) -> Multidim[T]:
@@ -312,6 +329,7 @@ class Multidim[T]:
     md.dims = [d for d in dim.dims()]
     md.parent = self
     md.is_reshape = True
+    md.buffer = md.parent.buffer
     return md
 
   def reshape(self, dim: View[T]) -> Multidim[T]:
@@ -320,6 +338,7 @@ class Multidim[T]:
     md.dims = [d for d in dim.dims()]
     md.parent = self
     md.is_reshape = True
+    md.buffer = md.parent.buffer
     return md
 
   def reshape(self, dim0, dim1, *dims) -> Multidim[T]:
@@ -331,6 +350,7 @@ class Multidim[T]:
     assert self.nunits() == md.nunits()
     md.parent = self
     md.is_reshape = True
+    md.buffer = md.parent.buffer
     return md
 
   def reshape(self, dims) -> Multidim[T]:
@@ -340,6 +360,7 @@ class Multidim[T]:
     assert self.nunits() == md.nunits()
     md.parent = self
     md.is_reshape = True
+    md.buffer = md.parent.buffer
     return md
 
   def shuffle_dims(self, order0, order1, *orders) -> Multidim[T]:

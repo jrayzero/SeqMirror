@@ -53,15 +53,30 @@ class Traversal:
 
   ndims: int
 
+  skip_origin_in_step: bool
+
   # these are the asteps that correspond to a single step with the current
   # orientation
   clockwise_angle_steps: dict[int,Tuple[int,int]]
 
   def __init__(self, ndims):
+    # only support 2D right now
+    assert ndims == 2
     self.ndims = ndims
     self.movements = []
     self.origin = [0] * ndims
     self.clockwise_angle_steps = {0:(1,0), 45:(1,1), 90:(0,1), 135:(-1,1), 180:(-1,0), 225:(-1,-1), 270:(0,-1), 315:(1,-1) }
+    self.skip_origin_in_step = False
+
+  def __init__(self, ndims, origin):
+    # only support 2D right now
+    assert ndims == 2
+    assert len(origin) == ndims
+    self.ndims = ndims
+    self.movements = []
+    self.origin = [o for o in origin]
+    self.clockwise_angle_steps = {0:(1,0), 45:(1,1), 90:(0,1), 135:(-1,1), 180:(-1,0), 225:(-1,-1), 270:(0,-1), 315:(1,-1) }
+    self.skip_origin_in_step = False
 
   def add_movement(self, movement: Movement):
     self.movements.append(movement)
@@ -107,6 +122,8 @@ class Traversal:
 
   def _gen_coords(self, origin):
     assert len(origin) > 0
+    if not self.skip_origin_in_step:
+      yield self.origin
     cur_coord = [c for c in origin]
     cur_angle = 0
     for movement in self.movements:
@@ -138,6 +155,25 @@ class Traversal:
   def __str__(self) -> str:
     return ' -> '.join([str(coord) for coord in self])
 
+class AStep:
+  step: list[int]
+  mult: int
+  def __init__(self, step: list[int], mult: int=1):
+    self.step = step
+    self.mult = mult
+
+  def __add__(self, other: Traversal):
+    movement = Movement(1)
+    movement.set_step(self.step, self.mult)
+    other.movements.insert(0, movement)
+    return other
+
+  def __radd__(self, other: Traversal):
+    movement = Movement(1)
+    movement.set_step(self.step, self.mult)
+    other.add_movement(movement)
+    return other
+
 class AppliedTraversal[T]:
   
   traversal: Traversal
@@ -147,14 +183,14 @@ class AppliedTraversal[T]:
   def __init__(self, traversal: Traversal, root: Block[T]):
     self.traversal = traversal
     self.root = View(root)
-    self.origin = [0] * len(self.root.dims())
+    self.origin = [0] * len(self.root.dims()) if len(traversal.origin) == 0 else [d for d in traversal.origin]
 
   def __init__(self, traversal: Traversal, root: View[T]):
     self.traversal = traversal
     self.root = root
-    self.origin = [0] * len(self.root.dims())
+#    self.origin = [0] * len(self.root.dims())
+    self.origin = [0] * len(self.root.dims()) if len(traversal.origin) == 0 else [d for d in traversal.origin]
 
-  # TODO eventually allow origin to have views and such with the values (like dims)
   def __init__(self, traversal: Traversal, root: Block[T], origin: list[int]):
     assert len(origin) == self.traversal.ndims
     self.traversal = traversal

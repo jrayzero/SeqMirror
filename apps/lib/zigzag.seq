@@ -1,31 +1,18 @@
-from cola.traversal import Traversal
+from cola.traversal import *
 
+@traversal
+def zigzag2[N:int](i: int = 1, upper: bool = True):
+  tparams 2, (0,0)
+  if i > 0 and upper:
+    # upper triangle
+    print(i)
+    astep (1,-1) by 2*i-1, (1,0), (-1,1) by 2*i, (0,1)
+    link zigzag2[N](i+1, i+1 != N//2)
+  elif i > 1:
+    # lower triangle
+    j = i-1
+    astep (1,-1) by 2*j+1, (0,1), (-1,1) by 2*j, (1,0)
+    link zigzag2[N](j, upper)    
 
-# even size traversals
-def zz_even_upper_rmaj(i):
-  trav = Traversal(2)
-  trav_build trav:
-    if i > 0:
-      link zz_even_upper_rmaj(i-2)
-      astep (0,1), (1,-1) by i-1, (1,0), (-1,1) by i
-  return trav
-
-def zz_even_lower_rmaj(i):
-  trav = Traversal(2)
-  trav_build trav:
-    if i > 0:
-      astep (-1,1) by i, (1,0), (1,-1) by i-1, (0,1) 
-      link zz_even_lower_rmaj(i-2)
-  return trav
-
-def zigzag_rmaj[N: int]():
-  trav = Traversal(2)
-  trav_build trav:
-    astep (0,0)
-    if N % 2 == 0:
-      link zz_even_upper_rmaj(N-2)
-      astep (0,1), (1,-1) by N-1, (0,1)
-      link zz_even_lower_rmaj(N-2)
-    else:
-      raise NotImplementedError()
-  return trav
+def zigzag[N:int]():
+  return AStep([0,1]) + zigzag2[8]() + AStep([1,-1]) + AStep([0,1])

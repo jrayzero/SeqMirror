@@ -1,5 +1,5 @@
 from error import *
-from ..lib.zigzag import zigzag_rmaj as zigzag
+from ..lib.zigzag import zigzag
 from cola.bitseq import *
 from cola.block import *
 
@@ -101,7 +101,7 @@ def make_derived_huffman_table(htable_bits: list[int], htable_val: list[int], is
     ehufsi[i] = huffsize[k]
   return ehufco, ehufsi
 
-def encode[T](bits: Bits, blk: View[T], ehufco_dc: list[int], ehufco_ac: list[int], 
+def encode[T,N:int](bits: Bits[N], blk: View[T], ehufco_dc: list[int], ehufco_ac: list[int], 
               ehufsi_dc: list[int], ehufsi_ac: list[int], last_dc: T, max_coeff_bits: int = 10):
   tmp = tmp2 = int(blk(0,0)) - int(last_dc)
   if tmp < 0:
@@ -113,14 +113,10 @@ def encode[T](bits: Bits, blk: View[T], ehufco_dc: list[int], ehufco_ac: list[in
     nbits += 1
     tmp >>= 1
 
-  bits_packed = 0
-    
   if nbits > max_coeff_bits:
     raise HuffmanError()
-  bits.pack(ehufco_dc[nbits], ehufsi_dc[nbits], True)
-  bits.pack(UInt[32](tmp2), nbits, True)
-  bits_packed += ehufsi_dc[nbits]
-  bits_packed += nbits
+  bits.pack(ehufco_dc[nbits], ehufsi_dc[nbits], True, 0xFF, 0x00)
+  bits.pack(UInt[32](tmp2), nbits, True, u32(0xFF), u32(0x00))
   r = 0
   zz = iter(zigzag[8]()(blk))
   next(zz) # skip over DC coefficient
@@ -130,7 +126,7 @@ def encode[T](bits: Bits, blk: View[T], ehufco_dc: list[int], ehufco_ac: list[in
       r += 1
     else:
       while r > 15:
-        bits.pack(ehufco_ac[0xF0], ehufsi_ac[0xF0], True)
+        bits.pack(ehufco_ac[0xF0], ehufsi_ac[0xF0], True, 0xFF, 0x00)
         r -= 16
       temp2 = temp
       if temp < 0:
@@ -144,15 +140,11 @@ def encode[T](bits: Bits, blk: View[T], ehufco_dc: list[int], ehufco_ac: list[in
       if nbits > max_coeff_bits:
         raise HuffmanError()
       i = (r << 4) + nbits
-      bits.pack(ehufco_ac[i], ehufsi_ac[i], True)
-      bits.pack(UInt[32](temp2), nbits, True)
-      bits_packed += ehufsi_ac[i]
-      bits_packed += nbits
+      bits.pack(ehufco_ac[i], ehufsi_ac[i], True, 0xFF, 0x00)
+      bits.pack(UInt[32](temp2), nbits, True, u32(0xFF), u32(0x00))
       r = 0
   if r > 0:
-    bits.pack(ehufco_ac[0], ehufsi_ac[0], True)
-    bits_packed += ehufsi_ac[0]
-  return bits_packed
+    bits.pack(ehufco_ac[0], ehufsi_ac[0], True, 0xFF, 0x00)
 
 def generate_optimal_htable(freqs: list[int]) -> Tuple[list[int], list[int]]:
   assert len(freqs) >= 257

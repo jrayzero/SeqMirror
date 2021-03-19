@@ -31,7 +31,7 @@ c_ac_ehufco, c_ac_ehufsi = make_derived_huffman_table(bits_ac_chrominance, val_a
 
 
 output_fd = open(outfile, 'wb')
-bits = Bits(output_fd)
+bits = Bits[64](output_fd)
 
 fd = open(infile, 'rb')
 
@@ -41,8 +41,6 @@ tick = _C.seq_time_monotonic()
 image_data,precision = read_bmp(fd)
 tock_read = _C.seq_time_monotonic()
 
-print('BMP read time is ' + str((tock_read-tick)) + 'ns')
-exit(38)
 # rip off any padded data from the bmp.
 # we don't just return a View here because the Block then goes out of scope
 rgb_table = generate_rgb_ycc_table_rmaj()
@@ -87,7 +85,7 @@ write_jfif_header_no_thumbnail(bits)
 write_qtables_segment(bits, 0, 0, View(jpeg_luma_qtable))
 write_qtables_segment(bits, 0, 1, View(jpeg_chroma_qtable))
 # TODO if downsample, update sampling factors
-write_jfif_frame_header[0](bits, precision, h, w, [1,1,1], [1,1,1], [0,1,1])
+write_jfif_frame_header[0,64](bits, precision, h, w, [1,1,1], [1,1,1], [0,1,1])
 
 # These can either be written in one segment, or as separate segments (like I do here)
 write_hufftables_segment(bits, 0, 0, bits_dc_luminance[1:], val_dc_luminance)
@@ -121,11 +119,11 @@ def jpeg_core_interleaved_full(Y,Cb,Cr):
     # cast to an int otherwise an i8 can overflow in the dct computation
     # when added together
     y_quant = jpeg_core_inner(y, l_divisors)
-    bp = encode(bits, View(y_quant), l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi, Y_last_dc)
+    encode(bits, View(y_quant), l_dc_ehufco, l_ac_ehufco, l_dc_ehufsi, l_ac_ehufsi, Y_last_dc)
     cb_quant = jpeg_core_inner(cb, c_divisors)
-    bp = encode(bits, View(cb_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cb_last_dc)
+    encode(bits, View(cb_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cb_last_dc)
     cr_quant = jpeg_core_inner(cr, c_divisors)
-    bp = encode(bits, View(cr_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cr_last_dc)
+    encode(bits, View(cr_quant), c_dc_ehufco, c_ac_ehufco, c_dc_ehufsi, c_ac_ehufsi, Cr_last_dc)
     Y_last_dc = y_quant(0,0)
     Cb_last_dc = cb_quant(0,0)
     Cr_last_dc = cr_quant(0,0)
@@ -144,6 +142,7 @@ bits.flush_all()
 output_fd.close()
 tock = _C.seq_time_monotonic()
 print('Total time is ' + str((tock-tick)/1e9) + 's')
+print('BMP read time is ' + str((tock_read-tick)) + 'ns')
 print('Color convert read time is ' + str((tock_conv-tock_read)/1e9) + 's')
 print('Pad and expand read time is ' + str((tock_pad-tock_conv)/1e9) + 's')
 print('Write headers time is ' + str((tock_headers-tock_pad)/1e9) + 's')

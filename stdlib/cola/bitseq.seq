@@ -1,129 +1,132 @@
 # TODO allow packing bits > 32 by breaking it up into different
 # sequences. 
 
-class Bits:
-  # holds bytes to be written to a file
-  output_buffer: Ptr[byte]
-  # number of bytes in output_buffer
-  output_sz: int
-  # holds temporary bit sequence. A max of 32 bits
-  # can be packed on at a time. Whenever it gets 
-  # above 32 bits, 1 byte at a time is moved to the
-  # output buffer
-  accum_buffer: UInt[64]
-  # number of bits in the accum_buffer
-  accum_sz: int
+class Bits[N: int]:  
+  l1_buffer: Ptr[byte]
+  l1_sz: int
+  l0_buffer: UInt[N]
+  l0_sz: int
   fd: File
   
   def __init__(self):
     assert False 
 
   def __init__(self, fd: File):
-    self.output_buffer = Ptr[byte](64) #[byte(0)] * 64
-    self.output_sz = 0
-    self.accum_buffer = UInt[64](0)
-    self.accum_sz = 0
+    self.l0_buffer = UInt[N](0)
+    self.l0_sz = 0
+    self.l1_buffer = Ptr[byte](64)
+    self.l1_sz = 0
     self.fd = fd
 
-  # TODo remove the stuff parameter and move that to the user side (they can check if the value
-  # is FF). It's too JPEG-specific to have in here
-  # pack towards LSB (its always right aligned tho starting at the MSB)
-  def pack(self, val: int, nbits, stuff: bool = False):
-    assert nbits <= 32
-    uval = UInt[64](val)
-    uval &= UInt[64]((1 << nbits)-1)
-    self.accum_sz += nbits
-    uval <<= UInt[64](64-self.accum_sz)
-    uval |= self.accum_buffer
-    self.accum_buffer = uval
-    self.put_if(jpeg_stuff_zero_byte = stuff)
+  def _pack[T: int](self, val: UInt[T], nbits: int, stuff: bool, stuff_on: u8, stuff_with: u8):
+    assert T >= nbits
+    nbits_to_pack = nbits
+#    print('nbits to pack ' + str(nbits_to_pack))
+    # MSB align and zero out MSB bits not needed
+    bitseq = val << UInt[T](T - nbits)#val >> UInt[T](T-nbits)    
+#    print(bitseq)
+    # see how many bits are left in l0
+    while nbits_to_pack > 0:
+      l0_bits_free = N - self.l0_sz
+#      print('l0 bits free: ' + str(l0_bits_free))
+      # see if we need all of the free bits
+      bits_needed = min(nbits_to_pack, l0_bits_free)
+#      print('bits_needed: ' + str(bits_needed))
+      mask = ~((UInt[T](1) << UInt[T](T-bits_needed)) - UInt[T](1))
+      masked_bits = bitseq & mask
+      # now shift back to be LSB aligned
+      masked_bits >>= UInt[T](T - bits_needed)
+#      print(masked_bits)
 
-  def pack[T: int](self, val: Int[T], nbits, stuff: bool = False):
-    assert nbits <= 32
-    uval = UInt[64](val)
-    uval &= UInt[64]((1 << nbits)-1)
-    self.accum_sz += nbits
-    uval <<= UInt[64](64-self.accum_sz)
-    uval |= self.accum_buffer
-    self.accum_buffer = uval
-    self.put_if(jpeg_stuff_zero_byte = stuff)
+      # and convert to UInt[N]
+      N_masked_bits = UInt[N](masked_bits)
+      # align to appropriate MSB side in l0_buffer
+      N_masked_bits <<= UInt[N](l0_bits_free-bits_needed)
+      # mask off the bits we can take here
+#      print((UInt[T](8) >> UInt[T](bits_needed-1)))
+#      mask = ~((UInt[T](8) >> UInt[T](bits_needed-1)) - UInt[T](1))
+#      print('mask/bitseq/masked bits: ' + str(mask) + '/' + str(bitseq) + '/' + str(N_masked_bits))
+#      masked_bits = bitseq & mask
+      # now shift them to be appended onto l0
+      self.l0_buffer |= UInt[N](N_masked_bits)
+      # align to MSB
+      bitseq <<= UInt[T](bits_needed)
+      nbits_to_pack -= bits_needed
+      self.l0_sz += bits_needed
+#      print('l0 buffer (' + str(self.l0_sz) + '): ' + str(self.l0_buffer))
+      # flush to l1_buffer if needed
+      self._put_if(N//2, stuff, stuff_on, stuff_with)
 
-  def pack[T: int](self, val: UInt[T], nbits, stuff: bool = False):
-    assert nbits <= 32
-    uval = UInt[64](val)
-    uval &= UInt[64]((1 << nbits)-1)
-    self.accum_sz += nbits
-    uval <<= UInt[64](64-self.accum_sz)
-    uval |= self.accum_buffer
-    self.accum_buffer = uval
-    self.put_if(jpeg_stuff_zero_byte = stuff)
+  def pack(self, val: int, nbits, stuff: bool = False, stuff_on: int = 0, stuff_with: int = 0):
+    self._pack(UInt[64](val), nbits, stuff, u8(stuff_on), u8(stuff_with))
 
-  def pack[T: int](self, val: Int[T], stuff: bool = False):
-    assert T <= 32
-    nbits = T
-    uval = UInt[64](val)
-    uval &= UInt[64]((1 << nbits)-1)
-    self.accum_sz += nbits
-    uval <<= UInt[64](64-self.accum_sz)
-    uval |= self.accum_buffer
-    self.accum_buffer = uval
-    self.put_if(jpeg_stuff_zero_byte = stuff)
+  def pack[T: int](self, val: Int[T], nbits, stuff: bool = False, stuff_on: Int[T] = Int[T](0), stuff_with: Int[T] = Int[T](0)):
+    self._pack(UInt[T](val), nbits, stuff, u8(stuff_on), u8(stuff_with))
 
-  def pack[T: int](self, val: UInt[T], stuff: bool = False):
-    assert T <= 32
-    nbits = T
-    uval = UInt[64](val)
-    uval &= UInt[64]((1 << nbits)-1)
-    self.accum_sz += nbits
-    uval <<= UInt[64](64-self.accum_sz)
-    uval |= self.accum_buffer
-    self.accum_buffer = uval
-    self.put_if(jpeg_stuff_zero_byte = stuff)
+  def pack[T: int](self, val: UInt[T], nbits, stuff: bool = False, stuff_on: UInt[T] = UInt[T](0), stuff_with: UInt[T] = UInt[T](0)):
+    self._pack(val, nbits, stuff, u8(stuff_on), u8(stuff_with))
 
-  # see if we need to move bits from accum_buffer to output_buffer
-  def put_if(self, bound: int = 32, jpeg_stuff_zero_byte: bool = False):
+  # see if we need to move bits from l0_buffer to l1_buffer
+  def _put_if(self, bound: int = N//2, stuff: bool = False, stuff_on: u8 = u8(0), stuff_with: u8 = u8(0)):
     # need to flush to no more than 32 bits
-    while self.accum_sz > bound:
+    while self.l0_sz > bound:
       # we move 1 byte at a time from MSB to LSB
-      bt = (self.accum_buffer >> UInt[64](56)) & UInt[64](0xFF)
-      self.output_buffer[self.output_sz] = byte(bt)
-      self.output_sz += 1      
-      self.accum_buffer <<= UInt[64](8) # get rid of the byte we just did
-      self.accum_sz -= 8
+      bt = (self.l0_buffer >> UInt[N](N-8)) & UInt[N](0xFF)
+      self.l1_buffer[self.l1_sz] = byte(bt)
+      self.l1_sz += 1      
+      self.l0_buffer <<= UInt[N](8) # get rid of the byte we just did
+      self.l0_sz -= 8
       self.flush_output_if()
-      # this is a special case for when the byte is 0xFF b/c that is usually a marker in JPEG,
-      # so jpeg expects a zero byte after to differentiate it from a marker
-      if bt == UInt[64](0xFF) and jpeg_stuff_zero_byte:
-        self.output_buffer[self.output_sz] = byte(0)
-        self.output_sz += 1
+      if stuff and u8(bt) == u8(0xFF):
+        self.l1_buffer[self.l1_sz] = byte(stuff_with)
+        self.l1_sz += 1
         self.flush_output_if()
 
   # see if we need to flush our output buffer to file
   def flush_output_if(self):
-    if self.output_sz == 64:
-      assert _C.fwrite(self.output_buffer, 1, 64, self.fd.fp) == 64
-      self.output_sz = 0
+    if self.l1_sz == 64:
+      assert _C.fwrite(self.l1_buffer, 1, 64, self.fd.fp) == 64
+      self.l1_sz = 0
       self.fd.flush()
 
-  # force accum_buffer to be put to output_buffer, then flush output buffer
+  # force l0_buffer to be put to l1_buffer, then flush output buffer
   def flush_all(self):
+    # TODO allow specifying how to stuff partial bytes (0 or 1)
     # pack on 1s if we have partial bytes
-    partial = self.accum_sz & 7
+    partial = self.l0_sz & 7
     if partial > 0:
       nbits = 8 - partial
       val = (1 << nbits) - 1
-      uval = UInt[64](val)
-      uval &= UInt[64]((1 << nbits)-1)
-      self.accum_sz += nbits
-      uval <<= UInt[64](64-self.accum_sz)
-      uval |= self.accum_buffer
-      self.accum_buffer = uval
-    # flush everything to the output_buffer
-    self.put_if(0)
-    assert  _C.fwrite(self.output_buffer, 1, self.output_sz, self.fd.fp) == self.output_sz
-    self.output_sz = 0
+      uval = UInt[N](val)
+      uval &= UInt[N]((1 << nbits)-1)
+      self.l0_sz += nbits
+      uval <<= UInt[N](N-self.l0_sz)
+      uval |= self.l0_buffer
+      self.l0_buffer = uval
+    # flush everything to the l1_buffer
+    self._put_if(0)
+    assert  _C.fwrite(self.l1_buffer, 1, self.l1_sz, self.fd.fp) == self.l1_sz
+    self.l1_sz = 0
     self.fd.flush()
 
+  # dumps the current state of the l0 and l1 buffers. just prints in decimal for now cause
+  # I'm lazy
+  def __str__(self):
+    s = 'In l1 buffer (' + str(self.l1_sz) + ' bytes):'
+    for i in range(self.l1_sz):
+      if i > 0:
+        s += ' '
+      else:
+        s += '\n'
+      s += str(self.l1_buffer[i])
+    s += '\n'
+    s += 'In l0 buffer (' + str(self.l0_sz) + ' bits):'
+    # mask off junk bits
+    if self.l0_sz > 0:
+      mask = ~((1 << (N - self.l0_sz)) - 1)
+      s += '\n' + str(self.l0_buffer & UInt[N](mask))
+    return s
+    
 @extend
 class UInt[N: int]:
 

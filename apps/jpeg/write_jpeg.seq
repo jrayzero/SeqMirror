@@ -1,5 +1,5 @@
 from error import *
-from ..lib.zigzag import zigzag_rmaj as zigzag
+from ..lib.zigzag import zigzag
 from cola.bitseq import *
 from cola.iter_utils import *
 from cola.block import *
@@ -77,13 +77,13 @@ COM = 0xFFFE
 
 TEM = 0xFF01
 
-def write_SOI_marker(bits: Bits):
+def write_SOI_marker[B:int](bits: Bits[B]):
   bits.pack(SOI,16)
 
-def write_EOI_marker(bits: Bits):
+def write_EOI_marker[B:int](bits: Bits[B]):
   bits.pack(EOI,16)
 
-def write_SOF_marker[N: int](bits: Bits):
+def write_SOF_marker[N: int, B:int](bits: Bits[B]):
   if N == 0:
     bits.pack(SOF0, 16)
   elif N == 1:
@@ -101,13 +101,13 @@ def write_SOF_marker[N: int](bits: Bits):
   else:
     raise JFormatError()
 
-def write_APP_marker[N: int](bits: Bits):
+def write_APP_marker[N: int, B:int](bits: Bits[B]):
   if N >= 16:
     raise JFormatError()
   bits.pack(APP_markers[N], 16)
 
-def write_jfif_header_no_thumbnail(bits: Bits):
-  write_APP_marker[0](bits)
+def write_jfif_header_no_thumbnail[B:int](bits: Bits[B]):
+  write_APP_marker[0,B](bits)
   bits.pack(16, 16)
   bits.pack(0x4A46, 16)
   bits.pack(0x4946, 16)
@@ -119,10 +119,10 @@ def write_jfif_header_no_thumbnail(bits: Bits):
   bits.pack(0, 8)
   bits.pack(0, 8)
 
-def write_jfif_frame_header[N: int](bits: Bits, P: int, Y: int, 
-                                    X: int, Hi: list[int], 
-                                    Vi: list[int], Tqi: list[int]):
-  write_SOF_marker[N](bits)
+def write_jfif_frame_header[N: int, B:int](bits: Bits[B], P: int, Y: int, 
+                                           X: int, Hi: list[int], 
+                                           Vi: list[int], Tqi: list[int]):
+  write_SOF_marker[N,B](bits)
   Nf = len(Hi)
   if (Nf != 1 and Nf != 3) or not (len(Hi) == len(Vi) == len(Tqi)):
     raise JFormatError()
@@ -138,7 +138,7 @@ def write_jfif_frame_header[N: int](bits: Bits, P: int, Y: int,
     bits.pack((h << 4) | v, 8)
     bits.pack(tq, 8)
 
-def write_scan_header(bits: Bits, Csj: list[int], Tdj: list[int], 
+def write_scan_header[B:int](bits: Bits[B], Csj: list[int], Tdj: list[int], 
                       Taj: list[int], Ss: int, Se: int, Ah: int, Al: int):
   bits.pack(SOS, 16)
   Ns = len(Csj)
@@ -154,7 +154,7 @@ def write_scan_header(bits: Bits, Csj: list[int], Tdj: list[int],
   bits.pack(Se, 8)
   bits.pack((Ah << 4) | Al, 8)
 
-def write_qtables_segment(bits: Bits, Pq: int, Tq: int, Qk: View[int]):
+def write_qtables_segment[B:int](bits: Bits[B], Pq: int, Tq: int, Qk: View[int]):
   bits.pack(DQT, 16)
   Lq = 67 + 64 * Pq
   bits.pack(Lq, 16)
@@ -171,7 +171,7 @@ def write_qtables_segment(bits: Bits, Pq: int, Tq: int, Qk: View[int]):
 
 # Li = bits table
 # Vij = huffval table
-def write_hufftables_segment(bits: Bits, Tc: int, Th: int, Li: list[int], Vij: list[int]):
+def write_hufftables_segment[B:int](bits: Bits[B], Tc: int, Th: int, Li: list[int], Vij: list[int]):
   assert len(Li) == 16
   bits.pack(DHT, 16)
   Lh = 2
@@ -188,14 +188,14 @@ def write_hufftables_segment(bits: Bits, Tc: int, Th: int, Li: list[int], Vij: l
   for v in Vij:
     bits.pack(v, 8)
 
-def write_app_segment[N:int](bits: Bits, Api: list[int]):
+def write_app_segment[N:int,B:int](bits: Bits[B], Api: list[int]):
   write_APP_marker[N](bits)
   Lp = 2 + len(Api)
   bits.pack(Lp, 16)
   for api in Api:
     bits.pack(api, 8)
   
-def write_nlines_segment(bits: Bits, NL: int):
+def write_nlines_segment[B:int](bits: Bits[B], NL: int):
   bits.pack(DNL, 16)
   bits.pack(4, 16)
   bits.pack(NL, 16)

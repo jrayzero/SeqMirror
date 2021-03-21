@@ -2,18 +2,24 @@ from cola.traversal import *
 
 # 2 is number of dimensions
 @traversal
-def diag2[N: int](i: int = 1, upper: bool = True):
+def _diag[N:int](i:int=1, upper:bool=True):
   tparams 2, (0,0)
   if i > 0 and upper:
     # upper triangle
     astep (-1,1) by i
     astep (i+1,-i)
-    link diag[N](i+1, i+1 != N-1)
+    link _diag[N](i+1, i+1 != N-1)
   elif i > 0:
     # lower triangle
     astep (-1,1) by i
     astep (i,-(i-1))
-    link diag[N](i-1, upper)
+    link _diag[N](i-1, upper)
 
 def diag[N: int]():
-  return AStep([1,0]) + diag[N]()
+  return AStep([1,0]) + _diag[N]()
+
+
+d = diag[8]()
+q = d
+for t in q:
+  pass #print(t)

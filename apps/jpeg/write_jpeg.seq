@@ -158,7 +158,6 @@ def write_qtables_segment[B:int](bits: Bits[B], Pq: int, Tq: int, Qk: View[int])
   bits.pack(DQT, 16)
   Lq = 67 + 64 * Pq
   bits.pack(Lq, 16)
-
   bits.pack((Pq << 4) | Tq, 8)
   if Pq == 0:
     for q in zigzag[8]()(Qk):

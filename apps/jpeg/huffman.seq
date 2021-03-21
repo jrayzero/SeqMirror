@@ -102,7 +102,7 @@ def make_derived_huffman_table(htable_bits: list[int], htable_val: list[int], is
   return ehufco, ehufsi
 
 def encode[T,N:int](bits: Bits[N], blk: View[T], ehufco_dc: list[int], ehufco_ac: list[int], 
-              ehufsi_dc: list[int], ehufsi_ac: list[int], last_dc: T, max_coeff_bits: int = 10):
+                    ehufsi_dc: list[int], ehufsi_ac: list[int], last_dc: T, max_coeff_bits: int = 10):
   tmp = tmp2 = int(blk(0,0)) - int(last_dc)
   if tmp < 0:
     tmp = -tmp

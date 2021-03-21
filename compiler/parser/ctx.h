@@ -140,7 +140,7 @@ public:
   // COLA
   void pushPTree(string ptree) { ptree_stack.push_back(ptree); }
 
-  string ptreePop() { string pt = ptree_stack.back(); ptree_stack.pop_back(); return pt; }
+  string popPtree() { string pt = ptree_stack.back(); ptree_stack.pop_back(); return pt; }
 
   string ptreePeekBack() const { return !ptreeEmpty() ? ptree_stack.back() : ""; }
 

@@ -28,7 +28,7 @@
 %token<string> PIPE PPIPE SPIPE B_AND B_OR B_XOR B_NOT B_LSH B_RSH
 %token<string> LSHEQ RSHEQ ANDEQ OREQ XOREQ
 /* COLA custom */
-%token PTREE_BUILD LEAF TRAV_BUILD RROT AROT RSTEP ASTEP SEEK LINK BY TPARAMS
+%token PTREE_BUILD LEAF TRAV_BUILD RROT AROT RSTEP ASTEP SEEK LINK BY TPARAMS PPARAMS
 /* operator precedence */
 %left B_OR
 %left B_XOR
@@ -202,6 +202,7 @@ small_single_statement:
   | YIELD separated_list(COMMA, expr)
     { $loc, Yield (match $2 with [] -> None | [e] -> Some e | l -> Some ($loc, Tuple l)) }
   | YIELD FROM expr { $loc, YieldFrom $3 }
+  | PPARAMS expr { $loc, PParams $2 }
   | THROW expr { $loc, Throw $2 }
 
 single_statement:

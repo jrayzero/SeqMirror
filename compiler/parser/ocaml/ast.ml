@@ -92,6 +92,7 @@ type tstmt =
   | Seek of texpr ann list
   | Link of texpr ann list
   | TParams of texpr ann list
+  | PParams of texpr ann
 
 and import =
   { imp_from: texpr ann

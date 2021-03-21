@@ -1,5 +1,5 @@
-from partition import *
 from cola.iter_utils import *
+from cola.block import *
 
 # Forward DCT stuff from jpeg-6b
 
@@ -13,10 +13,11 @@ def fdct_float_rmaj[T](data: View[T]) -> Block[float]:
   # know the sizes (though they could be determined statically). So I manually create a generator to go with row.
   # One way the compiler could handle this is if it replaces a multi-type call to a generator with individual calls to the iter
   # and then call next (I could probably do this in the simplify pass before typechecking!)
-  iter_blk = iter(MxN_partition_rmaj[1,8,float](View(blk))[0])
-  for row in MxN_partition_rmaj[1,8,T](data)[0]:
-    row = row.flatten()
-    brow = next(iter_blk).flatten()
+ # iter_blk = iter(MxN_partition_rmaj[1,8,float](View(blk))[0])
+  #  for row in MxN_partition_rmaj[1,8,T](data)[0]:
+  for r in range(8):
+    row = data[r,:].flatten()
+    brow = blk[r,:].flatten()
     tmp0 = row(0) + row(7)
     tmp7 = row(0) - row(7)
     tmp1 = row(1) + row(6)
@@ -51,9 +52,8 @@ def fdct_float_rmaj[T](data: View[T]) -> Block[float]:
     brow[3] = float(z13 - z2)
     brow[1] = float(z11 + z4)
     brow[7] = float(z11 - z4)
-  iter_blk.destroy()
-  for col in MxN_partition_rmaj[8,1,float](View(blk))[0]:
-    col = col.flatten()
+  for c in range(8):
+    col = blk[:,c].flatten()
     tmp0 = col(0) + col(7)
     tmp7 = col(0) - col(7)
     tmp1 = col(1) + col(6)

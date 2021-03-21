@@ -112,6 +112,7 @@ let print_token t =
   | LEAF -> "PT_LEAF"
   | TRAV_BUILD -> "TRAV_BUILD"
   | TPARAMS -> "T_PARAMS"
+  | PPARAMS -> "P_PARAMS"
   | RROT -> "RROT"
   | AROT -> "AROT"
   | RSTEP -> "RSTEP"

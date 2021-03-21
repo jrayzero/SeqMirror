@@ -340,6 +340,9 @@ StmtPtr parse_stmt(value val) {
       Return(Custom, std::make_unique<IdExpr>("link"), parse_list(t, parse_expr));
     case 32:
       Return(Custom, std::make_unique<IdExpr>("tparams"), parse_list(t, parse_expr));
+    case 33: {
+      Return(Custom, std::make_unique<IdExpr>("pparams"), parse_expr(t));
+    }
     default:
       seq::compilationError("[internal] tag variant mismatch ...");
       return nullptr;

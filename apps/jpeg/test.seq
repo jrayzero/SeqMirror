@@ -1,6 +1,6 @@
 # Now do the actual compression of a file
 from read_bmp import *
-from partition import *
+from ..lib.partition import *
 from color import *
 from sample import *
 from forward_xform import *
@@ -112,8 +112,8 @@ def jpeg_core_inner(component, divisors):
 
 # stores interleaved format for no downsampling (Y then Cb then Cr)
 def jpeg_core_interleaved_full(Y,Cb,Cr):
-  Y_split, Cb_split, Cr_split = NxN_partition_rmaj[8,u8](Y)[0], NxN_partition_rmaj[8,u8](Cb)[0], NxN_partition_rmaj[8,u8](Cr)[0]
-  Y_last_dc, Cb_last_dc, Cr_last_dc = 0, 0, 0
+  Y_split, Cb_split, Cr_split = grid_rmaj(Y,8)[0], grid_rmaj(Cb,8)[0], grid_rmaj(Cr,8)[0]
+  Y_last_dc, Cb_last_dc, Cr_last_dc = 0, 0, 0  
   for y,cb,cr in scan(Y_split, Cb_split, Cr_split):
     # level shift everything
     # cast to an int otherwise an i8 can overflow in the dct computation

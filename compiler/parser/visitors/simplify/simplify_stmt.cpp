@@ -436,6 +436,10 @@ void SimplifyVisitor::visit(FunctionStmt *stmt) {
     // by me here
 
   }
+  if (in(stmt->attributes, "ptree")) {
+    string ptree = ctx->cache->getTemporaryVar("ptree");
+    ctx->pushPTree(ptree);
+  }
   if (in(stmt->attributes, ATTR_EXTERN_PYTHON)) {
     // Handle Python code separately
     resultStmt = transformPythonDefinition(stmt->name, stmt->args, stmt->ret.get(),
@@ -535,6 +539,15 @@ void SimplifyVisitor::visit(FunctionStmt *stmt) {
     full_body.push_back(move(ret));
     suite = N<SuiteStmt>(move(full_body));
     ctx->popTrav();
+  }
+  if (in(stmt->attributes, "ptree")) {
+    // stick on a return statement
+    StmtPtr ret = N<ReturnStmt>(N<IdExpr>(ctx->ptreePeekBack()));
+    std::vector<StmtPtr> full_body;
+    full_body.push_back(move(suite));
+    full_body.push_back(move(ret));
+    suite = N<SuiteStmt>(move(full_body));
+    ctx->popPtree();
   }
 
   // Now fill the internal attributes that will be used later...
@@ -771,18 +784,22 @@ void SimplifyVisitor::visit(ClassStmt *stmt) {
 void SimplifyVisitor::visit(CustomStmt *stmt) {
   // COLA
   string head = stmt->head->getId()->value;
-  if (head == "pt_build") {
-    seqassert(stmt->args.size() == 1, "arg to pt_build is nullptr (or has multiple args)");
-    string pt = ctx->cache->getTemporaryVar("pt");
-    ctx->pushPTree(pt);
-    StmtPtr pt_assign = N<AssignStmt>(N<IdExpr>(pt), transform(stmt->args[0]));
+  if (head == "pparams") {
+    seqassert(stmt->args.size() == 1, "pparams should have 1 argument (Block or View) ");
+    seqassert(!ctx->ptreeEmpty(), "not in a ptree build function");
+    string ptree = ctx->ptreePeekBack();
+    // create a PTree from the parameters
+    ExprPtr create_ptree = transform(N<CallExpr>(N<IdExpr>("PTree"), transform(stmt->args[0])));
+    StmtPtr ptree_assign = N<AssignStmt>(N<IdExpr>(ptree), move(create_ptree));
+    // Process the body to create the ptree
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
-    ctx->ptreePop();
     vector<StmtPtr> stmts;
     stmts.reserve(2);
-    stmts.push_back(move(pt_assign));
+    stmts.push_back(move(ptree_assign));
     stmts.push_back(move(suite));
     resultStmt = N<SuiteStmt>(move(stmts));
+  } else if (head == "pt_build") {
+    seqassert(false, "not supported this way anymore");
   } else if (head == "pt_and" || head == "pt_or") {
     seqassert(!ctx->ptreeEmpty(), "not in a ptree build block");
     std::string pt_new = ctx->cache->getTemporaryVar("andor_child");
@@ -791,7 +808,7 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
                                                                 N<BoolExpr>(stmt->head->getId()->value == "pt_and")));
     ctx->pushPTree(pt_new);
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
-    ctx->ptreePop();
+    ctx->popPtree();
     vector<StmtPtr> stmts;
     stmts.reserve(2);
     stmts.push_back(move(node));
@@ -811,36 +828,20 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
     seqassert(stmt->args.size() == 2, "tparams should have 2 arguments (ndims, origin) ");
     seqassert(!ctx->travEmpty(), "not in a traversal build function");
     string trav = ctx->travPeekBack();
-//    ctx->pushTrav(trav);
     // create a traversal from the parameters
     ExprPtr create_trav = transform(N<CallExpr>(N<IdExpr>("Traversal"), transform(stmt->args[0]), transform(stmt->args[1])));
-//      N<CallExpr>(N<DotExpr>(N<IdExpr>("Traversal"), "__init__"), transform(stmt->args[0]), transform(stmt->args[1]));
     StmtPtr trav_assign = N<AssignStmt>(N<IdExpr>(trav), move(create_trav));
     // process the body to create the traversal
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
-//    ctx->popTrav();
     vector<StmtPtr> stmts;
     stmts.reserve(2);
     stmts.push_back(move(trav_assign));
     stmts.push_back(move(suite));
     resultStmt = N<SuiteStmt>(move(stmts));
-
   } else if (head == "trav_build") {
     seqassert(false, "not supported this way anymore");
-//    seqassert(stmt->args.size() == 1, "arg to trav_build is nullptr (or has multiple args)");
-//    string trav = ctx->cache->getTemporaryVar("trav");
-//    ctx->pushTrav(trav);
-//    StmtPtr trav_assign = N<AssignStmt>(N<IdExpr>(trav), transform(stmt->args[0]));
-//    StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
-//    ctx->popTrav();
-//    vector<StmtPtr> stmts;
-//    stmts.reserve(2);
-//    stmts.push_back(move(trav_assign));
-//    stmts.push_back(move(suite));
-//    resultStmt = N<SuiteStmt>(move(stmts));
   } else if (head == "rrot" || head == "arot" || head == "rstep" || head == "astep" || head == "aseek" || head == "link") {
     seqassert(!ctx->travEmpty(), "not in a traversal build block");
-    std::cerr << "FOUND " << head << std::endl;
     string movement = "add_" + head;
     string trav = ctx->travPeekBack();
     vector<StmtPtr> suite;

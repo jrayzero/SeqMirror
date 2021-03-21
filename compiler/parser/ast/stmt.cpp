@@ -352,6 +352,9 @@ string WithStmt::toString() const {
 }
 ACCEPT_IMPL(WithStmt, ASTVisitor);
 
+CustomStmt::CustomStmt(seq::ast::ExprPtr head, seq::ast::ExprPtr arg) : Stmt(), head(move(head)) {
+  this->args.push_back(move(arg));
+}
 CustomStmt::CustomStmt(ExprPtr head, StmtPtr suite)
     : Stmt(), head(move(head)), suite(move(suite)) {}
 CustomStmt::CustomStmt(ExprPtr head, ExprPtr arg, StmtPtr suite)

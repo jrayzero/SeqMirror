@@ -532,6 +532,7 @@ struct CustomStmt : public Stmt {
 
   CustomStmt(ExprPtr head, StmtPtr suite);
   // COLA
+  CustomStmt(ExprPtr head, ExprPtr arg);
   CustomStmt(ExprPtr head, ExprPtr arg, StmtPtr suite);
   CustomStmt(ExprPtr head, vector<ExprPtr> args, StmtPtr suite);
   CustomStmt(ExprPtr head, vector<ExprPtr> args);

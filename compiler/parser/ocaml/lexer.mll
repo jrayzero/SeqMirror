@@ -208,6 +208,7 @@ and read state = parse
       | "pt_leaf"  -> [P.LEAF]
       | "trav_build" -> [P.TRAV_BUILD]
       | "tparams" -> [P.TPARAMS]
+      | "pparams" -> [P.PPARAMS]
       | "rrot" -> [P.RROT]
       | "arot" -> [P.AROT]
       | "rstep" -> [P.RSTEP]

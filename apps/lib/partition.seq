@@ -1,0 +1,14 @@
+from cola.ptree import *      
+
+@ptree
+def gridlike_rmaj(root, grid_h: int, grid_w: int):
+  pparams root
+  h = root.dims()[0]
+  w = root.dims()[1] 
+  pt_and:
+    for r in range(0, h, grid_h):
+      for c in range(0, w, grid_w):
+        pt_leaf root[r:r+grid_h,c:c+grid_w]
+
+def grid_rmaj(root, grid_sz: int):
+  return gridlike_rmaj(root, grid_sz, grid_sz)

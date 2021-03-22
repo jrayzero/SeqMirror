@@ -10,6 +10,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <compiler/sir/transform/cola/remove_gens.h>
 
 namespace {
 void versMsg(llvm::raw_ostream &out) {
@@ -18,11 +19,15 @@ void versMsg(llvm::raw_ostream &out) {
 }
 
 void registerStandardPasses(seq::ir::transform::PassManager &pm, bool debug) {
-  if (debug)
+  if (debug) {
     return;
+  }
   pm.registerPass(
-      "bio-pipeline-opts",
-      std::make_unique<seq::ir::transform::pipeline::PipelineOptimizations>());
+    "bio-pipeline-opts",
+    std::make_unique<seq::ir::transform::pipeline::PipelineOptimizations>());
+  pm.registerPass(
+    "cola-remove-gens",
+    std::make_unique<seq::ir::transform::cola::RemoveGenerators>());
 }
 
 bool hasExtension(const std::string &filename, const std::string &extension) {
@@ -147,6 +152,10 @@ int main(int argc, char **argv) {
   seq::ir::transform::PassManager pm;
   registerStandardPasses(pm, debug);
   pm.run(module);
+
+//  std::cerr << "printing module" << std::endl;
+//  std::cerr << *module << std::endl;
+
   seq::ir::LLVMVisitor visitor(debug);
   visitor.visit(module);
   LOG_TIME("[T] ir-visitor = {:.1f}",

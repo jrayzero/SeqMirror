@@ -33,8 +33,8 @@ SimplifyContext::SimplifyContext(string filename, shared_ptr<Cache> cache)
       isStdlibLoading(false), moduleName{ImportFile::PACKAGE, "", ""}, canAssign(true) {
 }
 
-SimplifyContext::Base::Base(string name, ExprPtr ast, int parent, int attributes)
-    : name(move(name)), ast(move(ast)), parent(parent), attributes(attributes) {}
+SimplifyContext::Base::Base(string name, shared_ptr<Expr> ast, int attributes)
+    : name(move(name)), ast(move(ast)), attributes(attributes) {}
 
 shared_ptr<SimplifyItem> SimplifyContext::add(SimplifyItem::Kind kind,
                                               const string &name,
@@ -86,6 +86,8 @@ string SimplifyContext::generateCanonicalName(const string &name,
   }
   auto num = cache->identifierCount[newName]++;
   newName = num ? format("{}.{}", newName, num) : newName;
+  if (newName != name)
+    cache->identifierCount[newName]++;
   cache->reverseIdentifierLookup[newName] = name;
   return newName;
 }

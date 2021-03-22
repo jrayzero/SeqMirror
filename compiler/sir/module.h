@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cassert>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -8,6 +7,8 @@
 
 #include "util/fmt/format.h"
 #include "util/fmt/ostream.h"
+
+#include "util/common.h"
 
 #include "func.h"
 #include "util/iterators.h"
@@ -18,7 +19,7 @@ namespace seq {
 
 namespace ast {
 struct Cache;
-class CodegenVisitor;
+class TranslateVisitor;
 class TypecheckVisitor;
 } // namespace ast
 
@@ -62,7 +63,8 @@ public:
   static const std::string BOOL_MAGIC_NAME;
   static const std::string STR_MAGIC_NAME;
 
-  static const std::string GET_MAGIC_NAME;
+  static const std::string GETITEM_MAGIC_NAME;
+  static const std::string SETITEM_MAGIC_NAME;
   static const std::string ITER_MAGIC_NAME;
   static const std::string LEN_MAGIC_NAME;
 
@@ -381,8 +383,6 @@ private:
     vars.emplace_back(v);
     varMap[v->getId()] = std::prev(vars.end());
   }
-
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 } // namespace ir

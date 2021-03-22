@@ -1,13 +1,11 @@
 #include "func.h"
 
 #include <algorithm>
-#include <cctype>
-#include <unordered_map>
 
 #include "parser/common.h"
 
 #include "util/iterators.h"
-#include "util/lambda_visitor.h"
+#include "util/operator.h"
 #include "util/visitor.h"
 
 #include "module.h"
@@ -35,7 +33,7 @@ const char Func::NodeId = 0;
 
 void Func::realize(types::Type *newType, const std::vector<std::string> &names) {
   auto *funcType = cast<types::FuncType>(newType);
-  assert(funcType);
+  seqassert(funcType, "{} is not a function type", *newType);
 
   setType(funcType);
   args.clear();
@@ -64,31 +62,10 @@ int Func::doReplaceUsedVariable(int id, Var *newVar) {
 
 const char BodiedFunc::NodeId = 0;
 
-std::string BodiedFunc::getUnmangledName() const {
-  auto split = ast::split(getName(), '.');
-  for (auto it = split.rbegin(); it != split.rend(); ++it) {
-    if (!std::all_of(it->begin(), it->end(), ::isdigit))
-      return *it;
-  }
-  return split.front();
-}
-
-std::ostream &BodiedFunc::doFormat(std::ostream &os) const {
-  fmt::print(os, FMT_STRING("{} {}({}) -> {} [\n{}\n] {{\n{}\n}}"),
-             builtin ? "builtin_def" : "def", referenceString(),
-             fmt::join(util::dereference_adaptor(args.begin()),
-                       util::dereference_adaptor(args.end()), ", "),
-             cast<types::FuncType>(getType())->getReturnType()->referenceString(),
-             fmt::join(util::dereference_adaptor(symbols.begin()),
-                       util::dereference_adaptor(symbols.end()), "\n"),
-             *body);
-  return os;
-}
-
 int BodiedFunc::doReplaceUsedValue(int id, Value *newValue) {
   if (body && body->getId() == id) {
     auto *flow = cast<Flow>(newValue);
-    assert(flow);
+    seqassert(flow, "{} is not a flow", *newValue);
     body = flow;
     return 1;
   }
@@ -107,33 +84,7 @@ int BodiedFunc::doReplaceUsedVariable(int id, Var *newVar) {
 
 const char ExternalFunc::NodeId = 0;
 
-std::ostream &ExternalFunc::doFormat(std::ostream &os) const {
-  fmt::print(os, FMT_STRING("external_def {} ~ {}({}) -> {}"), getUnmangledName(),
-             referenceString(),
-             fmt::join(util::dereference_adaptor(args.begin()),
-                       util::dereference_adaptor(args.end()), ", "),
-             cast<types::FuncType>(getType())->getReturnType()->referenceString());
-  return os;
-}
-
 const char InternalFunc::NodeId = 0;
-
-std::string InternalFunc::getUnmangledName() const {
-  auto names = ast::split(getName(), '.');
-  auto name = names.back();
-  if (std::isdigit(name[0])) // TODO: get rid of this hack
-    name = names[names.size() - 2];
-  return name;
-}
-
-std::ostream &InternalFunc::doFormat(std::ostream &os) const {
-  fmt::print(os, FMT_STRING("internal_def {}.{} ~ {}({}) -> {}"),
-             parentType->referenceString(), getUnmangledName(), referenceString(),
-             fmt::join(util::dereference_adaptor(args.begin()),
-                       util::dereference_adaptor(args.end()), ", "),
-             cast<types::FuncType>(getType())->getReturnType()->referenceString());
-  return os;
-}
 
 std::vector<types::Type *> InternalFunc::doGetUsedTypes() const {
   std::vector<types::Type *> ret;
@@ -157,34 +108,6 @@ int InternalFunc::doReplaceUsedType(const std::string &name, types::Type *newTyp
 }
 
 const char LLVMFunc::NodeId = 0;
-
-std::string LLVMFunc::getUnmangledName() const {
-  auto names = ast::split(getName(), '.');
-  auto name = names.back();
-  if (std::isdigit(name[0])) // TODO: get rid of this hack
-    name = names[names.size() - 2];
-  return name;
-}
-
-std::ostream &LLVMFunc::doFormat(std::ostream &os) const {
-  fmt::dynamic_format_arg_store<fmt::format_context> store;
-  for (auto &l : llvmLiterals) {
-    if (l.isStatic())
-      store.push_back(l.getStaticValue());
-    else
-      store.push_back(
-          fmt::format(FMT_STRING("(type_of {})"), l.getTypeValue()->referenceString()));
-  }
-
-  auto body = fmt::vformat(llvmDeclares + llvmBody, store);
-
-  fmt::print(os, FMT_STRING("llvm_def {}({}) -> {} {{\n{}\n}}"), getName(),
-             fmt::join(util::dereference_adaptor(args.begin()),
-                       util::dereference_adaptor(args.end()), ", "),
-             cast<types::FuncType>(getType())->getReturnType()->referenceString(),
-             body);
-  return os;
-}
 
 std::vector<types::Type *> LLVMFunc::doGetUsedTypes() const {
   std::vector<types::Type *> ret;

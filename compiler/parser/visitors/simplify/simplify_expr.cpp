@@ -29,7 +29,7 @@ ExprPtr SimplifyVisitor::transform(const ExprPtr &expr) {
 ExprPtr SimplifyVisitor::transform(const Expr *expr, bool allowTypes) {
   if (!expr)
     return nullptr;
-  SimplifyVisitor v(ctx, preamble, prependStmts);
+  SimplifyVisitor v(ctx, preamble);
   v.setSrcInfo(expr->getSrcInfo());
   const_cast<Expr *>(expr)->accept(v);
   if (!allowTypes && v.resultExpr && v.resultExpr->isType())
@@ -49,7 +49,7 @@ void SimplifyVisitor::defaultVisit(Expr *e) { resultExpr = e->clone(); }
 /**************************************************************************************/
 
 void SimplifyVisitor::visit(NoneExpr *expr) {
-  resultExpr = transform(N<CallExpr>(N<IdExpr>("Optional")));
+  resultExpr = transform(N<CallExpr>(N<IdExpr>(TYPE_OPTIONAL)));
 }
 
 void SimplifyVisitor::visit(IntExpr *expr) {
@@ -80,11 +80,17 @@ void SimplifyVisitor::visit(IdExpr *expr) {
   // If we are accessing an outer non-global variable, raise an error unless
   // we are capturing variables (in that case capture it).
   bool captured = false;
+  auto newName = val->canonicalName;
   if (val->isVar()) {
     if (ctx->getBase() != val->getBase() && !val->isGlobal()) {
       if (!ctx->captures.empty()) {
         captured = true;
-        ctx->captures.back().insert(expr->value);
+        if (!in(ctx->captures.back(), val->canonicalName)) {
+          ctx->captures.back()[val->canonicalName] = newName =
+              ctx->generateCanonicalName(val->canonicalName);
+          ctx->cache->reverseIdentifierLookup[newName] = newName;
+        }
+        newName = ctx->captures.back()[val->canonicalName];
       } else {
         error("cannot access non-global variable '{}'",
               ctx->cache->reverseIdentifierLookup[expr->value]);
@@ -94,30 +100,27 @@ void SimplifyVisitor::visit(IdExpr *expr) {
 
   // Replace the variable with its canonical name. Do not canonize captured
   // variables (they will be later passed as argument names).
-  resultExpr = N<IdExpr>(captured ? expr->value : val->canonicalName);
+  resultExpr = N<IdExpr>(newName);
   // Flag the expression as a type expression if it points to a class name or a generic.
   if (val->isType() && !val->isStatic())
     resultExpr->markType();
   if (val->isStatic())
     resultExpr->isStaticExpr = true;
 
-  // Check if this variable is coming from an enclosing base; if so, ensure that the
-  // current base and all bases between the enclosing base point to the enclosing base.
-  for (int i = int(ctx->bases.size()) - 1; i >= 0; i--) {
-    if (ctx->bases[i].name == val->getBase()) {
-      for (int j = i + 1; j < ctx->bases.size(); j++) {
-        ctx->bases[j].parent = std::max(i, ctx->bases[j].parent);
-        seqassert(ctx->bases[j].parent < j, "invalid base");
-      }
+  // The only variables coming from the enclosing base must be class generics.
+  seqassert(!val->isFunc() || val->getBase().empty(), "{} has invalid base ({})",
+            expr->value, val->getBase());
+  if (val->isType() && !val->getBase().empty() && ctx->getBase() != val->getBase()) {
+    if (ctx->bases.size() == 2 && ctx->bases[0].name == val->getBase()) {
+      ctx->bases.back().attributes |= FLAG_METHOD;
       return;
     }
   }
   // If that is not the case, we are probably having a class accessing its enclosing
   // function variable (generic or other identifier). We do not like that!
-  if (!val->getBase().empty())
-    error(
-        "identifier '{}' not found (classes cannot access outer function identifiers)",
-        expr->value);
+  if (!captured && ctx->getBase() != val->getBase() && !val->getBase().empty())
+    error("identifier '{}' not found (cannot access outer function identifiers)",
+          expr->value);
 }
 
 void SimplifyVisitor::visit(StarExpr *expr) {
@@ -126,8 +129,12 @@ void SimplifyVisitor::visit(StarExpr *expr) {
 
 void SimplifyVisitor::visit(TupleExpr *expr) {
   vector<ExprPtr> items;
-  for (auto &i : expr->items)
-    items.emplace_back(transform(i));
+  for (auto &i : expr->items) {
+    if (auto es = i->getStar())
+      items.emplace_back(N<StarExpr>(transform(es->what)));
+    else
+      items.emplace_back(transform(i));
+  }
   resultExpr = N<TupleExpr>(move(items));
 }
 
@@ -233,7 +240,7 @@ void SimplifyVisitor::visit(GeneratorExpr *expr) {
     prev->stmts.push_back(N<YieldStmt>(clone(expr->expr)));
     stmts.push_back(move(suite));
     resultExpr =
-        transform(N<CallExpr>(N<DotExpr>(makeAnonFn(move(stmts)), "__iter__")));
+        N<CallExpr>(N<DotExpr>(N<CallExpr>(makeAnonFn(move(stmts))), "__iter__"));
   }
 }
 
@@ -333,14 +340,13 @@ void SimplifyVisitor::visit(BinaryExpr *expr) {
 void SimplifyVisitor::visit(PipeExpr *expr) {
   vector<PipeExpr::Pipe> p;
   for (auto &i : expr->items) {
-    bool foundEllipsis = false;
-    if (auto ec = i.expr->getCall())
-      for (const auto &a : ec->args) {
-        if (a.value->getEllipsis() && foundEllipsis)
-          error("unexpected partial argument");
-        foundEllipsis |= bool(a.value->getEllipsis());
-      }
-    p.push_back({i.op, transform(i.expr)});
+    auto e = clone(i.expr);
+    if (auto ec = const_cast<CallExpr *>(e->getCall())) {
+      for (auto &a : ec->args)
+        if (auto ee = const_cast<EllipsisExpr *>(a.value->getEllipsis()))
+          ee->isPipeArg = true;
+    }
+    p.push_back({i.op, transform(e)});
   }
   resultExpr = N<PipeExpr>(move(p));
 }
@@ -472,7 +478,7 @@ void SimplifyVisitor::visit(CallExpr *expr) {
     resultExpr = N<CallExpr>(clone(expr->expr), move(s));
     return;
   }
-  // 7. COLA things
+  // COLA things
   if (expr->expr->getDot()) {
     auto dot = expr->expr->getDot();
     if (dot->expr->getId()) {
@@ -491,24 +497,97 @@ void SimplifyVisitor::visit(CallExpr *expr) {
 //    resultExpr = N<CallExpr>(N<IdExpr>("internal_pt_leaf"), move(arg), N<IdExpr>(move(ptb)));
 //    return;
 //  }
+  // 7. tuple(i for i in j)
+  if (expr->expr->isId("tuple")) {
+    GeneratorExpr *g = nullptr;
+    if (expr->args.size() != 1 || !(g = CAST(expr->args[0].value, GeneratorExpr)) ||
+        g->kind != GeneratorExpr::Generator || g->loops.size() != 1 ||
+        !g->loops[0].conds.empty())
+      error("tuple only accepts a simple comprehension over a tuple");
+
+    ctx->addBlock();
+    auto var = clone(g->loops[0].vars);
+    auto ex = clone(g->expr);
+    if (auto i = var->getId()) {
+      ctx->add(SimplifyItem::Var, i->value, ctx->generateCanonicalName(i->value));
+      var = transform(var);
+      ex = transform(ex);
+    } else {
+      string varName = ctx->cache->getTemporaryVar("for");
+      ctx->add(SimplifyItem::Var, varName, varName);
+      var = N<IdExpr>(varName);
+      ex = N<StmtExpr>(
+          transform(N<AssignStmt>(clone(g->loops[0].vars), clone(var), nullptr, true)),
+          transform(ex));
+    }
+    vector<GeneratorBody> body;
+    body.push_back({move(var), transform(g->loops[0].gen), {}});
+    resultExpr = N<GeneratorExpr>(GeneratorExpr::Generator, move(ex), move(body));
+    ctx->popBlock();
+    return;
+  }
+
+  auto e = transform(expr->expr.get(), true);
+  // 8. namedtuple
+  if (e->isId("std.collections.namedtuple")) {
+    if (expr->args.size() != 2 || !expr->args[0].value->getString() ||
+        !expr->args[1].value->getList())
+      error("invalid namedtuple arguments");
+    vector<Param> generics, args;
+    int ti = 1;
+    for (auto &i : expr->args[1].value->getList()->items)
+      if (auto s = i->getString()) {
+        generics.emplace_back(Param{format("T{}", ti), nullptr, nullptr});
+        args.emplace_back(Param{s->value, N<IdExpr>(format("T{}", ti++)), nullptr});
+      } else if (i->getTuple() && i->getTuple()->items.size() == 2 &&
+                 i->getTuple()->items[0]->getString()) {
+        args.emplace_back(Param{i->getTuple()->items[0]->getString()->value,
+                                transformType(i->getTuple()->items[1].get()), nullptr});
+      } else {
+        error("invalid namedtuple arguments");
+      }
+    auto name = expr->args[0].value->getString()->value;
+    transform(
+        N<ClassStmt>(name, move(generics), move(args), nullptr, Attr({Attr::Tuple})));
+    auto i = N<IdExpr>(name);
+    resultExpr = transformType(i.get());
+    return;
+  }
+  // 9. partial
+  if (e->isId("std.functools.partial")) {
+    if (expr->args.size() < 1)
+      error("invalid namedtuple arguments");
+    vector<CallExpr::Arg> args = clone_nop(expr->args);
+    args.erase(args.begin());
+    args.push_back({"", N<EllipsisExpr>()});
+    resultExpr = transform(N<CallExpr>(clone(expr->args[0].value), move(args)));
+    return;
+  }
+
   vector<CallExpr::Arg> args;
   bool namesStarted = false;
+  bool foundEllispis = false;
   for (auto &i : expr->args) {
-    if ((i.name.empty() && !CAST(i.value, KeywordStarExpr)) && namesStarted)
+    if (i.name.empty() && namesStarted &&
+        !(CAST(i.value, KeywordStarExpr) || i.value->getEllipsis()))
       error("unnamed argument after a named argument");
     if (!i.name.empty() && (i.value->getStar() || CAST(i.value, KeywordStarExpr)))
       error("named star-expressions not allowed");
     namesStarted |= !i.name.empty();
-    if (i.value->getEllipsis())
+    if (auto ee = i.value->getEllipsis()) {
+      if (foundEllispis ||
+          (!ee->isPipeArg && i.value.get() != expr->args.back().value.get()))
+        error("unexpected ellipsis expression");
+      foundEllispis = true;
       args.push_back({i.name, clone(i.value)});
-    else if (auto es = i.value->getStar())
+    } else if (auto es = i.value->getStar())
       args.push_back({i.name, N<StarExpr>(transform(es->what))});
     else if (auto ek = CAST(i.value, KeywordStarExpr))
       args.push_back({i.name, N<KeywordStarExpr>(transform(ek->what))});
     else
       args.push_back({i.name, transform(i.value)});
   }
-  resultExpr = N<CallExpr>(transform(expr->expr.get(), true), move(args));
+  resultExpr = N<CallExpr>(move(e), move(args));
 }
 
 void SimplifyVisitor::visit(DotExpr *expr) {
@@ -549,6 +628,8 @@ void SimplifyVisitor::visit(DotExpr *expr) {
       if (val && (importName.empty() || val->isGlobal())) {
         itemName = val->canonicalName;
         itemEnd = i + 1;
+        if (!importName.empty())
+          ctx->add(val->canonicalName, val);
         break;
       }
     }
@@ -592,7 +673,7 @@ void SimplifyVisitor::visit(TypeOfExpr *expr) {
 }
 
 void SimplifyVisitor::visit(YieldExpr *expr) {
-  if (!ctx->getLevel() || ctx->bases.back().isType())
+  if (!ctx->inFunction())
     error("expected function body");
   defaultVisit(expr);
 }
@@ -600,19 +681,7 @@ void SimplifyVisitor::visit(YieldExpr *expr) {
 void SimplifyVisitor::visit(LambdaExpr *expr) {
   vector<StmtPtr> stmts;
   stmts.push_back(N<ReturnStmt>(clone(expr->expr)));
-  auto call_raw = makeAnonFn(move(stmts), expr->vars);
-  // OK to const_cast as c is already transformed and only handled here.
-  auto call = const_cast<CallExpr *>(call_raw->getCall());
-  if (!call) {
-    seqassert(call, "bad makeAnonFn return value");
-  } else if (!call->args.empty()) {
-    // Create a partial call: prepend ... for each lambda argument
-    for (int i = 0; i < expr->vars.size(); i++)
-      call->args.insert(call->args.begin(), {"", N<EllipsisExpr>()});
-    resultExpr = transform(call_raw);
-  } else {
-    resultExpr = move(call->expr);
-  }
+  resultExpr = makeAnonFn(move(stmts), expr->vars);
 }
 
 void SimplifyVisitor::visit(AssignExpr *expr) {
@@ -726,31 +795,14 @@ ExprPtr SimplifyVisitor::makeAnonFn(vector<StmtPtr> &&stmts,
   vector<CallExpr::Arg> args;
 
   string name = ctx->cache->getTemporaryVar("lambda");
-  ctx->captures.emplace_back(set<string>{});
   for (auto &s : argNames)
     params.emplace_back(Param{s, nullptr, nullptr});
-  auto fs = transform(N<FunctionStmt>(name, nullptr, vector<Param>{}, move(params),
-                                      N<SuiteStmt>(move(stmts)), vector<string>{}));
-  vector<FunctionStmt *> fns;
-  if (fs) {
-    if (auto fp = const_cast<FunctionStmt *>(fs->getFunction())) {
-      fns.emplace_back(fp);
-      prependStmts->push_back(move(fs));
-      name = fp->name;
-    } else {
-      seqassert(false, "expected a FunctionStmt");
-    }
-  } else {
-    fns.push_back(dynamic_cast<FunctionStmt *>(preamble->functions.back().get()));
-  }
-  fns.emplace_back(ctx->cache->functions[name].ast.get());
-  for (auto &c : ctx->captures.back()) {
-    for (auto f : fns)
-      f->args.emplace_back(Param{c, nullptr, nullptr});
-    args.emplace_back(CallExpr::Arg{"", N<IdExpr>(c)});
-  }
-  ctx->captures.pop_back();
-  return N<CallExpr>(N<IdExpr>(name), move(args));
+  auto s = transform(N<FunctionStmt>(name, nullptr, vector<Param>{}, move(params),
+                                     N<SuiteStmt>(move(stmts)), Attr({Attr::Capture})));
+  if (s)
+    return N<StmtExpr>(move(s), transform(N<IdExpr>(name)));
+  return transform(N<IdExpr>(name));
+  //  return N<CallExpr>(N<IdExpr>(name), move(args));
 }
 
 } // namespace ast

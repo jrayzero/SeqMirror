@@ -29,11 +29,6 @@ StmtPtr SimplifyVisitor::transform(const Stmt *stmt) {
   SimplifyVisitor v(ctx, preamble);
   v.setSrcInfo(stmt->getSrcInfo());
   const_cast<Stmt *>(stmt)->accept(v);
-  if (!v.prependStmts->empty()) {
-    if (v.resultStmt)
-      v.prependStmts->push_back(move(v.resultStmt));
-    v.resultStmt = N<SuiteStmt>(move(*v.prependStmts));
-  }
   if (v.resultStmt)
     v.resultStmt->age = ctx->cache->age;
   return move(v.resultStmt);
@@ -122,7 +117,7 @@ void SimplifyVisitor::visit(PrintStmt *stmt) {
 }
 
 void SimplifyVisitor::visit(ReturnStmt *stmt) {
-  if (!ctx->getLevel() || ctx->bases.back().isType())
+  if (!ctx->inFunction())
     error("expected function body");
   if (!ctx->travEmpty()) {
     error("user-specified returns not allowed in traversal definition");
@@ -131,7 +126,7 @@ void SimplifyVisitor::visit(ReturnStmt *stmt) {
 }
 
 void SimplifyVisitor::visit(YieldStmt *stmt) {
-  if (!ctx->getLevel() || ctx->bases.back().isType())
+  if (!ctx->inFunction())
     error("expected function body");
   resultStmt = N<YieldStmt>(transform(stmt->expr));
 }
@@ -235,7 +230,7 @@ void SimplifyVisitor::visit(IfStmt *stmt) {
   }
   if (!subIf.empty()) {
     if (!subIf[0].cond)
-      topIf.emplace_back(IfStmt::If{nullptr, transform(move(subIf[0].suite))});
+      topIf.emplace_back(IfStmt::If{nullptr, transform(subIf[0].suite)});
     else
       topIf.emplace_back(IfStmt::If{nullptr, transform(N<IfStmt>(move(subIf)))});
   }
@@ -318,7 +313,7 @@ void SimplifyVisitor::visit(GlobalStmt *stmt) {
 }
 
 void SimplifyVisitor::visit(ImportStmt *stmt) {
-  seqassert(!ctx->getLevel() || !ctx->bases.back().isType(), "imports within a class");
+  seqassert(!ctx->inClass(), "imports within a class");
   if (stmt->from->isId("C")) {
     /// Handle C imports
     if (auto i = stmt->what->getId())
@@ -428,7 +423,49 @@ void SimplifyVisitor::visit(ImportStmt *stmt) {
 //}
 
 void SimplifyVisitor::visit(FunctionStmt *stmt) {
-  if (in(stmt->attributes, "traversal")) {
+
+  vector<ExprPtr> decorators;
+  Attr attr = stmt->attributes;
+  for (auto &d : stmt->decorators) {
+    if (d->isId("llvm"))
+      attr.set(Attr::LLVM);
+    else if (d->isId("internal"))
+      attr.set(Attr::Internal);
+    else if (d->isId("atomic"))
+      attr.set(Attr::Atomic);
+    else if (d->isId("python"))
+      attr.set(Attr::Python);
+    else if (d->isId("force_realize"))
+      attr.set(Attr::ForceRealize);
+    else if (d->isId("test"))
+      attr.set(Attr::Test);
+    else if (d->isId("property"))
+      attr.set(Attr::Property);
+    else if (d->isId("inline"))
+      attr.set(Attr::Inline);
+    else if (d->isId("no_inline"))
+      attr.set(Attr::NoInline);
+    else if (d->isId("export"))
+      attr.set(Attr::Export);
+    else if (d->isId("prefetch"))
+      attr.set(Attr::Prefetch);
+    else if (d->isId("inter_align"))
+      attr.set(Attr::InterAlign);
+    else if (d->isId("traversal"))
+      attr.set(Attr::Traversal);
+    else if (d->isId("ptree"))
+      attr.set(Attr::PTree);
+    else
+      decorators.emplace_back(clone(d));
+  }
+  if (attr.has(Attr::Python)) {
+    // Handle Python code separately
+    resultStmt = transformPythonDefinition(stmt->name, stmt->args, stmt->ret.get(),
+                                           stmt->suite->firstInBlock());
+    // TODO: error on decorators
+    return;
+  }
+  if (attr.has(Attr::Traversal)) {
     string trav = ctx->cache->getTemporaryVar("trav");
     ctx->pushTrav(trav);
     // for the most part, the stuff in a traversal definition can be normal code
@@ -436,33 +473,31 @@ void SimplifyVisitor::visit(FunctionStmt *stmt) {
     // by me here
 
   }
-  if (in(stmt->attributes, "ptree")) {
+if (attr.has(Attr::PTree)) {
     string ptree = ctx->cache->getTemporaryVar("ptree");
     ctx->pushPTree(ptree);
   }
-  if (in(stmt->attributes, ATTR_EXTERN_PYTHON)) {
-    // Handle Python code separately
-    resultStmt = transformPythonDefinition(stmt->name, stmt->args, stmt->ret.get(),
-                                           stmt->suite->firstInBlock());
-    return;
-  }
 
   auto canonicalName = ctx->generateCanonicalName(stmt->name, true);
-  bool isClassMember = ctx->getLevel() && ctx->bases.back().isType();
+  bool isClassMember = ctx->inClass();
+  bool isEnclosedFunc = ctx->inFunction();
 
-  if (in(stmt->attributes, ATTR_FORCE_REALIZE) && (ctx->getLevel() || isClassMember))
+  if (attr.has(Attr::ForceRealize) && (ctx->getLevel() || isClassMember))
     error("builtins must be defined at the toplevel");
 
+  auto oldBases = move(ctx->bases);
+  ctx->bases = vector<SimplifyContext::Base>();
   if (!isClassMember)
     // Class members are added to class' method table
     ctx->add(SimplifyItem::Func, stmt->name, canonicalName, ctx->isToplevel());
-
+  if (isClassMember)
+    ctx->bases.push_back(oldBases[0]);
   ctx->bases.emplace_back(SimplifyContext::Base{canonicalName}); // Add new base...
   ctx->addBlock();                                               // ... and a block!
   // Set atomic flag if @atomic attribute is present.
-  if (in(stmt->attributes, ATTR_ATOMIC))
+  if (attr.has(Attr::Atomic))
     ctx->bases.back().attributes |= FLAG_ATOMIC;
-  if (in(stmt->attributes, ATTR_TEST))
+  if (attr.has(Attr::Test))
     ctx->bases.back().attributes |= FLAG_TEST;
   // Add generic identifiers to the context
   vector<Param> newGenerics;
@@ -517,21 +552,29 @@ void SimplifyVisitor::visit(FunctionStmt *stmt) {
     ctx->add(SimplifyItem::Var, varName, canName);
   }
   // Parse the return type.
-  if (!stmt->ret && in(stmt->attributes, ATTR_EXTERN_LLVM))
+  if (!stmt->ret && attr.has(Attr::LLVM))
     error("LLVM functions must have a return type");
   auto ret = transformType(stmt->ret.get());
   // Parse function body.
   StmtPtr suite = nullptr;
-  if (!in(stmt->attributes, ATTR_INTERNAL) && !in(stmt->attributes, ATTR_EXTERN_C)) {
+  std::map<string, string> captures;
+  if (!attr.has(Attr::Internal) && !attr.has(Attr::C)) {
     ctx->addBlock();
-    if (in(stmt->attributes, ATTR_EXTERN_LLVM))
+    if (attr.has(Attr::LLVM))
       suite = transformLLVMDefinition(stmt->suite->firstInBlock());
-    else
+    else {
+      if ((isEnclosedFunc || attr.has(Attr::Capture)) && !isClassMember)
+        ctx->captures.emplace_back(std::map<string, string>{});
       suite = SimplifyVisitor(ctx, preamble).transform(stmt->suite);
+      if (isEnclosedFunc) {
+        captures = ctx->captures.back();
+        ctx->captures.pop_back();
+      }
+    }
     ctx->popBlock();
   }
 
-  if (in(stmt->attributes, "traversal")) {
+  if (attr.has(Attr::Traversal)) {
     // stick on a return statement
     StmtPtr ret = N<ReturnStmt>(N<IdExpr>(ctx->travPeekBack()));
     std::vector<StmtPtr> full_body;
@@ -540,7 +583,7 @@ void SimplifyVisitor::visit(FunctionStmt *stmt) {
     suite = N<SuiteStmt>(move(full_body));
     ctx->popTrav();
   }
-  if (in(stmt->attributes, "ptree")) {
+  if (attr.has(Attr::PTree)) {
     // stick on a return statement
     StmtPtr ret = N<ReturnStmt>(N<IdExpr>(ctx->ptreePeekBack()));
     std::vector<StmtPtr> full_body;
@@ -556,28 +599,17 @@ void SimplifyVisitor::visit(FunctionStmt *stmt) {
   // Once the body is done, check if this function refers to a variable (or generic)
   // from outer scope (e.g. it's parent is not -1). If so, store the name of the
   // innermost base that was referred to in this function.
-  auto refParent =
-    ctx->bases.back().parent == -1 ? "" : ctx->bases[ctx->bases.back().parent].name;
+  auto isMethod = ctx->bases.back().attributes & FLAG_METHOD;
   ctx->bases.pop_back();
+  ctx->bases = move(oldBases);
   ctx->popBlock();
-  attributes[ATTR_MODULE] =
+  attr.module =
     format("{}{}", ctx->moduleName.status == ImportFile::STDLIB ? "std::" : "::",
            ctx->moduleName.module);
 
-  // Get the name of parent function (if there is any).
-  // This should reach parent function even if there is a class base in the middle.
-  string parentFunc;
-  for (int i = int(ctx->bases.size()) - 1; i >= 0; i--)
-    if (!ctx->bases[i].isType()) {
-      parentFunc = ctx->bases[i].name;
-      break;
-    }
-  if (!parentFunc.empty())
-    attributes[ATTR_PARENT_FUNCTION] = parentFunc;
-
   if (isClassMember) { // If this is a method...
     // ... set the enclosing class name...
-    attributes[ATTR_PARENT_CLASS] = ctx->bases.back().name;
+    attr.parentClass = ctx->bases.back().name;
     // ... add the method to class' method list ...
     ctx->cache->classes[ctx->bases.back().name].methods[stmt->name].push_back(
       {canonicalName, nullptr, ctx->cache->age});
@@ -585,36 +617,119 @@ void SimplifyVisitor::visit(FunctionStmt *stmt) {
     // generic), mark it as not static as it needs fully instantiated class to be
     // realized. For example, in class A[T]: def foo(): pass, A.foo() can be realized
     // even if T is unknown. However, def bar(): return T() cannot because it needs T
-    // (and is thus accordingly marked with ATTR_NOT_STATIC).
-    if (!ctx->bases.empty() && refParent == ctx->bases.back().name)
-      attributes[ATTR_NOT_STATIC] = "";
+    // (and is thus accordingly marked with ATTR_IS_METHOD).
+    if (isMethod)
+      attr.set(Attr::Method);
+  }
+
+  vector<CallExpr::Arg> partialArgs;
+  if (!captures.empty()) {
+    Param kw;
+    if (hasKwArg) {
+      kw = std::move(args.back());
+      args.pop_back();
+    }
+    for (auto &c : captures) {
+      args.emplace_back(Param{c.second, nullptr, nullptr});
+      partialArgs.emplace_back(CallExpr::Arg{
+          c.second, N<IdExpr>(ctx->cache->reverseIdentifierLookup[c.first])});
+    }
+    if (hasKwArg)
+      args.emplace_back(std::move(kw));
+    partialArgs.emplace_back(CallExpr::Arg{"", N<EllipsisExpr>()});
   }
   auto f = N<FunctionStmt>(canonicalName, move(ret), move(newGenerics), move(args),
-                           move(suite), move(attributes));
-  // Do not clone suite in the resultStmt: the suite will be accessed later trough the
-  // cache.
-  auto fl =
-    N<FunctionStmt>(canonicalName, clone(f->ret), clone_nop(f->generics),
-                    clone_nop(f->args), nullptr, map<string, string>(f->attributes));
-  if (!parentFunc.empty() || in(f->attributes, ATTR_FORCE_REALIZE) ||
-      in(f->attributes, ATTR_EXTERN_C))
-    resultStmt = clone(fl);
-  if (parentFunc.empty())
-    preamble->functions.push_back(move(fl));
+                           move(suite), attr);
+  // Do not clone suite: the suite will be accessed later trough the cache.
+  preamble->functions.push_back(N<FunctionStmt>(canonicalName, clone(f->ret),
+                                                clone_nop(f->generics),
+                                                clone_nop(f->args), nullptr, attr));
   // Make sure to cache this (generic) AST for later realization.
   ctx->cache->functions[canonicalName].ast = move(f);
+
+  ExprPtr finalExpr;
+  if (!captures.empty())
+    finalExpr = N<CallExpr>(N<IdExpr>(stmt->name), move(partialArgs));
+  if (isClassMember && decorators.size())
+    error("decorators cannot be applied to class methods");
+  for (int j = int(decorators.size()) - 1; j >= 0; j--) {
+    if (auto c = const_cast<CallExpr *>(decorators[j]->getCall())) {
+      auto vop = move(c->args);
+      vop.emplace(vop.begin(), CallExpr::Arg{"", finalExpr ? move(finalExpr)
+                                                           : N<IdExpr>(stmt->name)});
+      finalExpr = N<CallExpr>(move(c->expr), move(vop));
+    } else {
+      finalExpr = N<CallExpr>(move(decorators[j]),
+                              finalExpr ? move(finalExpr) : N<IdExpr>(stmt->name));
+    }
+  }
+  if (finalExpr)
+    resultStmt = transform(N<AssignStmt>(N<IdExpr>(stmt->name), move(finalExpr)));
 }
 
 void SimplifyVisitor::visit(ClassStmt *stmt) {
+  enum Magic { Init, Repr, Eq, Order, Hash, Pickle, Container, Python };
+  Attr attr = stmt->attributes;
+  vector<char> hasMagic(10, 2);
+  hasMagic[Init] = hasMagic[Pickle] = 1;
+  // @tuple(init=, repr=, eq=, order=, hash=, pickle=, container=, python=, add=,
+  // internal=...)
+  // @dataclass(...)
+  // @extend
+  for (auto &d : stmt->decorators) {
+    if (auto c = d->getCall()) {
+      if (c->expr->isId("tuple"))
+        attr.set(Attr::Tuple);
+      else if (!c->expr->isId("dataclass"))
+        error("invalid class attribute");
+      else if (attr.has(Attr::Tuple))
+        error("class already marked as tuple");
+      for (auto &a : c->args) {
+        auto b = CAST(a.value, BoolExpr);
+        if (!b)
+          error("expected static boolean");
+        auto val = b->value;
+        if (a.name == "init")
+          hasMagic[Init] = val;
+        else if (a.name == "repr")
+          hasMagic[Repr] = val;
+        else if (a.name == "eq")
+          hasMagic[Eq] = val;
+        else if (a.name == "order")
+          hasMagic[Order] = val;
+        else if (a.name == "hash")
+          hasMagic[Hash] = val;
+        else if (a.name == "pickle")
+          hasMagic[Pickle] = val;
+        else if (a.name == "python")
+          hasMagic[Python] = val;
+        else if (a.name == "container")
+          hasMagic[Container] = val;
+        else
+          error("invalid decorator argument");
+      }
+    } else if (d->isId("tuple")) {
+      if (attr.has(Attr::Tuple))
+        error("class already marked as tuple");
+      attr.set(Attr::Tuple);
+    } else if (d->isId("extend")) {
+      attr.set(Attr::Extend);
+      if (stmt->decorators.size() != 1)
+        error("extend cannot be combined with other decorators");
+      if (!ctx->bases.empty())
+        error("extend is only allowed at the toplevel");
+    } else if (d->isId("internal")) {
+      attr.set(Attr::Internal);
+    }
+  }
+  for (int i = 1; i < hasMagic.size(); i++)
+    if (hasMagic[i] == 2)
+      hasMagic[i] = attr.has(Attr::Tuple) ? 1 : 0;
+
   // Extensions (@extend) cases are handled bit differently
   // (no auto method-generation, no arguments etc.)
-  bool extension = in(stmt->attributes, ATTR_EXTEND);
-  if (extension && stmt->attributes.size() != 1)
-    error("extend cannot be combined with other attributes");
-  if (extension && !ctx->bases.empty())
-    error("extend is only allowed at the toplevel");
-
-  bool isRecord = stmt->isRecord(); // does it have @tuple attribute
+  bool extension = attr.has(Attr::Extend);
+  bool isRecord = attr.has(Attr::Tuple); // does it have @tuple attribute
 
   // Special name handling is needed because of nested classes.
   string name = stmt->name;
@@ -632,7 +747,7 @@ void SimplifyVisitor::visit(ClassStmt *stmt) {
     make_shared<SimplifyItem>(SimplifyItem::Type, "", "", ctx->isToplevel(), false);
   if (!extension) {
     classItem->canonicalName = canonicalName =
-      ctx->generateCanonicalName(name, !in(stmt->attributes, "internal"));
+        ctx->generateCanonicalName(name, !attr.has(Attr::Internal));
     // Reference types are added to the context at this stage.
     // Record types (tuples) are added after parsing class arguments to prevent
     // recursive record types (that are allowed for reference types).
@@ -659,7 +774,7 @@ void SimplifyVisitor::visit(ClassStmt *stmt) {
   auto oldBases = move(ctx->bases);
   ctx->bases = vector<SimplifyContext::Base>();
   ctx->bases.emplace_back(SimplifyContext::Base(canonicalName));
-  ctx->bases.back().ast = N<IdExpr>(name);
+  ctx->bases.back().ast = make_shared<IdExpr>(name);
 
   // Add generics, if any, to the context.
   ctx->addBlock();
@@ -682,7 +797,8 @@ void SimplifyVisitor::visit(ClassStmt *stmt) {
     newGenerics.emplace_back(
       Param{genName, transformType(originalAST->generics[gi].type.get()), nullptr});
   }
-  ctx->bases.back().ast = N<IndexExpr>(N<IdExpr>(name), N<TupleExpr>(move(genAst)));
+  ctx->bases.back().ast =
+      make_shared<IndexExpr>(N<IdExpr>(name), N<TupleExpr>(move(genAst)));
 
   // Parse class members (arguments) and methods.
   vector<Param> args;
@@ -706,48 +822,48 @@ void SimplifyVisitor::visit(ClassStmt *stmt) {
       ctx->cache->imports[STDLIB_IMPORT].ctx->addToplevel(canonicalName, classItem);
     }
     // Create a cached AST.
-    auto attributes = stmt->attributes;
-    attributes[ATTR_MODULE] =
+    attr.module =
       format("{}{}", ctx->moduleName.status == ImportFile::STDLIB ? "std::" : "::",
              ctx->moduleName.module);
     ctx->cache->classes[canonicalName].ast =
       N<ClassStmt>(canonicalName, move(newGenerics), move(args),
-                   N<SuiteStmt>(vector<StmtPtr>()), move(attributes));
+                     N<SuiteStmt>(vector<StmtPtr>()), attr);
     vector<StmtPtr> fns;
-    ExprPtr codeType = clone(ctx->bases.back().ast);
+    ExprPtr codeType = ctx->bases.back().ast->clone();
     vector<string> magics{};
     // Internal classes do not get any auto-generated members.
-    if (!in(stmt->attributes, ATTR_INTERNAL)) {
+    if (!attr.has(Attr::Internal)) {
       // Prepare a list of magics that are to be auto-generated.
-      if (!isRecord) {
-        magics = {"new", "init", "raw"};
-        if (in(stmt->attributes, ATTR_TOTAL_ORDERING))
-          for (auto &i : {"eq", "ne", "lt", "gt", "le", "ge"})
-            magics.emplace_back(i);
-        if (!in(stmt->attributes, ATTR_NO(ATTR_PICKLE)))
-          for (auto &i : {"pickle", "unpickle"})
-            magics.emplace_back(i);
-      } else {
-        magics = {"new", "str", "len", "hash"};
-        if (!startswith(stmt->name, TYPE_TUPLE) &&
-            !in(stmt->attributes, ATTR_NO(ATTR_DICT)))
-          magics.emplace_back("dict");
-        if (!in(stmt->attributes, ATTR_NO(ATTR_TOTAL_ORDERING)))
-          for (auto &i : {"eq", "ne", "lt", "gt", "le", "ge"})
-            magics.emplace_back(i);
-        if (!in(stmt->attributes, ATTR_NO(ATTR_PICKLE)))
-          for (auto &i : {"pickle", "unpickle"})
-            magics.emplace_back(i);
-        if (!in(stmt->attributes, ATTR_NO(ATTR_CONTAINER)))
-          for (auto &i : {"iter", "getitem"})
-            magics.emplace_back(i);
-        if (!in(stmt->attributes, ATTR_NO(ATTR_CONTAINER)) &&
-            startswith(stmt->name, TYPE_TUPLE))
-          magics.emplace_back("contains");
-        if (!in(stmt->attributes, ATTR_NO(ATTR_PYTHON)))
-          for (auto &i : {"to_py", "from_py"})
-            magics.emplace_back(i);
-      }
+      if (isRecord)
+        magics = {"len", "hash"};
+      else
+        magics = {"new", "raw"};
+      if (hasMagic[Init])
+        magics.emplace_back(isRecord ? "new" : "init");
+      if (hasMagic[Eq])
+        for (auto &i : {"eq", "ne"})
+          magics.emplace_back(i);
+      if (hasMagic[Order])
+        for (auto &i : {"lt", "gt", "le", "ge"})
+          magics.emplace_back(i);
+      if (hasMagic[Pickle])
+        for (auto &i : {"pickle", "unpickle"})
+          magics.emplace_back(i);
+      if (hasMagic[Repr])
+        magics.emplace_back("str");
+      if (hasMagic[Container])
+        for (auto &i : {"iter", "getitem"})
+          magics.emplace_back(i);
+      if (hasMagic[Python])
+        for (auto &i : {"to_py", "from_py"})
+          magics.emplace_back(i);
+
+      if (hasMagic[Container] && startswith(stmt->name, TYPE_TUPLE))
+        magics.emplace_back("contains");
+      if (!startswith(stmt->name, TYPE_TUPLE))
+        magics.emplace_back("dict");
+      if (startswith(stmt->name, TYPE_TUPLE))
+        magics.emplace_back("add");
     }
     // Codegen default magic methods and add them to the final AST.
     for (auto &m : magics)
@@ -768,17 +884,19 @@ void SimplifyVisitor::visit(ClassStmt *stmt) {
     preamble->types.push_back(clone(ctx->cache->classes[canonicalName].ast));
     c->suite = clone(suite);
   }
+  vector<StmtPtr> stmts;
+  stmts.emplace_back(N<ClassStmt>(canonicalName, clone_nop(c->generics),
+                                  vector<Param>{}, move(suite), Attr({Attr::Extend})));
   // Parse nested classes
   for (auto sp : getClassMethods(stmt->suite.get()))
     if (sp && sp->getClass()) {
       // Add dummy base to fix nested class' name.
       ctx->bases.emplace_back(SimplifyContext::Base(canonicalName));
-      ctx->bases.back().ast = N<IdExpr>(name);
-      prependStmts->push_back(transform(sp));
+      ctx->bases.back().ast = make_shared<IdExpr>(name);
+      stmts.emplace_back(transform(sp));
       ctx->bases.pop_back();
     }
-  resultStmt = N<ClassStmt>(canonicalName, clone_nop(c->generics), vector<Param>{},
-                            move(suite), vector<string>{ATTR_EXTEND});
+  resultStmt = N<SuiteStmt>(move(stmts));
 }
 
 void SimplifyVisitor::visit(CustomStmt *stmt) {
@@ -893,10 +1011,11 @@ StmtPtr SimplifyVisitor::transformAssignment(const Expr *lhs, const Expr *rhs,
     // Function and type aliases are not normal assignments. They are treated like a
     // simple context renames.
     // Note: x = Ptr[byte] is not a simple alias, and is handled separately below.
-    if (rhs && rhs->getId()) {
-      auto val = ctx->find(rhs->getId()->value);
+    auto r = transform(rhs, true);
+    if (r && r->getId()) {
+      auto val = ctx->find(r->getId()->value);
       if (!val)
-        error("cannot find '{}'", rhs->getId()->value);
+        error("cannot find '{}'", r->getId()->value);
       if (val->isType() || val->isFunc()) {
         ctx->add(e->value, val);
         return nullptr;
@@ -906,7 +1025,6 @@ StmtPtr SimplifyVisitor::transformAssignment(const Expr *lhs, const Expr *rhs,
     // Generate new canonical variable name for this assignment and use it afterwards.
     auto canonical = ctx->generateCanonicalName(e->value);
     auto l = N<IdExpr>(canonical);
-    auto r = transform(rhs, true);
     bool global = ctx->isToplevel();
     // ctx->moduleName != MODULE_MAIN;
     // ⚠️ TODO: should we make __main__ top-level variables NOT global by default?
@@ -967,7 +1085,8 @@ void SimplifyVisitor::unpackAssignments(const Expr *lhs, const Expr *rhs,
     // Recursively process the assignment (as we can have cases like (a, (b, c)) = d).
     unpackAssignments(leftSide[st], rightSide.get(), stmts, shadow, mustExist);
   }
-  // If there is a StarExpr, process it and the remaining assignments after it (if any).
+  // If there is a StarExpr, process it and the remaining assignments after it (if
+  // any).
   if (st < leftSide.size() && leftSide[st]->getStar()) {
     // StarExpr becomes SliceExpr: in (a, *b, c) = d, b is d[1:-2]
     auto rightSide = Nx<IndexExpr>(
@@ -981,8 +1100,8 @@ void SimplifyVisitor::unpackAssignments(const Expr *lhs, const Expr *rhs,
     unpackAssignments(leftSide[st]->getStar()->what.get(), rightSide.get(), stmts,
                       shadow, mustExist);
     st += 1;
-    // Keep going till the very end. Remaining assignments use negative indices (-1, -2
-    // etc) as we are not sure how big is StarExpr.
+    // Keep going till the very end. Remaining assignments use negative indices (-1,
+    // -2 etc) as we are not sure how big is StarExpr.
     for (; st < leftSide.size(); st++) {
       if (leftSide[st]->getStar())
         error(leftSide[st], "multiple unpack expressions");
@@ -1079,9 +1198,8 @@ StmtPtr SimplifyVisitor::transformCImport(const string &name, const vector<Param
     fnArgs.emplace_back(Param{args[ai].name.empty() ? format("a{}", ai) : args[ai].name,
                               args[ai].type->clone(), nullptr});
   }
-  auto f =
-      N<FunctionStmt>(name, ret ? ret->clone() : N<IdExpr>("void"), vector<Param>(),
-                      move(fnArgs), nullptr, vector<string>{ATTR_EXTERN_C});
+  auto f = N<FunctionStmt>(name, ret ? ret->clone() : N<IdExpr>("void"),
+                           vector<Param>(), move(fnArgs), nullptr, Attr({Attr::C}));
   StmtPtr tf = transform(f.get()); // Already in the preamble
   if (!altName.empty())
     ctx->add(altName, ctx->find(name));
@@ -1126,9 +1244,9 @@ StmtPtr SimplifyVisitor::transformCDLLImport(const Expr *dylib, const string &na
   // Prepare final FunctionStmt and transform it
   for (int i = 0; i < args.size(); i++)
     params.emplace_back(Param{format("a{}", i), clone(args[i].type)});
-  return transform(N<FunctionStmt>(
-    altName.empty() ? name : altName, ret ? ret->clone() : nullptr, vector<Param>(),
-    move(params), N<SuiteStmt>(move(stmts)), vector<string>()));
+  return transform(N<FunctionStmt>(altName.empty() ? name : altName,
+                                   ret ? ret->clone() : nullptr, vector<Param>(),
+                                   move(params), N<SuiteStmt>(move(stmts))));
 }
 
 StmtPtr SimplifyVisitor::transformPythonImport(const Expr *what,
@@ -1183,7 +1301,7 @@ StmtPtr SimplifyVisitor::transformPythonImport(const Expr *what,
   // Return a wrapper function
   return transform(N<FunctionStmt>(
     altName.empty() ? name : altName, ret ? ret->clone() : nullptr, vector<Param>(),
-    move(params), N<SuiteStmt>(move(call), move(retStmt)), vector<string>()));
+      move(params), N<SuiteStmt>(move(call), move(retStmt))));
 }
 
 void SimplifyVisitor::transformNewImport(const ImportFile &file) {
@@ -1197,9 +1315,9 @@ void SimplifyVisitor::transformNewImport(const ImportFile &file) {
   StmtPtr sf = parseFile(file.path);
   auto sn = SimplifyVisitor(ictx, preamble).transform(sf);
 
-  // If we are loading standard library, we won't wrap imports in functions as we assume
-  // that standard library has no recursive imports. We will just append the top-level
-  // statements as-is.
+  // If we are loading standard library, we won't wrap imports in functions as we
+  // assume that standard library has no recursive imports. We will just append the
+  // top-level statements as-is.
   if (ctx->isStdlibLoading) {
     resultStmt = N<SuiteStmt>(move(sn), true);
   } else {
@@ -1207,7 +1325,8 @@ void SimplifyVisitor::transformNewImport(const ImportFile &file) {
     string importVar = import->second.importVar =
                          ctx->cache->getTemporaryVar("import", '.'),
       importDoneVar;
-    // import_done = False (global variable that indicates if an import has been loaded)
+    // import_done = False (global variable that indicates if an import has been
+    // loaded)
     preamble->globals.push_back(N<AssignStmt>(
       N<IdExpr>(importDoneVar = importVar + "_done"), N<BoolExpr>(false)));
     ctx->cache->globals.insert(importDoneVar);
@@ -1249,10 +1368,10 @@ void SimplifyVisitor::transformNewImport(const ImportFile &file) {
     // type-checking even if it is not called.
     ctx->cache->functions[importVar].ast =
       N<FunctionStmt>(importVar, nullptr, vector<Param>{}, vector<Param>{},
-                      N<SuiteStmt>(move(stmts)), vector<string>{ATTR_FORCE_REALIZE});
+                        N<SuiteStmt>(move(stmts)), Attr({Attr::ForceRealize}));
     preamble->functions.push_back(N<FunctionStmt>(importVar, nullptr, vector<Param>{},
                                                   vector<Param>{}, nullptr,
-                                                  vector<string>{ATTR_FORCE_REALIZE}));
+                                                  Attr({Attr::ForceRealize})));
   }
 }
 
@@ -1322,7 +1441,7 @@ StmtPtr SimplifyVisitor::codegenMagic(const string &op, const Expr *typExpr,
   ExprPtr ret;
   vector<Param> fargs;
   vector<StmtPtr> stmts;
-  vector<string> attrs;
+  Attr attr;
   if (op == "new") {
     // Classes: @internal def __new__() -> T
     // Tuples: @internal def __new__(a1: T1, ..., aN: TN) -> T
@@ -1332,7 +1451,7 @@ StmtPtr SimplifyVisitor::codegenMagic(const string &op, const Expr *typExpr,
         fargs.emplace_back(
           Param{a.name, clone(a.type),
                 a.deflt ? clone(a.deflt) : N<CallExpr>(clone(a.type))});
-    attrs.emplace_back(ATTR_INTERNAL);
+    attr.set(Attr::Internal);
   } else if (op == "init") {
     // Classes: def __init__(self: T, a1: T1, ..., aN: TN) -> void:
     //            self.aI = aI ...
@@ -1369,9 +1488,12 @@ StmtPtr SimplifyVisitor::codegenMagic(const string &op, const Expr *typExpr,
     //           yield self.aI ...
     //         (error during a realizeFunc() method if T is a heterogeneous tuple)
     fargs.emplace_back(Param{"self", typExpr->clone()});
-    ret = N<IndexExpr>(I("Generator"), !args.empty() ? clone(args[0].type) : I("void"));
+    ret = N<IndexExpr>(I("Generator"), !args.empty() ? clone(args[0].type) : I("int"));
     for (auto &a : args)
       stmts.emplace_back(N<YieldStmt>(N<DotExpr>(N<IdExpr>("self"), a.name)));
+    if (args.empty()) // Hack for empty tuple: yield from List[int]()
+      stmts.emplace_back(
+          N<YieldFromStmt>(N<CallExpr>(N<IndexExpr>(I("List"), I("int")))));
   } else if (op == "contains") {
     // Tuples: def __contains__(self: T, what) -> bool:
     //            if isinstance(what, T1): if what == self.a1: return True ...
@@ -1584,17 +1706,25 @@ StmtPtr SimplifyVisitor::codegenMagic(const string &op, const Expr *typExpr,
     stmts.emplace_back(
       N<AssignStmt>(I("d"), N<CallExpr>(N<IndexExpr>(I("List"), I("str")),
                                         N<IntExpr>(args.size()))));
-    for (int ai = 0; ai < args.size(); ai++)
+    for (auto &a : args)
       stmts.push_back(N<ExprStmt>(
-        N<CallExpr>(N<DotExpr>(I("d"), "append"), N<StringExpr>(args[ai].name))));
+          N<CallExpr>(N<DotExpr>(I("d"), "append"), N<StringExpr>(a.name))));
     stmts.emplace_back(N<ReturnStmt>(I("d")));
+  } else if (op == "add") {
+    // def __add__(self, tup):
+    //   return (*self, *t)
+    fargs.emplace_back(Param{"self", typExpr->clone()});
+    fargs.emplace_back(Param{"tup", nullptr});
+    vector<ExprPtr> ta;
+    ta.emplace_back(N<StarExpr>(N<IdExpr>("self")));
+    ta.emplace_back(N<StarExpr>(N<IdExpr>("tup")));
+    stmts.emplace_back(N<ReturnStmt>(N<TupleExpr>(move(ta))));
   } else {
     seqassert(false, "invalid magic {}", op);
   }
 #undef I
-  auto t =
-    make_unique<FunctionStmt>(format("__{}__", op), move(ret), vector<Param>{},
-                              move(fargs), N<SuiteStmt>(move(stmts)), move(attrs));
+  auto t = make_unique<FunctionStmt>(format("__{}__", op), move(ret), vector<Param>{},
+                                     move(fargs), N<SuiteStmt>(move(stmts)), attr);
   t->setSrcInfo(ctx->cache->generateSrcInfo());
   return t;
 }

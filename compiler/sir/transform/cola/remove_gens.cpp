@@ -5,6 +5,7 @@
 #include "remove_gens.h"
 #include "sir/util/irtools.h"
 #include "sir/util/cloning.h"
+#include "util/common.h"
 
 namespace seq {
 namespace ir {
@@ -15,7 +16,7 @@ using namespace std;
 
 bool is_next_function(Value *v) {
   if (v->is<CallInstr>()) {
-    auto f = v->as<CallInstr>()->getFunc();
+    auto f = v->as<CallInstr>()->getCallee();
     string fname = cast<BodiedFunc>(util::getFunc(f))->getUnmangledName();
     return fname == "next" || fname == "__next__";
   }
@@ -24,7 +25,7 @@ bool is_next_function(Value *v) {
 
 bool is_iter_function(Value *v) {
   if (v->is<CallInstr>()) {
-    auto f = v->as<CallInstr>()->getFunc();
+    auto f = v->as<CallInstr>()->getCallee();
     string fname = cast<BodiedFunc>(util::getFunc(f))->getUnmangledName();
     return fname == "iter" || fname == "__iter__";
   }
@@ -33,7 +34,7 @@ bool is_iter_function(Value *v) {
 
 bool is_scan_function(Value *v) {
   if (v->is<CallInstr>()) {
-    auto f = v->as<CallInstr>()->getFunc();
+    auto f = v->as<CallInstr>()->getCallee();
     string fname = cast<BodiedFunc>(util::getFunc(f))->getUnmangledName();
     return fname == "scan";
   }
@@ -82,8 +83,22 @@ void RemoveGenerators::handle(seq::ir::ForFlow *flow) {
     // see if it is a block or view
     auto c = flow->getIter()->as<CallInstr>();
 
-    auto *func = cast<BodiedFunc>(util::getFunc(c->getFunc()));
-    std::string type_name = get_class_name(func->getName());
+    auto *func = cast<BodiedFunc>(util::getFunc(c->getCallee()));
+
+//    std::cerr << func->getUnmangledName() << std::endl;
+//    std::string type_name = get_class_name(func->getName());
+    // this is so hacky
+    auto spl = ast::split(func->getName(), '.');
+    int i = 0;
+    for (auto &s : spl) {
+      s = ast::split(s, '[')[0];
+      if (s == "__iter__" || s == "iter") {
+        break;
+      }
+      i++;
+    }
+    seqassert(i > 0, "didn't find iter");
+    string type_name = spl[i-1];
 
     auto arg = c->front();
     if (type_name == "Block" || type_name == "View") {

@@ -9,6 +9,7 @@
 #include "util/iterators.h"
 #include "util/visitor.h"
 
+#include "util/common.h"
 #include "util/fmt/format.h"
 #include "util/fmt/ostream.h"
 
@@ -87,10 +88,10 @@ public:
 
   /// Accepts visitors.
   /// @param v the visitor
-  virtual void accept(util::IRVisitor &v) = 0;
+  virtual void accept(util::Visitor &v) = 0;
   /// Accepts visitors.
   /// @param v the visitor
-  virtual void accept(util::ConstIRVisitor &v) const = 0;
+  virtual void accept(util::ConstVisitor &v) const = 0;
 
   /// Sets an attribute
   /// @param the attribute key
@@ -179,11 +180,7 @@ public:
   /// @param m the new module
   void setModule(Module *m) { getActual()->module = m; }
 
-  friend std::ostream &operator<<(std::ostream &os, const Node &a) {
-    if (a.hasReplacement())
-      return os << *a.getActual();
-    return a.doFormat(os);
-  }
+  friend std::ostream &operator<<(std::ostream &os, const Node &a);
 
   bool hasReplacement() const { return replacement != nullptr; }
 
@@ -238,8 +235,6 @@ public:
 private:
   Node *getActual() { return replacement ? replacement : this; }
   const Node *getActual() const { return replacement ? replacement : this; }
-
-  virtual std::ostream &doFormat(std::ostream &os) const = 0;
 };
 
 template <typename Derived, typename Parent> class AcceptorExtend : public Parent {
@@ -256,14 +251,14 @@ public:
     return other == nodeId() || Parent::isConvertible(other);
   }
 
-  void accept(util::IRVisitor &v) {
+  void accept(util::Visitor &v) {
     if (Node::hasReplacement())
       Node::getActual()->accept(v);
     else
       v.visit(static_cast<Derived *>(this));
   }
 
-  void accept(util::ConstIRVisitor &v) const {
+  void accept(util::ConstVisitor &v) const {
     if (Node::hasReplacement())
       Node::getActual()->accept(v);
     else
@@ -298,7 +293,7 @@ public:
   /// Lazily replaces all instances of the node.
   /// @param v the new value
   void replaceAll(Derived *v) {
-    assert(replaceable);
+    seqassert(replaceable, "node {} not replaceable", *v);
     Node::replacement = v;
   }
 

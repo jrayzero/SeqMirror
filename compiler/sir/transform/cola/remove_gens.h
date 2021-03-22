@@ -12,7 +12,7 @@ namespace ir {
 namespace transform {
 namespace cola {
 
-class RemoveGenerators : public LambdaValuePass {
+class RemoveGenerators : public OperatorPass {
 
   void handle(ForFlow *) override;
 

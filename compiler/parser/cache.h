@@ -26,26 +26,8 @@
 #define MAIN_IMPORT ""
 #define STDLIB_IMPORT ":stdlib:"
 #define STDLIB_INTERNAL_MODULE "internal"
-#define ATTR_INTERNAL "internal"
-#define ATTR_TUPLE "tuple"
-#define ATTR_TRAIT "trait"
-#define ATTR_ATOMIC "atomic"
-#define ATTR_TEST "test"
-#define ATTR_EXTERN_C ".c"
 #define ATTR_EXTERN_LLVM "llvm"
-#define ATTR_EXTERN_PYTHON "python"
-#define ATTR_FORCE_REALIZE "force_realize"
-#define ATTR_PARENT_FUNCTION ".parentFunc"
-#define ATTR_PARENT_CLASS ".parentClass"
-#define ATTR_NOT_STATIC ".notStatic"
-#define ATTR_TOTAL_ORDERING "total_ordering"
-#define ATTR_CONTAINER "container"
-#define ATTR_PYTHON "python"
-#define ATTR_PICKLE "pickle"
 #define ATTR_EXTEND "extend"
-#define ATTR_DICT "dict"
-#define ATTR_MODULE ".module"
-#define ATTR_NO(x) ("no_" x)
 
 #define TYPE_TUPLE "Tuple.N"
 #define TYPE_KWTUPLE "KwTuple.N"
@@ -56,6 +38,11 @@
 #define TYPE_EXCHEADER "std.internal.types.error.ExcHeader"
 #define TYPE_SLICE "std.internal.types.slice.Slice"
 #define FN_UNWRAP "std.internal.types.optional.unwrap"
+#define VAR_ARGV "__argv__"
+
+#define FLAG_METHOD 1
+#define FLAG_ATOMIC 2
+#define FLAG_TEST 3
 
 namespace seq {
 namespace ast {
@@ -63,7 +50,7 @@ namespace ast {
 /// Forward declarations
 struct SimplifyContext;
 struct TypeContext;
-struct CodegenContext;
+struct TranslateContext;
 
 /**
  * Cache encapsulation that holds data structures shared across various transformation
@@ -159,7 +146,7 @@ struct Cache : public std::enable_shared_from_this<Cache> {
     };
     /// Realization lookup table that maps a realized class name to the corresponding
     /// ClassRealization instance.
-    unordered_map<string, ClassRealization> realizations;
+    unordered_map<string, shared_ptr<ClassRealization>> realizations;
 
     Class() : ast(nullptr) {}
   };
@@ -183,7 +170,7 @@ struct Cache : public std::enable_shared_from_this<Cache> {
     };
     /// Realization lookup table that maps a realized function name to the corresponding
     /// FunctionRealization instance.
-    unordered_map<string, FunctionRealization> realizations;
+    unordered_map<string, shared_ptr<FunctionRealization>> realizations;
 
     Function() : ast(nullptr) {}
   };
@@ -193,7 +180,9 @@ struct Cache : public std::enable_shared_from_this<Cache> {
 
   /// Pointer to the later contexts needed for IR API access.
   shared_ptr<TypeContext> typeCtx;
-  shared_ptr<CodegenContext> codegenCtx;
+  shared_ptr<TranslateContext> codegenCtx;
+  /// Set of function realizations that are to be translated to IR.
+  set<std::pair<string, string>> pendingRealizations;
 
 public:
   explicit Cache(string argv0 = "");

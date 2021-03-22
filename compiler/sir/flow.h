@@ -63,9 +63,6 @@ public:
   /// @return the iterator beyond the removed flow or instruction
   template <typename It> auto erase(It pos) { return series.erase(pos); }
 
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
-
 protected:
   std::vector<Value *> doGetUsedValues() const override {
     return std::vector<Value *>(series.begin(), series.end());
@@ -106,9 +103,6 @@ public:
   /// Sets the body.
   /// @param f the new value
   void setBody(Flow *f) { body = f; }
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 
 protected:
   std::vector<Value *> doGetUsedValues() const override { return {cond, body}; }
@@ -162,9 +156,6 @@ public:
   /// Sets the var.
   /// @param c the new var
   void setVar(Var *c) { var = c; }
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 
 protected:
   std::vector<Value *> doGetUsedValues() const override { return {iter, body}; }
@@ -220,9 +211,6 @@ public:
   /// Sets the condition.
   /// @param c the new condition
   void setCond(Value *c) { cond = c; }
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 
 protected:
   std::vector<Value *> doGetUsedValues() const override;
@@ -343,9 +331,6 @@ public:
   /// @return the iterator beyond the erased catch
   template <typename It> auto erase(It pos) { return catches.erase(pos); }
 
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
-
 protected:
   std::vector<Value *> doGetUsedValues() const override;
   int doReplaceUsedValue(int id, Value *newValue) override;
@@ -369,7 +354,7 @@ public:
   class Stage {
   private:
     /// the function being (partially) called in this stage
-    Value *func;
+    Value *callee;
     /// the function arguments, where null represents where
     /// previous pipeline output should go
     std::vector<Value *> args;
@@ -380,12 +365,13 @@ public:
 
   public:
     /// Constructs a pipeline stage.
-    /// @param func the function being called
+    /// @param callee the function being called
     /// @param args call arguments, with exactly one null entry
     /// @param generator whether this stage is a generator stage
     /// @param parallel whether this stage is parallel
-    Stage(Value *func, std::vector<Value *> args, bool generator, bool parallel)
-        : func(func), args(std::move(args)), generator(generator), parallel(parallel) {}
+    Stage(Value *callee, std::vector<Value *> args, bool generator, bool parallel)
+        : callee(callee), args(std::move(args)), generator(generator),
+          parallel(parallel) {}
 
     /// @return an iterator to the first argument
     auto begin() { return args.begin(); }
@@ -419,10 +405,13 @@ public:
     /// @return the iterator beyond the removed argument
     template <typename It> auto erase(It pos) { return args.erase(pos); }
 
+    /// Sets the called function.
+    /// @param c the callee
+    void setCallee(Value *c) { callee = c; }
     /// @return the called function
-    Value *getFunc() { return func; }
+    Value *getCallee() { return callee; }
     /// @return the called function
-    const Value *getFunc() const { return func; }
+    const Value *getCallee() const { return callee; }
 
     /// Sets the stage's generator flag.
     /// @param v the new value
@@ -492,9 +481,6 @@ public:
   template <typename... Args> void emplace_back(Args &&... args) {
     stages.emplace_back(std::forward<Args>(args)...);
   }
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 
 protected:
   std::vector<Value *> doGetUsedValues() const override;

@@ -7,7 +7,7 @@ namespace seq {
 namespace ir {
 namespace util {
 
-class CloneVisitor : public ConstIRVisitor {
+class CloneVisitor : public ConstVisitor {
 private:
   /// the clone context
   std::unordered_map<int, Node *> ctx;
@@ -140,7 +140,7 @@ public:
     std::vector<Value *> args;
     for (const auto *a : other)
       args.push_back(clone(a));
-    return {clone(other.getFunc()), std::move(args), other.isGenerator(),
+    return {clone(other.getCallee()), std::move(args), other.isGenerator(),
             other.isParallel()};
   }
 

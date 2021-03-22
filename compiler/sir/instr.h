@@ -65,9 +65,6 @@ protected:
 
   std::vector<Var *> doGetUsedVariables() const override { return {lhs}; }
   int doReplaceUsedVariable(int id, Var *newVar) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Instr representing loading the field of a value.
@@ -106,9 +103,6 @@ protected:
   types::Type *doGetType() const override;
   std::vector<Value *> doGetUsedValues() const override { return {val}; }
   int doReplaceUsedValue(int id, Value *newValue) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Instr representing setting the field of a value.
@@ -158,16 +152,13 @@ protected:
   types::Type *doGetType() const override { return lhs->getType(); }
   std::vector<Value *> doGetUsedValues() const override { return {lhs, rhs}; }
   int doReplaceUsedValue(int id, Value *newValue) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Instr representing calling a function.
 class CallInstr : public AcceptorExtend<CallInstr, Instr> {
 private:
   /// the function
-  Value *func;
+  Value *callee;
   /// the arguments
   std::vector<Value *> args;
 
@@ -175,25 +166,25 @@ public:
   static const char NodeId;
 
   /// Constructs a call instruction.
-  /// @param func the function
+  /// @param callee the function
   /// @param args the arguments
   /// @param name the instruction's name
-  CallInstr(Value *func, std::vector<Value *> args, std::string name = "")
-      : AcceptorExtend(std::move(name)), func(func), args(std::move(args)) {}
+  CallInstr(Value *callee, std::vector<Value *> args, std::string name = "")
+      : AcceptorExtend(std::move(name)), callee(callee), args(std::move(args)) {}
 
   /// Constructs a call instruction with no arguments.
-  /// @param func the function
+  /// @param callee the function
   /// @param name the instruction's name
-  explicit CallInstr(Value *func, std::string name = "")
-      : CallInstr(func, {}, std::move(name)) {}
+  explicit CallInstr(Value *callee, std::string name = "")
+      : CallInstr(callee, {}, std::move(name)) {}
 
-  /// @return the func
-  Value *getFunc() { return func; }
-  /// @return the func
-  const Value *getFunc() const { return func; }
-  /// Sets the func.
-  /// @param f the new value
-  void setFunc(Value *f) { func = f; }
+  /// @return the callee
+  Value *getCallee() { return callee; }
+  /// @return the callee
+  const Value *getCallee() const { return callee; }
+  /// Sets the callee.
+  /// @param c the new value
+  void setCallee(Value *c) { callee = c; }
 
   /// @return an iterator to the first argument
   auto begin() { return args.begin(); }
@@ -233,9 +224,6 @@ protected:
   types::Type *doGetType() const override;
   std::vector<Value *> doGetUsedValues() const override;
   int doReplaceUsedValue(int id, Value *newValue) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Instr representing allocating an array on the stack.
@@ -274,9 +262,6 @@ protected:
   types::Type *doGetType() const override { return arrayType; }
   std::vector<types::Type *> doGetUsedTypes() const override { return {arrayType}; }
   int doReplaceUsedType(const std::string &name, types::Type *newType) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Instr representing getting information about a type.
@@ -318,9 +303,6 @@ protected:
   types::Type *doGetType() const override;
   std::vector<types::Type *> doGetUsedTypes() const override { return {inspectType}; }
   int doReplaceUsedType(const std::string &name, types::Type *newType) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Instr representing a Python yield expression.
@@ -355,9 +337,6 @@ protected:
   types::Type *doGetType() const override { return type; }
   std::vector<types::Type *> doGetUsedTypes() const override { return {type}; }
   int doReplaceUsedType(const std::string &name, types::Type *newType) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Instr representing a ternary operator.
@@ -412,9 +391,6 @@ protected:
     return {cond, trueValue, falseValue};
   }
   int doReplaceUsedValue(int id, Value *newValue) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Base for control flow instructions
@@ -430,9 +406,6 @@ public:
   static const char NodeId;
 
   using AcceptorExtend::AcceptorExtend;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Instr representing a continue statement.
@@ -441,9 +414,6 @@ public:
   static const char NodeId;
 
   using AcceptorExtend::AcceptorExtend;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Instr representing a return statement.
@@ -469,9 +439,6 @@ public:
 protected:
   std::vector<Value *> doGetUsedValues() const override;
   int doReplaceUsedValue(int id, Value *newValue) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 class YieldInstr : public AcceptorExtend<YieldInstr, Instr> {
@@ -504,9 +471,6 @@ public:
 protected:
   std::vector<Value *> doGetUsedValues() const override;
   int doReplaceUsedValue(int id, Value *newValue) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 class ThrowInstr : public AcceptorExtend<ThrowInstr, Instr> {
@@ -531,9 +495,6 @@ public:
 protected:
   std::vector<Value *> doGetUsedValues() const override;
   int doReplaceUsedValue(int id, Value *newValue) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 /// Instr that contains a flow and value.
@@ -574,9 +535,6 @@ protected:
   types::Type *doGetType() const override { return val->getType(); }
   std::vector<Value *> doGetUsedValues() const override { return {flow, val}; }
   int doReplaceUsedValue(int id, Value *newValue) override;
-
-private:
-  std::ostream &doFormat(std::ostream &os) const override;
 };
 
 } // namespace ir

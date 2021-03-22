@@ -66,8 +66,8 @@ StmtPtr SimplifyVisitor::apply(shared_ptr<Cache> cache, const StmtPtr &node,
       auto canonical = stdlib->generateCanonicalName(name);
       stdlib->add(SimplifyItem::Type, name, canonical, true);
       // Generate an AST for each POD type. All of them are tuples.
-      cache->classes[canonical].ast = make_unique<ClassStmt>(
-          canonical, vector<Param>(), vector<Param>(), nullptr, vector<string>{});
+      cache->classes[canonical].ast =
+          make_unique<ClassStmt>(canonical, vector<Param>(), vector<Param>(), nullptr);
       preamble->types.emplace_back(clone(cache->classes[canonical].ast));
     }
     // Add simple POD types to the preamble (these types are defined in LLVM and we
@@ -78,11 +78,12 @@ StmtPtr SimplifyVisitor::apply(shared_ptr<Cache> cache, const StmtPtr &node,
       // Generate an AST for each POD type. All of them are tuples.
       cache->classes[canonical].ast =
           make_unique<ClassStmt>(canonical, vector<Param>(), vector<Param>(), nullptr,
-                                 vector<string>{ATTR_INTERNAL, ATTR_TUPLE});
+                                 Attr({Attr::Internal, Attr::Tuple}));
       preamble->types.emplace_back(clone(cache->classes[canonical].ast));
     }
     // Add generic POD types to the preamble
-    for (auto &name : vector<string>{"Ptr", "Generator", "Optional", "Int", "UInt"}) {
+    for (auto &name :
+         vector<string>{"Ptr", "Generator", TYPE_OPTIONAL, "Int", "UInt"}) {
       auto canonical = stdlib->generateCanonicalName(name);
       stdlib->add(SimplifyItem::Type, name, canonical, true);
       vector<Param> generics;
@@ -91,9 +92,8 @@ StmtPtr SimplifyVisitor::apply(shared_ptr<Cache> cache, const StmtPtr &node,
         generics.emplace_back(Param{genName, make_unique<IdExpr>("int"), nullptr});
       else
         generics.emplace_back(Param{genName, nullptr, nullptr});
-      auto c =
-          make_unique<ClassStmt>(canonical, move(generics), vector<Param>(), nullptr,
-                                 vector<string>{ATTR_INTERNAL, ATTR_TUPLE});
+      auto c = make_unique<ClassStmt>(canonical, move(generics), vector<Param>(),
+                                      nullptr, Attr({Attr::Internal, Attr::Tuple}));
       preamble->types.emplace_back(clone(c));
       cache->classes[canonical].ast = move(c);
     }
@@ -117,7 +117,7 @@ StmtPtr SimplifyVisitor::apply(shared_ptr<Cache> cache, const StmtPtr &node,
     preamble->globals.push_back(
         SimplifyVisitor(stdlib, preamble)
             .transform(make_unique<AssignStmt>(
-                make_unique<IdExpr>("__argv__"), nullptr,
+                make_unique<IdExpr>(VAR_ARGV), nullptr,
                 make_unique<IndexExpr>(make_unique<IdExpr>("Array"),
                                        make_unique<IdExpr>("str")))));
     stdlib->isStdlibLoading = false;
@@ -184,11 +184,8 @@ StmtPtr SimplifyVisitor::apply(shared_ptr<SimplifyContext> ctx, const StmtPtr &n
 }
 
 SimplifyVisitor::SimplifyVisitor(shared_ptr<SimplifyContext> ctx,
-                                 shared_ptr<Preamble> preamble,
-                                 shared_ptr<vector<StmtPtr>> prepend)
-    : ctx(move(ctx)), preamble(move(preamble)) {
-  prependStmts = prepend ? move(prepend) : make_shared<vector<StmtPtr>>();
-}
+                                 shared_ptr<Preamble> preamble)
+    : ctx(move(ctx)), preamble(move(preamble)) {}
 
 } // namespace ast
 } // namespace seq

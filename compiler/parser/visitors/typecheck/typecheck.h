@@ -71,6 +71,9 @@ public:
   ///   Tuple.N.__new__(a1, ..., aN).
   /// If Tuple.N has not been seen before, generate a stub class for it.
   void visit(TupleExpr *) override;
+  /// Transform a tuple generator tuple(expr for i in tuple) to:
+  ///   Tuple.N.__new__(expr...).
+  void visit(GeneratorExpr *) override;
   /// Set type to the unification of both sides.
   /// Wrap a side with Optional.__new__() if other side is optional.
   /// Wrap conditional with .__bool__() if it is not a bool.
@@ -265,7 +268,8 @@ private:
   /// Also used to generate a named tuple class Name.N[T1,...,TN] with field names
   /// provided in names parameter.
   string generateTupleStub(int len, const string &name = "Tuple",
-                           vector<string> names = vector<string>{});
+                           vector<string> names = vector<string>{},
+                           bool hasSuffix = true);
   /// Generate a function type Function.N[TR, T1, ..., TN] as follows:
   ///   @internal @tuple @trait
   ///   class Function.N[TR, T1, ..., TN]:
@@ -291,6 +295,8 @@ private:
   /// Create generic types for type or function generics and add them to the context.
   vector<types::ClassType::Generic> parseGenerics(const vector<Param> &generics,
                                                   int level);
+  /// Make an empty partial call fn(...) for a function fn.
+  ExprPtr partializeFunction(ExprPtr expr);
 
 private:
   types::TypePtr unify(types::TypePtr &a, const types::TypePtr &b);

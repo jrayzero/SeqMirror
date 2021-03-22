@@ -133,7 +133,7 @@ llvm::DIFile *LLVMVisitor::DebugInfo::getFile(const std::string &path) {
 }
 
 LLVMVisitor::LLVMVisitor(bool debug, const std::string &flags)
-    : util::ConstIRVisitor(), context(), builder(context), module(), func(nullptr),
+    : util::ConstVisitor(), context(), builder(context), module(), func(nullptr),
       block(nullptr), value(nullptr), vars(), funcs(), coro(), loops(), trycatch(),
       db(debug, flags), machine() {
   llvm::InitializeNativeTarget();
@@ -158,7 +158,7 @@ void LLVMVisitor::process(const Node *x) {
 
 void LLVMVisitor::verify() {
   const bool broken = llvm::verifyModule(*module, &llvm::errs());
-  assert(!broken);
+  seqassert(!broken, "module broken");
 }
 
 void LLVMVisitor::dump(const std::string &filename) { writeToLLFile(filename); }
@@ -306,6 +306,7 @@ void LLVMVisitor::runLLVMPipeline() {
 }
 
 void LLVMVisitor::writeToObjectFile(const std::string &filename) {
+  runLLVMPipeline();
   auto &llvmtm = static_cast<llvm::LLVMTargetMachine &>(*machine);
   auto *mmi = new llvm::MachineModuleInfo(&llvmtm);
   llvm::legacy::PassManager pm;
@@ -321,13 +322,15 @@ void LLVMVisitor::writeToObjectFile(const std::string &filename) {
     compilationError(err.message());
   }
   llvm::raw_pwrite_stream *os = &out->os();
-  assert(!machine->addPassesToEmitFile(pm, *os, llvm::TargetMachine::CGFT_ObjectFile,
-                                       /*DisableVerify=*/true, mmi));
+  seqassert(!machine->addPassesToEmitFile(pm, *os, llvm::TargetMachine::CGFT_ObjectFile,
+                                          /*DisableVerify=*/true, mmi),
+            "could not add passes");
   pm.run(*module);
   out->keep();
 }
 
 void LLVMVisitor::writeToBitcodeFile(const std::string &filename) {
+  runLLVMPipeline();
   std::error_code err;
   llvm::raw_fd_ostream stream(filename, err, llvm::sys::fs::F_None);
   llvm::WriteBitcodeToFile(module.get(), stream);
@@ -337,6 +340,7 @@ void LLVMVisitor::writeToBitcodeFile(const std::string &filename) {
 }
 
 void LLVMVisitor::writeToLLFile(const std::string &filename) {
+  runLLVMPipeline();
   auto fo = fopen(filename.c_str(), "w");
   llvm::raw_fd_ostream fout(fileno(fo), true);
   fout << *module;
@@ -381,15 +385,19 @@ void addEnvVarPathsToLinkerArgs(std::vector<std::string> &args,
 }
 } // namespace
 
-void LLVMVisitor::writeToExecutable(const std::string &filename) {
+void LLVMVisitor::writeToExecutable(const std::string &filename,
+                                    const std::vector<std::string> &libs) {
+  const std::string objFile = filename + ".o";
+  writeToObjectFile(objFile);
+
   std::vector<std::string> command = {"clang"};
   addEnvVarPathsToLinkerArgs(command, "LIBRARY_PATH");
   addEnvVarPathsToLinkerArgs(command, "LD_LIBRARY_PATH");
   addEnvVarPathsToLinkerArgs(command, "DYLD_LIBRARY_PATH");
   addEnvVarPathsToLinkerArgs(command, "SEQ_LIBRARY_PATH");
-
-  const std::string objFile = filename + ".o";
-  writeToObjectFile(objFile);
+  for (const auto &lib : libs) {
+    command.push_back("-l" + lib);
+  }
   std::vector<std::string> extraArgs = {"-lseqrt", "-lomp", "-lpthread", "-ldl",
                                         "-lz",     "-lm",   "-lc",       "-o",
                                         filename,  objFile};
@@ -406,8 +414,8 @@ void LLVMVisitor::writeToExecutable(const std::string &filename) {
 #endif
 }
 
-void LLVMVisitor::compile(const std::string &filename) {
-  runLLVMPipeline();
+void LLVMVisitor::compile(const std::string &filename,
+                          const std::vector<std::string> &libs) {
   llvm::StringRef f(filename);
   if (f.endswith(".ll")) {
     writeToLLFile(filename);
@@ -416,7 +424,7 @@ void LLVMVisitor::compile(const std::string &filename) {
   } else if (f.endswith(".o") || f.endswith(".obj")) {
     writeToObjectFile(filename);
   } else {
-    writeToExecutable(filename);
+    writeToExecutable(filename, libs);
   }
 }
 
@@ -559,7 +567,7 @@ void LLVMVisitor::enterLoop(LoopData data) {
 }
 
 void LLVMVisitor::exitLoop() {
-  assert(!loops.empty());
+  seqassert(!loops.empty(), "no loops present");
   loops.pop_back();
 }
 
@@ -569,7 +577,7 @@ void LLVMVisitor::enterTryCatch(TryCatchData data) {
 }
 
 void LLVMVisitor::exitTryCatch() {
-  assert(!trycatch.empty());
+  seqassert(!trycatch.empty(), "no try catches present");
   trycatch.pop_back();
 }
 
@@ -619,6 +627,7 @@ void LLVMVisitor::visit(const Module *x) {
       continue;
 
     if (auto *f = cast<Func>(var)) {
+      //            LOG("{}", f->getName());
       makeLLVMFunction(f);
       funcs.insert(f, func);
     } else {
@@ -848,7 +857,7 @@ void LLVMVisitor::makeLLVMFunction(const Func *x) {
 void LLVMVisitor::makeYield(llvm::Value *value, bool finalYield) {
   builder.SetInsertPoint(block);
   if (value) {
-    assert(coro.promise);
+    seqassert(coro.promise, "promise is null");
     builder.CreateStore(value, coro.promise);
   }
   llvm::Function *coroSuspend =
@@ -867,7 +876,7 @@ void LLVMVisitor::makeYield(llvm::Value *value, bool finalYield) {
 void LLVMVisitor::visit(const ExternalFunc *x) {
   func = module->getFunction(getNameForFunction(x)); // inserted during module visit
   coro = {};
-  assert(func);
+  seqassert(func, "{} not inserted", *x);
   func->setDoesNotThrow();
 }
 
@@ -903,14 +912,13 @@ void LLVMVisitor::visit(const InternalFunc *x) {
   using namespace types;
   func = module->getFunction(getNameForFunction(x)); // inserted during module visit
   coro = {};
-  assert(func);
+  seqassert(func, "{} not inserted", *x);
   setDebugInfoForNode(x);
 
   Type *parentType = x->getParentType();
   auto *funcType = cast<FuncType>(x->getType());
   std::vector<Type *> argTypes(funcType->begin(), funcType->end());
 
-  assert(func);
   func->setLinkage(llvm::GlobalValue::PrivateLinkage);
   func->addFnAttr(llvm::Attribute::AttrKind::AlwaysInline);
   std::vector<llvm::Value *> args;
@@ -977,7 +985,8 @@ void LLVMVisitor::visit(const InternalFunc *x) {
 
   else if (internalFuncMatchesIgnoreArgs<RecordType>("__new__", x)) {
     auto *recordType = cast<RecordType>(parentType);
-    assert(args.size() == std::distance(recordType->begin(), recordType->end()));
+    seqassert(args.size() == std::distance(recordType->begin(), recordType->end()),
+              "args size does not match");
     result = llvm::UndefValue::get(getLLVMType(recordType));
     for (auto i = 0; i < args.size(); i++) {
       result = builder.CreateInsertValue(result, args[i], i);
@@ -994,13 +1003,13 @@ void LLVMVisitor::visit(const InternalFunc *x) {
     }
   }
 
-  assert(result && "internal function not found");
+  seqassert(result, "internal function {} not found", *x);
   builder.CreateRet(result);
 }
 
 std::string LLVMVisitor::buildLLVMCodeString(const LLVMFunc *x) {
   auto *funcType = cast<types::FuncType>(x->getType());
-  assert(funcType);
+  seqassert(funcType, "{} is not a function type", *x->getType());
   std::string bufStr;
   llvm::raw_string_ostream buf(bufStr);
 
@@ -1061,14 +1070,14 @@ void LLVMVisitor::visit(const LLVMFunc *x) {
       llvmType->print(buf);
       store.push_back(buf.str());
     } else {
-      assert(0);
+      seqassert(0, "formatting failed");
     }
   }
   code = fmt::vformat(code, store);
 
   llvm::SMDiagnostic err;
   std::unique_ptr<llvm::MemoryBuffer> buf = llvm::MemoryBuffer::getMemBuffer(code);
-  assert(buf);
+  seqassert(buf, "could not create buffer");
   std::unique_ptr<llvm::Module> sub =
       llvm::parseIR(buf->getMemBufferRef(), err, context);
   if (!sub) {
@@ -1081,9 +1090,9 @@ void LLVMVisitor::visit(const LLVMFunc *x) {
 
   llvm::Linker L(*module);
   const bool fail = L.linkInModule(std::move(sub));
-  assert(!fail);
+  seqassert(!fail, "linking failed");
   func = module->getFunction(getNameForFunction(x));
-  assert(func);
+  seqassert(func, "function not linked in");
   func->setLinkage(llvm::GlobalValue::PrivateLinkage);
   func->addFnAttr(llvm::Attribute::AttrKind::AlwaysInline);
 }
@@ -1091,7 +1100,7 @@ void LLVMVisitor::visit(const LLVMFunc *x) {
 void LLVMVisitor::visit(const BodiedFunc *x) {
   func = module->getFunction(getNameForFunction(x)); // inserted during module visit
   coro = {};
-  assert(func);
+  seqassert(func, "{} not inserted", *x);
   setDebugInfoForNode(x);
 
   auto *fnAttributes = x->getAttribute<KeyValueAttribute>();
@@ -1109,15 +1118,16 @@ void LLVMVisitor::visit(const BodiedFunc *x) {
   func->setPersonalityFn(makePersonalityFunc());
 
   auto *funcType = cast<types::FuncType>(x->getType());
+  seqassert(funcType, "{} is not a function type", *x->getType());
   auto *returnType = funcType->getReturnType();
-  assert(funcType);
   auto *entryBlock = llvm::BasicBlock::Create(context, "entry", func);
   builder.SetInsertPoint(entryBlock);
   builder.SetCurrentDebugLocation(llvm::DebugLoc());
 
   // set up arguments and other symbols
-  assert(std::distance(func->arg_begin(), func->arg_end()) ==
-         std::distance(x->arg_begin(), x->arg_end()));
+  seqassert(std::distance(func->arg_begin(), func->arg_end()) ==
+                std::distance(x->arg_begin(), x->arg_end()),
+            "argument length does not match");
   unsigned argIdx = 1;
   auto argIter = func->arg_begin();
   for (auto varIter = x->arg_begin(); varIter != x->arg_end(); ++varIter) {
@@ -1167,7 +1177,7 @@ void LLVMVisitor::visit(const BodiedFunc *x) {
 
   if (x->isGenerator()) {
     auto *generatorType = cast<types::GeneratorType>(returnType);
-    assert(generatorType);
+    seqassert(generatorType, "{} is not a generator type", *returnType);
 
     llvm::Function *coroId =
         llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::coro_id);
@@ -1263,15 +1273,15 @@ void LLVMVisitor::visit(const BodiedFunc *x) {
   }
 }
 
-void LLVMVisitor::visit(const Var *x) { assert(0); }
+void LLVMVisitor::visit(const Var *x) { seqassert(0, "cannot visit var"); }
 
 void LLVMVisitor::visit(const VarValue *x) {
   if (auto *f = cast<Func>(x->getVar())) {
     value = funcs[f];
-    assert(value);
+    seqassert(value, "{} value not found", *x);
   } else {
     llvm::Value *varPtr = vars[x->getVar()];
-    seqassert(varPtr, "{}", *x);
+    seqassert(varPtr, "{} value not found", *x);
     builder.SetInsertPoint(block);
     value = builder.CreateLoad(varPtr);
   }
@@ -1279,7 +1289,7 @@ void LLVMVisitor::visit(const VarValue *x) {
 
 void LLVMVisitor::visit(const PointerValue *x) {
   llvm::Value *var = vars[x->getVar()];
-  assert(var);
+  seqassert(var, "{} variable not found", *x);
   value = var; // note: we don't load the pointer
 }
 
@@ -1354,7 +1364,7 @@ llvm::Type *LLVMVisitor::getLLVMType(types::Type *t) {
     return x->getBuilder()->buildType(this);
   }
 
-  assert(0 && "unknown type");
+  seqassert(0, "unknown type");
   return nullptr;
 }
 
@@ -1502,7 +1512,7 @@ llvm::DIType *LLVMVisitor::getDITypeHelper(
     return x->getBuilder()->buildDebugType(this);
   }
 
-  assert(0 && "unknown type");
+  seqassert(0, "unknown type");
   return nullptr;
 }
 
@@ -1616,7 +1626,7 @@ void LLVMVisitor::visit(const WhileFlow *x) {
 void LLVMVisitor::visit(const ForFlow *x) {
   llvm::Type *loopVarType = getLLVMType(x->getVar()->getType());
   llvm::Value *loopVar = vars[x->getVar()];
-  assert(loopVar);
+  seqassert(loopVar, "{} loop variable not found", *x);
 
   auto *condBlock = llvm::BasicBlock::Create(context, "for.cond", func);
   auto *bodyBlock = llvm::BasicBlock::Create(context, "for.body", func);
@@ -1738,7 +1748,7 @@ void LLVMVisitor::visit(const TryCatchFlow *x) {
     tc.retStore = trycatch[0].retStore;
   }
 
-  // codegen finally
+  // translate finally
   block = tc.finallyBlock;
   process(x->getFinally());
   auto *finallyBlock = block;
@@ -1806,13 +1816,13 @@ void LLVMVisitor::visit(const TryCatchFlow *x) {
       builder.CreateStore(excStateNotThrown, tc.excFlag);
       builder.CreateBr(loops.back().continueBlock);
     } else {
-      assert(!isRoot);
+      seqassert(!isRoot, "cannot be root");
       theSwitch->addCase(excStateBreak, trycatch.back().finallyBlock);
       theSwitch->addCase(excStateContinue, trycatch.back().finallyBlock);
     }
   }
 
-  // try and catch codegen
+  // try and catch translate
   std::vector<const TryCatchFlow::Catch *> catches;
   for (auto &c : *x) {
     catches.push_back(&c);
@@ -1825,12 +1835,12 @@ void LLVMVisitor::visit(const TryCatchFlow *x) {
     tc.handlers.push_back(catchBlock);
 
     if (!c->getType()) {
-      assert(!catchAll);
+      seqassert(!catchAll, "cannot be catch all");
       catchAll = catchBlock;
     }
   }
 
-  // codegen try
+  // translate try
   block = entryBlock;
   enterTryCatch(tc);
   process(x->getBody());
@@ -1855,7 +1865,7 @@ void LLVMVisitor::visit(const TryCatchFlow *x) {
     if (catchAll) // can't ever delegate past catch-all
       break;
 
-    assert(it->catchTypes.size() == it->handlers.size());
+    seqassert(it->catchTypes.size() == it->handlers.size(), "handler mismatch");
     for (unsigned i = 0; i < it->catchTypes.size(); i++) {
       if (!anyMatch(it->catchTypes[i], catchTypesFull)) {
         catchTypesFull.push_back(it->catchTypes[i]);
@@ -1886,7 +1896,7 @@ void LLVMVisitor::visit(const TryCatchFlow *x) {
   std::vector<llvm::Value *> typeIndices;
 
   for (auto *catchType : catchTypesFull) {
-    assert(!catchType || cast<types::RefType>(catchType));
+    seqassert(!catchType || cast<types::RefType>(catchType), "invalid catch type");
     const std::string typeVarName =
         "seq.typeidx." + (catchType ? catchType->getName() : "<all>");
     llvm::GlobalVariable *tidx = getTypeIdxVar(catchType);
@@ -1948,7 +1958,7 @@ void LLVMVisitor::visit(const TryCatchFlow *x) {
           builder.getInt32((uint64_t)getTypeIdx(catchTypesFull[i])), depthSet);
     }
 
-    // codegen catch body if this block is ours (vs. a parent's)
+    // translate catch body if this block is ours (vs. a parent's)
     if (i < catches.size()) {
       block = handlersFull[i];
       builder.SetInsertPoint(block);
@@ -1958,7 +1968,7 @@ void LLVMVisitor::visit(const TryCatchFlow *x) {
         llvm::Value *obj =
             builder.CreateBitCast(objPtr, getLLVMType(catches[i]->getType()));
         llvm::Value *varPtr = vars[var];
-        assert(varPtr);
+        seqassert(varPtr, "could not get catch var");
         builder.CreateStore(obj, varPtr);
       }
 
@@ -1974,7 +1984,7 @@ void LLVMVisitor::visit(const TryCatchFlow *x) {
 
 void LLVMVisitor::callStage(const PipelineFlow::Stage *stage) {
   llvm::Value *output = value;
-  process(stage->getFunc());
+  process(stage->getCallee());
   llvm::Value *f = value;
   std::vector<llvm::Value *> args;
   for (const auto *arg : *stage) {
@@ -1998,7 +2008,7 @@ void LLVMVisitor::codegenPipeline(
   auto *stage = stages[where];
 
   if (where == 0) {
-    process(stage->getFunc());
+    process(stage->getCallee());
     codegenPipeline(stages, syncReg, where + 1);
     return;
   }
@@ -2009,7 +2019,7 @@ void LLVMVisitor::codegenPipeline(
 
   if (generator) {
     auto *generatorType = cast<types::GeneratorType>(prevStage->getOutputType());
-    assert(generatorType);
+    seqassert(generatorType, "{} is not a generator type", *prevStage->getOutputType());
     auto *baseType = getLLVMType(generatorType->getBase());
 
     auto *condBlock = llvm::BasicBlock::Create(context, "pipeline.cond", func);
@@ -2171,7 +2181,7 @@ void LLVMVisitor::visit(const dsl::CustomFlow *x) { x->getBuilder()->buildValue(
 
 void LLVMVisitor::visit(const AssignInstr *x) {
   llvm::Value *var = vars[x->getLhs()];
-  assert(var);
+  seqassert(var, "could not find {} var", *x);
   process(x->getRhs());
   if (var != getDummyVoidValue(context)) {
     builder.SetInsertPoint(block);
@@ -2181,9 +2191,9 @@ void LLVMVisitor::visit(const AssignInstr *x) {
 
 void LLVMVisitor::visit(const ExtractInstr *x) {
   auto *memberedType = cast<types::MemberedType>(x->getVal()->getType());
-  assert(memberedType);
+  seqassert(memberedType, "{} is not a membered type", *x->getVal()->getType());
   const int index = memberedType->getMemberIndex(x->getField());
-  assert(index >= 0);
+  seqassert(index >= 0, "invalid index");
 
   process(x->getVal());
   builder.SetInsertPoint(block);
@@ -2197,9 +2207,9 @@ void LLVMVisitor::visit(const ExtractInstr *x) {
 
 void LLVMVisitor::visit(const InsertInstr *x) {
   auto *refType = cast<types::RefType>(x->getLhs()->getType());
-  assert(refType);
+  seqassert(refType, "{} is not a reference type", *x->getLhs()->getType());
   const int index = refType->getMemberIndex(x->getField());
-  assert(index >= 0);
+  seqassert(index >= 0, "invalid index");
 
   process(x->getLhs());
   llvm::Value *lhs = value;
@@ -2215,7 +2225,7 @@ void LLVMVisitor::visit(const InsertInstr *x) {
 
 void LLVMVisitor::visit(const CallInstr *x) {
   builder.SetInsertPoint(block);
-  process(x->getFunc());
+  process(x->getCallee());
   llvm::Value *f = value;
 
   std::vector<llvm::Value *> args;
@@ -2239,7 +2249,7 @@ void LLVMVisitor::visit(const TypePropertyInstr *x) {
     value = builder.getInt8(x->getInspectType()->isAtomic() ? 1 : 0);
     break;
   default:
-    assert(0);
+    seqassert(0, "unknown type property");
   }
 }
 
@@ -2310,7 +2320,7 @@ void LLVMVisitor::visit(const TernaryInstr *x) {
 }
 
 void LLVMVisitor::visit(const BreakInstr *x) {
-  assert(!loops.empty());
+  seqassert(!loops.empty(), "not in a loop");
   builder.SetInsertPoint(block);
   if (auto *tc = getInnermostTryCatchBeforeLoop()) {
     auto *excStateBreak = builder.getInt8(TryCatchData::State::BREAK);
@@ -2323,7 +2333,7 @@ void LLVMVisitor::visit(const BreakInstr *x) {
 }
 
 void LLVMVisitor::visit(const ContinueInstr *x) {
-  assert(!loops.empty());
+  seqassert(!loops.empty(), "not in a loop");
   builder.SetInsertPoint(block);
   if (auto *tc = getInnermostTryCatchBeforeLoop()) {
     auto *excStateContinue = builder.getInt8(TryCatchData::State::CONTINUE);
@@ -2353,7 +2363,7 @@ void LLVMVisitor::visit(const ReturnInstr *x) {
       auto *excStateReturn = builder.getInt8(TryCatchData::State::RETURN);
       builder.CreateStore(excStateReturn, tc->excFlag);
       if (tc->retStore) {
-        assert(value);
+        seqassert(value, "no return value storage");
         builder.CreateStore(value, tc->retStore);
       }
       builder.CreateBr(tc->finallyBlock);
@@ -2371,7 +2381,7 @@ void LLVMVisitor::visit(const ReturnInstr *x) {
 void LLVMVisitor::visit(const YieldInstr *x) {
   if (x->isFinal()) {
     if (x->getValue()) {
-      assert(coro.promise);
+      seqassert(coro.promise, "no coroutine promise");
       process(x->getValue());
       builder.SetInsertPoint(block);
       builder.CreateStore(value, coro.promise);

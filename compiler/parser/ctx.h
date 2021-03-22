@@ -123,12 +123,6 @@ public:
   string getFilename() const { return filename; }
   /// Sets the absolute path of a current module.
   void setFilename(string file) { filename = move(file); }
-  /// Set a context flag.
-  void setFlag(string flag) { flags.insert(move(flag)); }
-  /// Remove a context flag.
-  void unsetFlag(const string &flag) { flags.erase(flag); }
-  /// True if the context contains a flag.
-  bool hasFlag(const string &flag) { return flags.find(flag) != flags.end(); }
 
   /// Convenience functions to allow range-based for loops over a context.
   typename Map::iterator begin() { return map.begin(); }
@@ -155,7 +149,7 @@ public:
   bool travEmpty() const { return trav_stack.empty(); }
 
 private:
-  /// Removed an identifier from the map only.
+  /// Remove an identifier from the map only.
   void removeFromMap(const string &name) {
     auto i = map.find(name);
     seqassert(!(i == map.end() || !i->second.size()),

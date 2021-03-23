@@ -1,17 +1,17 @@
 from cola.traversal import *
 
 @traversal
-def zigzag2[N:int](i: int = 1, upper: bool = True):
+def _zigzag[N:int](i: int = 1, upper: bool = True):
   tparams 2, (0,0)
   if i > 0 and upper:
     # upper triangle
     astep (1,-1) by 2*i-1, (1,0), (-1,1) by 2*i, (0,1)
-    link zigzag2[N](i+1, i+1 != N//2)
+    link _zigzag[N](i+1, i+1 != N//2)
   elif i > 1:
     # lower triangle
     j = i-1
     astep (1,-1) by 2*j+1, (0,1), (-1,1) by 2*j, (1,0)
-    link zigzag2[N](j, upper)    
+    link _zigzag[N](j, upper)    
 
 def zigzag[N:int]():
-  return AStep([0,1]) + zigzag2[8]() + AStep([1,-1]) + AStep([0,1])
+  return AStep([0,1]) + _zigzag[N]() + AStep([1,-1]) + AStep([0,1])

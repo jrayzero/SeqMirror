@@ -38,7 +38,7 @@ print map2([1, 2, 3], lambda x: x+e)  #: [2, 3, 4]
 
 #%% nested,barebones
 def m4[TD](a: int, d: TD):
-    def m5[TE](a: int, d: TD, e: TE):
+    def m5[TD,TE](a: int, d: TD, e: TE):
         print a, d, e
     m5(a, d, 1.12)
 m4(1, 's')  #: 1 s 1.12
@@ -49,7 +49,7 @@ class A[TA]:
     a: TA
     # lots of nesting:
     def m4[TD](self: A[TA], d: TD):
-        def m5[TE](a: TA, d: TD, e: TE):
+        def m5[TA,TD,TE](a: TA, d: TD, e: TE):
             print a, d, e
         m5(self.a, d, d)
 ax = A(42)
@@ -97,7 +97,7 @@ class A[TA,TB,TC]:
 
     # lots of nesting:
     def m4[TD](self: A[TA,TB,TC], d: TD):
-        def m5[TE](a: TA, b: TB, c: TC, d: TD, e: TE):
+        def m5[TA,TB,TC,TD,TE](a: TA, b: TB, c: TC, d: TD, e: TE):
             print a, b, c, d, e
         m5(self.a, self.b, self.c, d, d)
 
@@ -193,9 +193,9 @@ print rec3('x', 's').__class__  #: str
 
 # Nested mutually recursive function
 def f[T](x: T) -> T:
-    def g(z):
+    def g[T](z):
         return z(T())
-    return g(f[T])
+    return g[T](f[T])
 print f(1.2).__class__ #: float
 print f('s').__class__ #: str
 
@@ -219,9 +219,9 @@ rec3(1, 's')
 
 #%% instantiate_function_2,barebones
 def fx[T](x: T) -> T:
-    def g(z):
+    def g[T](z):
         return z(T())
-    return g(fx)
+    return g[T](fx)
 print fx[float].__class__, fx(1).__class__ #: fx[float;float] int
 
 #%% optionals,barebones
@@ -298,7 +298,7 @@ print h(list(map(lambda i: i-1, map(lambda i: i+2, range(5)))))
 #%% func_unify_error,barebones
 def foo(x:int):
     print x
-z = 1 & foo #! ERROR: cannot unify foo[int] and int
+z = 1 & foo #! ERROR: cannot unify foo[...] and int
 
 #%% void_error,barebones
 def foo():
@@ -317,7 +317,7 @@ def foo():
         i += 1
 a = list(foo())
 #!     ERROR: expression with void type
-#!     ERROR: while realizing std.internal.types.ptr.List.__init__.2
+#!     ERROR: while realizing std.internal.types.ptr.List.__init__
 #!     ERROR: while realizing std.__init__.list
 
 #%% instantiate_swap,barebones
@@ -433,11 +433,11 @@ print x, x.__class__ #: 1 int
 # print f.__class__  # TODO ERRORS
 
 def fg[T](x:T):
-    def g(y):
+    def g[T](y):
         z = T()
         return z
     print fg[str].__class__  #: fg[str;str]
-    print g(1).__class__ #: int
+    print g[T](1).__class__ #: int
 fg(1)
 print fg(1).__class__ #: void
 
@@ -636,10 +636,10 @@ a.foo(1) #! ERROR: cannot typecheck the program
 
 #%% return_deduction,barebones
 def fun[T, R](x, y: T) -> R:
-   	def ffi[T, Z](x: T, y: R, z: Z):
+   	def ffi[T, R, Z](x: T, y: R, z: Z):
    		return (x, y, z)
-   	yy = ffi[bool, str](False, byte(2), 's')
-   	yz = ffi[int, str](1, byte(2), 's')
+   	yy = ffi[bool, R, str](False, byte(2), 's')
+   	yz = ffi[int, R, str](1, byte(2), 's')
    	return byte(1)
 print fun[float,byte](2, 1.1).__class__ #: byte
 
@@ -670,12 +670,17 @@ f = F(foo, goo, 2)
 print f.f(f.x) #: 3
 f.g(f.x) #: 4
 
+def hoo(z):
+    print z+3
+f.g = hoo
+f.g(f.x)  #: 5
+
 def hai(x, y, z):
     print f'hai({x},{y},{z})'
 fn = Function[[int, int, int], void](hai)
 fn(1, 2, 3) #: hai(1,2,3)
 print str(fn)[:12] #: <function at
-z = fn(..., 2, 3)
+z = fn(a2=2, a3=3, ...)
 z(3) #: hai(3,2,3)
 
 #%% int_float,barebones
@@ -690,6 +695,7 @@ def test(name, sort, key):
 def foo(l, f):
     return [f(i) for i in l]
 test('hi', foo, lambda x: x+1) #: hi [2, 3, 4, 5]
+# TODO
 # def foof(l: List[int], x, f: Callable[[int], int]):
 #     return [f(i)+x for i in l]
 # test('qsort', foof(..., 3, ...))
@@ -704,14 +710,13 @@ print X[float].foo[int].__class__ #: X.foo[int;X[float],float,int]
 # print y.foo[float].__class__
 print X[int]().foo(1, 's') #: (2, ss)
 
-#%% class_partial_access_err,barebones
-# TODO: propagate instatitation to partial functions!
+#%% class_partial_access,barebones
 class X[T]:
-    # TODO: def foo[U](self, x: T, y: U) fails because T does not propagate: fix it!
     def foo[U](self, x, y: U):
         return (x+x, y+y)
 y = X[X[int]]()
-print y.foo[float].__class__ #! ERROR: cannot unify X[X[int]] and float
+print y.foo[float].__class__ #: X.foo[float;X[X[int]],?,float]
+print y.foo[float](1, 2.2) #: (2, 4.4)
 
 #%% forward,barebones
 def foo(f, x):
@@ -721,13 +726,13 @@ def bar[T](x):
     print x, T.__class__
 foo(bar, 1)
 #: 1 int
-#: bar[int;int]
+#: bar[...]
 foo(bar[int], 1)
 #: 1 int
-#: bar[int;int]
+#: bar[...]
 foo(bar[str], 's')
 #: s str
-#: bar[str;str]
+#: bar[...]
 z = bar
 z[int]('s')
 #: s int
@@ -742,8 +747,8 @@ zz(1)
 #%% sort_partial
 def foo(x, y):
     return y**x
-print sorted([1,2,3,4,5], key=foo(..., y=2))
-print sorted([1,2,3,4,5], key=foo(..., y=-2))
+print sorted([1,2,3,4,5], key=foo(y=2, ...))
+print sorted([1,2,3,4,5], key=foo(y=-2, ...))
 #: [1, 2, 3, 4, 5]
 #: [5, 3, 1, 2, 4]
 
@@ -757,3 +762,129 @@ def frec(x, y):
 print frec(1, 2).__class__, frec('s', 1).__class__
 #!   ERROR: expression with void type
 #!   ERROR: while realizing frec (arguments frec[int,int])
+
+#%% return_fn,barebones
+def retfn(a):
+    def inner(b, *args, **kwargs):
+        print a, b, args, kwargs
+    print inner.__class__ #: retfn.inner[...,...,int,...]
+    return inner(15, ...)
+f = retfn(1)
+print f.__class__ #: retfn.inner[int,...,int,...]
+f(2,3,foo='bar') #: 1 15 (2, 3) (foo: bar)
+
+#%% decorator_manual,barebones
+def foo(x, *args, **kwargs):
+    print x, args, kwargs
+    return 1
+def dec(fn, a):
+    print 'decorating', fn.__class__ #: decorating foo[...,...,...]
+    def inner(*args, **kwargs):
+        print 'decorator', args, kwargs #: decorator (5.5, s) (z: True)
+        return fn(a, *args, **kwargs)
+    return inner(...)
+ff = dec(foo(...), 10)
+print ff(5.5, 's', z=True)
+#: 10 (5.5, s) (z: True)
+#: 1
+
+
+#%% decorator,barebones
+def foo(x, *args, **kwargs):
+    print x, args, kwargs
+    return 1
+def dec(fn, a):
+    print 'decorating', fn.__class__
+    def inner(*args, **kwargs):
+        print 'decorator', args, kwargs
+        return fn(a, *args, **kwargs)
+    return inner
+ff = dec(foo, 10)
+print ff(5.5, 's', z=True)
+#: decorating foo[...,...,...]
+#: decorator (5.5, s) (z: True)
+#: 10 (5.5, s) (z: True)
+#: 1
+
+@dec(a=5)
+def zoo(e, b, *args):
+    return f'zoo: {e}, {b}, {args}'
+print zoo(2, 3)
+print zoo('s', 3)
+#: decorating zoo[...,...,...]
+#: decorator (2, 3) ()
+#: zoo: 5, 2, (3)
+#: decorator (s, 3) ()
+#: zoo: 5, s, (3)
+
+def mydecorator(func):
+    def inner():
+        print("before")
+        func()
+        print("after")
+    return inner
+@mydecorator
+def foo():
+    print("foo")
+foo()
+#: before
+#: foo
+#: after
+
+def timeme(func):
+    def inner(*args, **kwargs):
+        begin = 1
+        end = func(*args, **kwargs) - begin
+        print('time needed for', func.__class__, 'is', end)
+    return inner
+@timeme
+def factorial(num):
+    n = 1
+    for i in range(1,num + 1):
+        n *= i
+    print(n)
+    return n
+factorial(10)
+#: 3628800
+#: time needed for factorial[...] is 3628799
+
+def dx1(func):
+    def inner():
+        x = func()
+        return x * x
+    return inner
+def dx2(func):
+    def inner():
+        x = func()
+        return 2 * x
+    return inner
+@dx1
+@dx2
+def num():
+    return 10
+print(num()) #: 400
+
+def dy1(func):
+    def inner(*a, **kw):
+        x = func(*a, **kw)
+        return x * x
+    return inner
+def dy2(func):
+    def inner(*a, **kw):
+        x = func(*a, **kw)
+        return 2 * x
+    return inner
+@dy1
+@dy2
+def num(a, b):
+    return a+b
+print(num(10, 20)) #: 3600
+
+#%% hetero_iter,barebones
+e = (1, 2, 3, 'foo', 5, 'bar', 6)
+for i in e:
+    if isinstance(i, int):
+        if i == 1: continue
+    if isinstance(i, str):
+        if i == 'bar': break
+    print i

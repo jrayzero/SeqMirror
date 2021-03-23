@@ -113,7 +113,7 @@ x = foo
 print x(1) #: 2
 
 #%% assign_err_6,barebones
-x = bar #! ERROR: cannot find 'bar'
+x = bar #! ERROR: identifier 'bar' not found
 
 #%% assign_err_7,barebones
 foo() += bar #! ERROR: invalid assignment
@@ -552,12 +552,35 @@ class Foo:
         return 'F'
 Foo.foo(1) #! ERROR: cannot unify int and Foo
 
+#%% function_nested,barebones
+def foo(v):
+    value = v
+    def bar():
+        return value
+    return bar
+baz = foo(2)
+print baz() #: 2
+
+def f(x):
+    a=1
+    def g(y):
+        return a+y
+    return g(x)
+print f(5) #: 6
+
+#%% function_err_nested,barebones
+def f[T]():
+    def g():
+        return T()
+    g()
+f[int]() #! ERROR: identifier 'T' not found
+
 #%% class_err_1,barebones
 @extend
 @foo
 class Foo:
     pass
-#! ERROR: extend cannot be combined with other attributes
+#! ERROR: extend cannot be combined with other decorators
 
 #%% class_err_1b,barebones
 size_t = i32
@@ -639,7 +662,7 @@ class F[T: str]:
 def foo[T]():
     class A:
         x: T
-#! ERROR: identifier 'T' not found (classes cannot access outer function identifiers)
+#! ERROR: identifier 'T' not found (cannot access outer function identifiers)
 
 #%% class_err_11,barebones
 def foo(x):
@@ -654,7 +677,7 @@ def foo(x):
     class A:
         def bar():
             print T()
-#! ERROR: identifier 'T' not found (classes cannot access outer function identifiers)
+#! ERROR: identifier 'T' not found (cannot access outer function identifiers)
 
 #%% recursive_class,barebones
 class Node[T]:
@@ -705,7 +728,7 @@ print a.__getitem__(1)  #: 2
 print list(a.__iter__()) #: [1, 2]
 
 #%% magic_class,barebones
-@total_ordering
+@dataclass(eq=True, order=True)
 class Foo:
     x: int
     y: int
@@ -756,39 +779,33 @@ print Foo().__getitem__(1)
 #!     ERROR: while realizing __internal__.tuple_getitem
 #!     ERROR: while realizing Foo.__getitem__
 
-#%% magic_err_3,barebones
+#%% magic_empty_tuple,barebones
 @tuple
 class Foo:
     pass
-print Foo().__iter__()
-#! ERROR: cannot iterate empty tuple
-#! ERROR: while realizing Foo.__iter__
+print list(Foo().__iter__())  #: []
 
 #%% magic_err_4,barebones
-@tuple
-@no_total_ordering
+@tuple(eq=False)
 class Foo:
     x: int
 Foo(1).__eq__(Foo(1)) #! ERROR: cannot find '__eq__' in Foo
 
 #%% magic_err_5,barebones
-@tuple
-@no_pickle
+@tuple(pickle=False)
 class Foo:
     x: int
 p = Ptr[byte]()
 Foo(1).__pickle__(p) #! ERROR: cannot find '__pickle__' in Foo
 
 #%% magic_err_6,barebones
-@tuple
-@no_container
+@tuple(container=False)
 class Foo:
     x: int
 Foo(1).__getitem__(0) #! ERROR: cannot find '__getitem__' in Foo
 
 #%% magic_err_7,barebones
-@tuple
-@no_python
+@tuple(python=False)
 class Foo:
     x: int
 p = Ptr[byte]()

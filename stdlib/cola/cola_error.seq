@@ -1,18 +1,18 @@
 # error caused when a stub function is executed (meaning it wasn't lowered by the compiler)
-class StubError:
+class ColaError:
     _hdr: ExcHeader
 
     def __init__(self):
-        self._hdr = ('StubError', '', '', '', 0, 0)
+        self._hdr = ('ColaError', '', '', '', 0, 0)
 
     def __init__(self, message: str):
-        self._hdr = ('StubError', message, '', '', 0, 0)
+        self._hdr = ('ColaError', message, '', '', 0, 0)
 
     @property
     def message(self):
         return self._hdr.msg
 
-class ColaNotImplemented():
+class ColaNotImplemented:
     _hdr: ExcHeader
 
     def __init__(self):
@@ -25,7 +25,7 @@ class ColaNotImplemented():
     def message(self):
         return self._hdr.msg
 
-class ColaNotTested():
+class ColaNotTested:
     _hdr: ExcHeader
 
     def __init__(self):

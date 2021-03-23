@@ -1,0 +1,1022 @@
+from exslice import ExSlice
+import random,string
+
+@extend
+class Array[T]:
+  def __str__(self) -> str:
+    return '[' + ','.join([str(self[i]) for i in range(self.len)]) + ']'
+
+# TODO make dims and stuff like that be uints (and exslices stop be int sand allow ti to be negative)
+
+class Multidim[T]:
+  dims: list[int]
+  parent_mapping: list[ExSlice] # the mapping to your immediate parent
+  # views contain a pointer to their referenced buffer
+  buffer: Array[T]
+  parent: Multidim[T]
+  unique_id: str
+  is_reshape: bool
+  is_backing_buffer: bool  
+
+class View[T]:
+  base: Multidim[T]
+
+class Block[T]:
+  base: Multidim[T]
+
+@extend
+class Multidim[T]:
+
+  ### INIT FUNCTIONS
+
+  def __init__(self):
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+    self.is_reshape = False
+    self.is_backing_buffer = False
+    
+  def __init__(self, other: Block[T], set_as_parent: bool):
+    self.__init__()
+    self.dims = [d for d in other.dims()]
+    if set_as_parent:
+      self.parent = other.base
+      self.parent_mapping = [ExSlice(0,d) for d in self.dims]
+      self.buffer = other.base.buffer
+    else:
+      self.parent = other.base
+      self.buffer = Array[T](self.nunits())
+      self.is_backing_buffer = True
+
+  def __init__(self, other: View[T], set_as_parent: bool):
+    self.__init__()
+    self.dims = [d for d in other.dims()]
+    if set_as_parent:
+      self.parent = other.base
+      self.parent_mapping = [ExSlice(0,d) for d in self.dims]
+      self.buffer = other.base.buffer
+    else:
+      self.parent = other.base
+      self.buffer = Array[T](self.nunits())
+      self.is_backing_buffer = True
+
+  def __init__(self, other: int, _:bool):
+    self.__init__()
+    self.dims = [other]
+    self.buffer = Array[T](other)
+    self.is_backing_buffer = True
+
+  def __init__(self, dims: list[int]):
+    self.__init__()
+    self.dims = [d for d in dims]
+    self.buffer = Array[T](self.nunits())
+    self.is_backing_buffer = True
+
+  # dimensions can be integers or a Multidim[int]/Block[int]/View[int] of size 1
+  # for specifying something like Block[T](10,11,12,...)
+
+  # 2D and above
+  def __init__(self, dim0, dim1, *dims):
+    assert isinstance(dims, tuple)
+    self.__init__()
+    self.dims = [Multidim._convert_to_S[int](dim0), Multidim._convert_to_S[int](dim1)]
+    if staticlen(dims) > 0:
+      self.dims += [Multidim._convert_to_S[int](d) for d in dims]
+    self.buffer = Array[T](self.nunits())
+    self.is_backing_buffer = True
+
+  # fall back that catches manually specified collection such as [10,11,12] or (10,view,12) etc
+  def __init__(self, dims, _:bool): # gets a bool so it works with the generic init in block
+    self.__init__()
+    assert isinstance(dims, list) or isinstance(dims, tuple)
+    self.dims = [Multidim._convert_to_S[int](d) for d in dims]
+    self.buffer = Array[T](self.nunits())#[T(0)] * self.nunits()
+    self.is_backing_buffer = True
+
+  # init dims and fill immediately (MAKES A SHALLOW COPY)
+  def __init__(self, dims, data: Array[T]):
+    self.__init__()
+    assert isinstance(dims, list) or isinstance(dims, tuple)
+    self.dims = [Multidim._convert_to_S[int](d) for d in dims]
+    self.buffer = data
+    self.is_backing_buffer = True
+
+  def __init__(self, dims, data: list[T]):
+    self.__init__()
+    assert isinstance(dims, list) or isinstance(dims, tuple)
+    self.dims = [Multidim._convert_to_S[int](d) for d in dims]
+    self.buffer = data.arr
+    self.is_backing_buffer = True
+
+  # this is called from the __getitem__ functions, so the ExSlices should already be adjusted
+  def __init__(self, parent: Multidim[T], dims: list[int], parent_mapping: list[ExSlice]):
+    self.__init__()
+    self.parent = parent
+    self.parent_mapping = parent_mapping
+    self.dims = [d for d in dims]
+    self.buffer = parent.buffer
+
+  ### INTERNAL STATIC UTILITY FUNCTIONS
+  def _linearize(dims: list[int], coord: list[int]) -> int:
+    linear = 0
+    for idx,c in enumerate(reversed(coord)):
+      s = c
+      for i in range(idx):
+        s *= dims[len(coord) - i - 1]
+      linear += s
+    return linear
+
+  def _delinearize(dims: list[int], linear_idx: int) -> list[int]:
+    coord = []
+    for idx in range(1, len(dims)):
+      mul = 1
+      for i in range(idx, len(dims)):
+        mul *= dims[i]
+      coord.append(linear_idx // mul)
+      linear_idx %= mul
+    coord.append(linear_idx)
+    return coord
+
+  def _convert_to_S[S](item: S) -> S:
+    return item
+
+
+  def _convert_to_S[S](item: Block[S]) -> S:
+    return item()
+
+  def _convert_to_S[S](item: View[S]) -> S:
+    return item()
+
+  def _convert_to_S[S](item: Multidim[S]) -> S:
+    return item()
+
+  ### INTERNAL NON-STATIC UTILITY FUNCTIONS
+
+  def _broadcast_binary_arithmetic[S=T](self, other: T, op_func_ptr) -> Multidim[S]:
+    flat = self.flatten()
+    tmp = Multidim[S](self.dims, True)    
+    for i in range(self.nunits()):
+      buffer,linear = flat._map_to_parent_buffer([i])
+      tmp.buffer[i] = op_func_ptr(buffer[linear[0]], other)
+    return tmp
+
+  def _elementwise_binary_arithmetic[S=T](self, other: Multidim[T], op_func_ptr) -> Multidim[S]:
+    assert len(self.dims) == len(other.dims)
+    assert self.nunits() == other.nunits()
+    self_flat = self.flatten()
+    other_flat = other.flatten()
+    tmp = Multidim[S](self.dims, True)
+    for i in range(self.nunits()):
+      sbuffer,slinear = self_flat._map_to_parent_buffer([i])
+      obuffer,olinear = other_flat._map_to_parent_buffer([i])
+      tmp.buffer[i] = op_func_ptr(sbuffer[slinear[0]], obuffer[olinear[0]])
+    return tmp
+
+  # This takes a coordinate and remaps it all the way up the chain of parents' until the first buffer is found.
+  # Then it linearizes that value. It is the main workhorse of all the other functions
+  def _map_to_parent_buffer(self, coord: list[int], linearize_last: bool = True) -> Tuple[Array[T], list[int]]:
+    assert len(self.dims) == len(coord)
+    if self.is_backing_buffer:
+      # Base case. Found the first buffer. Just linearize the coordinate
+      if linearize_last:
+        return self.buffer,[Multidim._linearize(self.dims, coord)] # wrap in list so have consistent return type
+      else:
+        return self.buffer,coord
+    else:
+      # figure out how to map the current coordinate. There are 2 possibilities:
+      # 1) a reshaping: we linearize with respect to ourselves and delinearize wrt the parent
+      # 2) a slicing: same ndims, but need to take into account and take/skip values 
+      if self.is_reshape:
+        # reshaping
+        l = Multidim._linearize(self.dims, coord)
+        return self.parent._map_to_parent_buffer(Multidim._delinearize(self.parent.dims, l), linearize_last)
+      else:
+        # slicing
+        new_coord = []
+        for pm,c in zip(self.parent_mapping, coord):
+          # NOTE: since these are mapping ExSlices, they should already be adjusted
+          start = ~pm.start
+          take = ~pm.take
+          skip = ~pm.skip
+          new_coord.append(start + (c // take) * (take + skip) + c % take)
+        return self.parent._map_to_parent_buffer(new_coord, linearize_last)
+
+  ### PUBLIC UTILITY FUNCTIONS
+
+  def nunits(self):
+    n = 1
+    for d in self.dims:
+      n *= d
+    return n
+
+  # reshapes to 1D if needed
+  def flatten(self):
+    if len(self.dims) == 1:
+      return self
+    else:
+      return self.reshape([self.nunits()])
+
+  # gets local origin relative to parent
+  def origin(self) -> list[int]:
+    if self.parent_mapping:
+      return [~p.start for p in self.parent_mapping]
+    else:
+      return [0] * len(self.dims)
+
+  def abs_origin(self) -> list[int]:
+    coord = [0] * len(self.dims)
+    _,origin = self._map_to_parent_buffer(coord, False)
+    return origin
+
+  def __bool__(self: Multidim[bool]) -> bool:
+    assert self.nunits() == 1
+    return self.flatten()(0)
+
+  # shorthand form of __str__ that just returns size + abs_origin
+  def shorthand(self):
+    return str(self.dims) + '@' + str(self.abs_origin())
+
+  # "recursive iteration" to print out 
+  def _to_str_loop_nest(self, iterators: list[int], dims: list[int], cur_depth: int, max_sym_size: int) -> str:
+    if cur_depth == len(dims) - 1:
+      # last level
+      s = ''
+      if cur_depth == 0:
+        s += '\n'
+      for i in range(dims[cur_depth]):
+        iterators[cur_depth] = i
+        buffer,linear = self._map_to_parent_buffer(iterators)
+        sym = str(buffer[linear[0]])
+        s += ' ' * (max_sym_size - len(sym)) + sym + ' '
+      return s
+    else:      
+      # more levels
+      s = ''
+      for i in range(dims[cur_depth]):
+        iterators[cur_depth] = i
+        # formatting for printing multiple dimensions
+        if cur_depth == 0 and len(dims) > 2:
+          s += '\ndim idxs: ' + str(iterators[cur_depth])
+        elif cur_depth < len(dims) - 2:
+          s += ',' + str(iterators[cur_depth])
+        else:
+          s += '\n'
+        s += self._to_str_loop_nest(iterators, dims, cur_depth+1, max_sym_size)
+      return s
+
+  def _get_max_symbol_size(self):
+    flat = self.flatten()
+    max_size = 0
+    for i in range(flat.nunits()):
+      buffer,linear = flat._map_to_parent_buffer([i])
+      s = str(buffer[linear[0]])
+      if len(s) > max_size:
+        max_size = len(s)
+    return max_size
+
+  # This uses recursive iteration rather than the flatten because it makes it easier to figure out
+  # when to insert the newlines, which depend on which level of the loop nest we are at
+  def __str__(self):
+    s = ''
+    m = self._get_max_symbol_size()
+    iterators = [0] * len(self.dims)    
+    return self._to_str_loop_nest(iterators, self.dims, 0, m)
+
+  ### FUNCTIONS FOR CHECKING EQUALITY (FOR DEBUGGING)
+
+  # These do NOT check location information. Just compares contents and possibly the dims
+  def buffer_equals(self, that: Multidim[T], compare_ndims: bool) -> bool:
+    if self.nunits() != that.nunits():
+      return False
+    if compare_ndims:
+      if len(self.dims) != len(that.dims):
+        return False
+    self_flat = self.flatten()
+    that_flat = that.flatten()
+    for i in range(self.nunits()):
+      sbuffer,slinear = self_flat._map_to_parent_buffer([i])
+      tbuffer,tlinear = that_flat._map_to_parent_buffer([i])
+      if sbuffer[slinear[0]] != tbuffer[tlinear[0]]:
+        return False
+    return True
+
+  def buffer_equals(self, that: list[T]) -> bool:
+    if self.nunits() != len(that):
+      return False
+    flat = self.flatten()
+    for i in range(self.nunits()):
+      buffer,linear = flat._map_to_parent_buffer([i])
+      if buffer[linear[0]] != that[i]:
+        return False
+    return True
+
+  ### RESHAPE FUNCTIONS
+
+  # call these from Block/View.reshape
+  # reshaping doesn't create a parent mapping
+
+  # reshape to the dimensions of other
+  def reshape(self, dim: int) -> Multidim[T]:
+    assert self.nunits() == dim
+    md = Multidim[T]()
+    md.dims = [dim]
+    md.parent = self
+    md.is_reshape = True
+    md.buffer = md.parent.buffer
+    return md
+
+  def reshape(self, dim: Block[T]) -> Multidim[T]:
+    assert self.nunits() == dim.nunits()
+    md = Multidim[T]()
+    md.dims = [d for d in dim.dims()]
+    md.parent = self
+    md.is_reshape = True
+    md.buffer = md.parent.buffer
+    return md
+
+  def reshape(self, dim: View[T]) -> Multidim[T]:
+    assert self.nunits() == dim.nunits()
+    md = Multidim[T]()
+    md.dims = [d for d in dim.dims()]
+    md.parent = self
+    md.is_reshape = True
+    md.buffer = md.parent.buffer
+    return md
+
+  def reshape(self, dim0, dim1, *dims) -> Multidim[T]:
+    assert isinstance(dims, tuple)
+    md = Multidim[T]()
+    md.dims = [Multidim._convert_to_S[int](dim0), Multidim._convert_to_S[int](dim1)]
+    if staticlen(dims) > 0:
+      md.dims += [Multidim._convert_to_S[int](d) for d in dims]
+    assert self.nunits() == md.nunits()
+    md.parent = self
+    md.is_reshape = True
+    md.buffer = md.parent.buffer
+    return md
+
+  def reshape(self, dims) -> Multidim[T]:
+    assert isinstance(dims, list) or isinstance(dims, tuple)
+    md = Multidim[T]()
+    md.dims = [Multidim._convert_to_S[int](d) for d in dims]
+    assert self.nunits() == md.nunits()
+    md.parent = self
+    md.is_reshape = True
+    md.buffer = md.parent.buffer
+    return md
+
+  def shuffle_dims(self, order0, order1, *orders) -> Multidim[T]:
+    assert isinstance(orders, tuple)
+    l = 2 + staticlen(orders)
+    assert l == len(self.dims)
+    all_orders = [Multidim._convert_to_S[int](order0), Multidim._convert_to_S[int](order1)]
+    if staticlen(orders) > 0:
+      all_orders += [Multidim._convert_to_S[int](d) for d in orders]
+    reshape_dims = [0] * len(self.dims)
+    for idx,i in enumerate(all_orders):
+      reshape_dims[idx] = self.dims[i]
+    return self.reshape(reshape_dims)
+
+  def shuffle_dims(self, orders) -> Multidim[T]:
+    assert isinstance(orders, list) or isinstance(orders, tuple)
+    assert len(orders) == len(self.dims)
+    all_orders = [Multidim._convert_to_S[int](d) for d in orders]
+    reshape_dims = [0] * len(self.dims)
+    for idx,i in enumerate(all_orders):
+      reshape_dims[idx] = self.dims[i]
+    return self.reshape(reshape_dims)
+
+  ### __GETITEM__ AND ASSOCIATED FUNCTIONS
+  
+  def __getitem__(self, idx: int) -> Multidim[T]:
+    assert len(self.dims) == 1
+    assert 0 <= idx < self.dims[0]
+    return Multidim[T](self, [1], [ExSlice(idx, idx+1)])
+
+  def __getitem__(self, idx: Multidim[T]) -> Multidim[T]:
+    return self[idx()]    
+
+  def __getitem__(self, idx: Block[T]) -> Multidim[T]:
+    return self[idx.base]
+
+  def __getitem__(self, idx: View[T]) -> Multidim[T]:
+    return self[idx.base]
+
+  def __getitem__(self, idx: ExSlice) -> Multidim[T]:
+    assert len(self.dims) == 1
+    d,m = self._compute_dim_and_map(idx, 0)
+    return Multidim[T](self, [d], [m])
+
+  def __getitem__(self, idx: Slice) -> Multidim[T]:
+    assert len(self.dims) == 1
+    d,m = self._compute_dim_and_map(idx, 0)
+    return Multidim[T](self, [d], [m])
+  
+  # one of the calls uses this one
+  def __getitem__(self, idx0, idx1, *idxs) -> Multidim[T]:
+    assert isinstance(idxs, tuple) or isinstance(idxs, list)
+    assert (2 + len(idxs)) == len(self.dims)
+    d0,m0 = self._compute_dim_and_map(idx0,0)
+    d1,m1 = self._compute_dim_and_map(idx1,1)
+    dims = [d0,d1]
+    mapping = [m0,m1]
+    if staticlen(idxs) > 0:
+      it = 2
+      for idx in idxs:
+        d,m = self._compute_dim_and_map(idx, it)
+        dims.append(d)
+        mapping.append(m)
+        it += 1
+    return Multidim[T](self, dims, mapping)    
+
+  # should be a tuple of things
+  def __getitem__(self, idxs) -> Multidim[T]:
+    assert isinstance(idxs, tuple) or isinstance(idxs, list)
+    assert len(idxs) == len(self.dims)
+    dims = []
+    mapping = []
+    it = 0
+    for idx in idxs:
+      d,m = self._compute_dim_and_map(idx, it)
+      dims.append(d)
+      mapping.append(m)
+      it += 1
+    return Multidim[T](self, dims, mapping)
+      
+  def _compute_dim_and_map(self, idx: int, it: int) -> Tuple[int, ExSlice]:
+    return 1,ExSlice(idx,idx+1)
+  
+  def _compute_dim_and_map(self, idx: ExSlice, it: int) -> Tuple[int, ExSlice]:
+    idx = idx.adjust(self.dims[it])
+    assert idx.compute_effective_stop() < self.dims[it]
+    return idx.compute_effective_range(),idx
+
+  def _compute_dim_and_map(self, idx: Slice, it: int) -> Tuple[int, ExSlice]:
+    idx2 = ExSlice(idx).adjust(self.dims[it])
+    assert idx2.compute_effective_stop() < self.dims[it]
+    return idx2.compute_effective_range(),idx2
+  
+  def _compute_dim_and_map(self, idx: Block[T], it: int) -> Tuple[int, ExSlice]:
+    val = idx.base()
+    assert 0 <= val < self.dims[it]
+    return 1,ExSlice(val,val+1)
+
+  def _compute_dim_and_map(self, idx: View[T], it: int) -> Tuple[int, ExSlice]:
+    val = idx.base()
+    assert 0 <= val < self.dims[it]
+    return 1,ExSlice(val,val+1)
+
+  ### __CALL__ AND ASSOCIATED FUNCTIONS
+  
+  # all the calls realized a SINGLE element
+  def __call__(self) -> T:
+    assert self.nunits() == 1
+    flat = self.flatten()
+    buffer,linear = flat._map_to_parent_buffer([0])
+    return buffer[linear[0]]
+
+  def __call__(self, idx: int) -> T:
+    assert len(self.dims) == 1
+    buffer,linear = self._map_to_parent_buffer([idx])
+    return buffer[linear[0]]
+
+  def __call__(self, idx: Multidim[T]) -> T:
+    assert len(self.dims) == 1
+    return self[idx]()
+
+  def __call__(self, idx: Block[T]) -> T:
+    return self(idx.base)
+
+  def __call__(self, idx: View[T]) -> T:
+    return self(idx.base)
+
+  def __call__(self, idxs) -> T:
+    return self[idxs]()
+
+  def __call__(self, idx0, idx1, *idx) -> T:
+    return self.__getitem__(idx0,idx1,*idx)()
+
+  # realize all elements of the multidim
+  def realize(self) -> list[T]:
+    realized = [0] * self.nunits()
+    flat = self.flatten()
+    for i in range(flat.nunits()):
+      buffer,linear = flat._map_to_parent_buffer([i])
+      realized[i] = buffer[linear[0]]
+    return realized
+
+  ### __SETITEM__ AND ASSOCIATED FUNCTIONS
+
+  # The setitems work by slicing into self with the idxs, and then performing the write
+  def __setitem__(self, idx: int, item: T):
+    assert len(self.dims) == 1
+    assert 0 <= idx < self.dims[0]
+    buffer,linear = self._map_to_parent_buffer([idx])
+    buffer[linear[0]] = item
+
+  def __setitem__(self, idx: Multidim[T], item: T):
+    self[idx()] = item
+
+  def __setitem__(self, idx: Block[T], item: T):
+    self[idx()] = item
+
+  def __setitem__(self, idx: View[T], item: T):
+    self[idx()] = item
+
+  def __setitem__(self, idx: ExSlice, item):
+    assert len(self.dims) == 1
+    sliced = self[idx]
+    sliced._write(item)
+
+  def __setitem__(self, idx: Slice, item):
+    assert len(self.dims) == 1
+    sliced = self[idx]
+    sliced._write(item)
+
+  # should be a tuple of things
+  def __setitem__(self, idxs, item):
+    assert isinstance(idxs, tuple) or isinstance(idxs, list)
+    sliced = self[idxs]
+    sliced._write(item)
+
+  def _write(self, item: T):
+    self._write([item])
+
+  def _write(self, items: list[T]):
+    if self.nunits() != len(items):
+      # if it is a single item, we can broadcast it
+      assert len(items) == 1
+      flat = self.flatten()
+      for i in range(flat.nunits()):
+        buffer,linear = flat._map_to_parent_buffer([i])
+        buffer[linear[0]] = items[0]        
+    else:
+      flat = self.flatten()
+      for i in range(flat.nunits()):
+        buffer,linear = flat._map_to_parent_buffer([i])
+        buffer[linear[0]] = items[i]
+
+  def _write(self, item: Multidim[T]):
+    assert self.nunits() == item.nunits()
+    self_flat = self.flatten()
+    item_flat = item.flatten()
+    for i in range(self_flat.nunits()):
+      dest_buffer,dest_linear = self_flat._map_to_parent_buffer([i])
+      src_buffer,src_linear = item_flat._map_to_parent_buffer([i])
+      dest_buffer[dest_linear[0]] = src_buffer[src_linear[0]]
+
+  def _write(self, item: Block[T]):
+    self._write(item.base) 
+
+  def _write(self, item: View[T]):
+    self._write(item.base)
+    
+  ### ARITHMETIC
+    
+  # broadcast
+  def __add__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__add__)
+
+  def __radd__(self, other: T) -> Multidim[T]:
+    return self + other
+
+  def __sub__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__sub__)
+
+  def __rsub__(self, other: T) -> Multidim[T]:
+    return self - other
+
+  def __mul__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__mul__)
+
+  def __rmul__(self, other: T) -> Multidim[T]:
+    return self * other
+
+  def __truediv__(self, other: T) -> Multidim[float]:
+    return self._broadcast_binary_arithmetic[float](other, T.__truediv__)
+
+  def __rtruediv__(self, other: T) -> Multidim[float]:
+    return self / other
+
+  def __floordiv__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__floordiv__)
+
+  def __rfloordiv__(self, other: T) -> Multidim[T]:
+    return self // other
+
+  def __rshift__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__rshift__)
+
+  def __rrshift__(self, other: T) -> Multidim[T]:
+    return self >> other
+
+  def __lshift__(self, other: T) -> Multidim[T]:
+    return self._broadcast_binary_arithmetic(other, T.__lshift__)
+
+  def __rlshift__(self, other: T) -> Multidim[T]:
+    return self << other
+
+  def __lt__(self, other: T) -> Multidim[bool]:
+    return self._broadcast_binary_arithmetic[bool](other, T.__lt__)
+
+  def __le__(self, other: T) -> Multidim[bool]:
+    return self._broadcast_binary_arithmetic[bool](other, T.__le__)
+
+  def __gt__(self, other: T) -> Multidim[bool]:
+    return self._broadcast_binary_arithmetic[bool](other, T.__gt__)
+
+  def __ge__(self, other: T) -> Multidim[bool]:
+    return self._broadcast_binary_arithmetic[bool](other, T.__ge__)
+
+  def __eq__(self, other: T) -> Multidim[bool]:
+    return self._broadcast_binary_arithmetic[bool](other, T.__eq__)
+
+  def __ne__(self, other: T) -> Multidim[bool]:
+    return self._broadcast_binary_arithmetic[bool](other, T.__ne__)
+
+  # elementwise
+  def __add__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+
+  def __add__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+
+  def __sub__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+
+  def __sub__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+
+  def __mul__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+
+  def __mul__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+
+  def __truediv__(self, other: Block[T]) -> Multidim[float]:
+    return self._elementwise_binary_arithmetic[float](other.base, T.__truediv__)
+
+  def __truediv__(self, other: View[T]) -> Multidim[float]:
+    return self._elementwise_binary_arithmetic[float](other.base, T.__truediv__)
+
+  def __floordiv__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__floordiv__)
+
+  def __floordiv__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__floordiv__)
+
+  def __rshift__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__rshift__)
+
+  def __rshift__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__rshift__)
+
+  def __lshift__(self, other: Block[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__lshift__)
+
+  def __lshift__(self, other: View[T]) -> Multidim[T]:
+    return self._elementwise_binary_arithmetic(other.base, T.__lshift__)
+
+  def __lt__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__lt__)
+
+  def __lt__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__lt__)
+
+  def __le__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__le__)
+
+  def __le__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__le__)
+
+  def __gt__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__gt__)
+
+  def __gt__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__gt__)
+
+  def __ge__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__ge__)
+
+  def __ge__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__ge__)
+
+  def __eq__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__eq__)
+
+  def __eq__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__eq__)
+
+  def __ne__(self, other: Block[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__ne__)
+
+  def __ne__(self, other: View[T]) -> Multidim[bool]:
+    return self._elementwise_binary_arithmetic[bool](other.base, T.__ne__)
+
+  ### iteration
+
+  # note that it flattens the dimensions
+  def __iter__(self) -> Generator[Multidim[T]]:
+    flat = self.flatten()
+    for i in range(flat.nunits()):
+      yield flat[i]
+
+# TODO appropriate base data type for buffer (is it a list)?
+@extend
+class Block[T]:
+
+  # need separate init for block and view so it typechecks
+  def __init__(self, other: Block[T]):
+    self.base = Multidim[T](other, False)
+
+  def __init__(self, other: View[T]):
+    self.base = Multidim[T](other, False)
+
+  def __init__(self, other):
+    self.base = Multidim[T](other, False)
+
+  def __init__(self, dims, data: list[T]):
+    self.base = Multidim[T](dims, data)
+
+  def __init__(self, dim0, dim1, *dims):
+    self.base = Multidim[T](dim0, dim1, *dims)    
+
+  def reshape(self, other) -> View[T]:
+    return View(self.base.reshape(other))
+
+  def reshape(self, dim0, dim1, *dims) -> View[T]:
+    return View(self.base.reshape(dim0, dim1, *dims))
+
+  def shuffle_dims(self, other) -> View[T]:
+    return View(self.base.shuffle_dims(other))
+
+  def shuffle_dims(self, dim0, dim1, *dims) -> View[T]:
+    return View(self.base.shuffle_dims(dim0, dim1, *dims))
+
+  def shorthand(self):
+    return self.base.shorthand()
+
+  def dims(self):
+    return self.base.dims
+
+  def nunits(self):
+    return self.base.nunits()
+
+  def flatten(self) -> View[T]:
+    return View(self.base.flatten())
+
+  # with __setitem__ and __getitem__, we don't need the star arg syntax because args automatically get grouped
+  # as a tuple (or just a single item if is a 1D access)
+  def __getitem__(self, idxs) -> View[T]:
+    return View[T](self.base[idxs])
+  
+  def __setitem__(self, idxs, items):
+    self.base[idxs] = items
+
+  # gets a realized (concrete) value
+  def __call__(self) -> T:
+    return self.base()
+
+  def __call__(self, idx: int) -> T:
+    return self.base(idx)
+
+  def __call__(self, idxs) -> T:
+    return self.base(idxs)
+
+  def __call__(self, idx0, idx1, *idxs) -> T:
+    return self.base(idx0, idx1, *idxs)
+
+  def __str__(self):
+    return 'block\n' + str(self.base)
+
+  def buffer_equals(self, that: View[T], compare_ndims=False):
+    return self.base.buffer_equals(that.base, compare_ndims)
+
+  def buffer_equals(self, that: Block[T], compare_ndims=False):
+    return self.base.buffer_equals(that.base, compare_ndims)
+
+  def buffer_equals(self, that):
+    return self.base.buffer_equals(that)
+
+  def __add__(self, other):
+    return Block(self.base + other)
+
+  def __radd__(self, other):
+    return Block(self.base.__radd__(other))
+
+  def __sub__(self, other):
+    return Block(self.base - other)
+
+  def __rsub__(self, other):
+    return Block(self.base.__rsub__(other))
+
+  def __mul__(self, other):
+    return Block(self.base * other)
+
+  def __rmul__(self, other):
+    return Block(self.base.__rmul__(other))
+
+  def __truediv__(self, other):
+    return Block[float](self.base / other)
+
+  def __rtruediv__(self, other):
+    return Block[float](self.base.__rtruediv__(other))
+
+  def __floordiv__(self, other):
+    return Block(self.base // other)
+
+  def __rfloordiv__(self, other):
+    return Block(self.base.__rfloordiv__(other))
+
+  def __rshift__(self, other):
+    return Block(self.base >> other)
+
+  def __rrshift__(self, other):
+    return Block(self.base.__rrshift__(other))
+
+  def __lshift__(self, other):
+    return Block(self.base << other)
+
+  def __rlshift__(self, other):
+    return Block(self.base.__rlshift__(other))
+
+  def __lt__(self, other):
+    return Block[bool](self.base < other)
+
+  def __le__(self, other):
+    return Block[bool](self.base <= other)
+
+  def __gt__(self, other):
+    return Block[bool](self.base > other)
+
+  def __ge__(self, other):
+    return Block[bool](self.base >= other)
+
+  def __eq__(self, other):
+    return Block[bool](self.base == other)
+
+  def __ne__(self, other):
+    return Block[bool](self.base != other)
+
+  # iteration, which is just a row-major scan by default
+  # yields single view values
+  def __iter__(self) -> Generator[View[T]]:
+    for item in self.base:
+      yield View(item)
+
+  def __bool__(self):
+    return bool(self.base)
+
+@extend
+class View[T]:
+
+  def __init__(self):
+    self.base = Multidim[T]()
+
+  # need separate init for block and view so it typechecks
+  def __init__(self, parent: Block[T]):
+    self.base = Multidim[T](parent, True)
+
+  def __init__(self, parent: View[T]):
+    self.base = Multidim[T](parent, True)
+
+  def __init__(self, parent):
+    self.base = Multidim[T](parent, True)
+
+  # used from reshaping
+  def __init__(self, base: Multidim[T]):
+    self.base = base
+
+  def reshape(self, other) -> View[T]:
+    return View(self.base.reshape(other))
+
+  def reshape(self, dim0, dim1, *dims) -> View[T]:
+    return View(self.base.reshape(dim0, dim1, *dims))
+
+  def shuffle_dims(self, other) -> View[T]:
+    return View(self.base.shuffle_dims(other))
+
+  def shuffle_dims(self, dim0, dim1, *dims) -> View[T]:
+    return View(self.base.shuffle_dims(dim0, dim1, *dims))
+
+  def shorthand(self):
+    return self.base.shorthand()
+
+  def dims(self):
+    return self.base.dims
+
+  def nunits(self):
+    return self.base.nunits()
+
+  def flatten(self) -> View[T]:
+    return View(self.base.flatten())
+
+  # with __setitem__ and __getitem__, we don't need the star arg syntax because args automatically get grouped
+  # as a tuple (or just a single item if is a 1D access)
+  def __getitem__(self, idxs) -> View[T]:
+    return View[T](self.base[idxs])
+  
+  def __setitem__(self, idxs, items):
+    self.base[idxs] = items
+
+  # gets a realized (concrete) value
+  def __call__(self) -> T:
+    return self.base()
+
+  def __call__(self, idx: int) -> T:
+    return self.base(idx)
+
+  def __call__(self, idxs) -> T:
+    return self.base(idxs)
+
+  def __call__(self, idx0, idx1, *idxs) -> T:
+    return self.base(idx0, idx1, *idxs)
+  
+  def __str__(self):
+    return 'view\n' + str(self.base)
+    
+  def buffer_equals(self, that: View[T], compare_ndims=False):
+    return self.base.buffer_equals(that.base, compare_ndims)
+
+  def buffer_equals(self, that: Block[T], compare_ndims=False):
+    return self.base.buffer_equals(that.base, compare_ndims)
+
+  def buffer_equals(self, that):
+    return self.base.buffer_equals(that)    
+
+  def __add__(self, other):
+    return Block(self.base + other)
+
+  def __radd__(self, other):
+    return Block(self.base.__radd__(other))
+
+  def __sub__(self, other):
+    return Block(self.base - other)
+
+  def __rsub__(self, other):
+    return Block(self.base.__rsub__(other))
+
+  def __mul__(self, other):
+    return Block(self.base * other)
+
+  def __rmul__(self, other):
+    return Block(self.base.__rmul__(other))
+
+  def __truediv__(self, other):
+    return Block[float](self.base / other)
+
+  def __rtruediv__(self, other):
+    return Block[float](self.base.__rtruediv__(other))
+
+  def __floordiv__(self, other):
+    return Block(self.base // other)
+
+  def __rfloordiv__(self, other):
+    return Block(self.base.__rfloordiv__(other))
+
+  def __rshift__(self, other):
+    return Block(self.base >> other)
+
+  def __rrshift__(self, other):
+    return Block(self.base.__rrshift__(other))
+
+  def __lshift__(self, other):
+    return Block(self.base << other)
+
+  def __rlshift__(self, other):
+    return Block(self.base.__rlshift__(other))
+
+  def __lt__(self, other):
+    return Block[bool](self.base < other)
+
+  def __le__(self, other):
+    return Block[bool](self.base <= other)
+
+  def __gt__(self, other):
+    return Block[bool](self.base > other)
+
+  def __ge__(self, other):
+    return Block[bool](self.base >= other)
+
+  def __eq__(self, other):
+    return Block[bool](self.base == other)
+
+  def __ne__(self, other):
+    return Block[bool](self.base != other)
+
+  # iteration, which is just a row-major scan by default
+  # yields single view values
+  def __iter__(self) -> Generator[View[T]]:
+    for item in self.base:
+      yield View(item)
+
+  def __bool__(self):
+    return bool(self.base)
+
+@extend
+class File:
+  # nelems is total number of elems to read and elem_bytes is the size of each elem
+  def read[T](self, nelems: int, elem_bytes: int, block: Block[T]) -> int:
+    self._ensure_open();
+    assert len(block.base.buffer) >= nelems # make sure enough space
+    ret = _C.fread(block.base.buffer.arr.ptr.as_byte(), T.len() // 8, nelems, self.fp)
+    self._errcheck("error in read")
+    return ret

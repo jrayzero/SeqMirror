@@ -51,6 +51,14 @@ void seq_exc_init();
 
 int debug;
 
+SEQ_FUNC int seek_end() {
+  return SEEK_END;
+}
+
+SEQ_FUNC int seek_set() {
+  return SEEK_SET;
+}
+
 SEQ_FUNC void seq_init(int d) {
   GC_INIT();
   GC_set_warn_proc(GC_ignore_warn_proc);

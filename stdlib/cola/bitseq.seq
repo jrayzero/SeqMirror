@@ -1,20 +1,27 @@
+import internal.gc as gc
 # TODO allow packing bits > 32 by breaking it up into different
 # sequences. 
 
 class Bits[N: int]:  
   l1_buffer: Ptr[byte]
   l1_sz: int
+  l1_max_cap: int
   l0_buffer: UInt[N]
   l0_sz: int
-  fd: File
+  fd: Optional[File] # if you have a file, you don't resize l1
   
-  def __init__(self):
-    assert False 
-
-  def __init__(self, fd: File):
+  def __init__(self, l1_start_capacity = 64, l1_max_capacity = 64):
     self.l0_buffer = UInt[N](0)
     self.l0_sz = 0
-    self.l1_buffer = Ptr[byte](64)
+    self.l1_buffer = Ptr[byte](l1_start_capacity)
+    self.l1_max_cap = l1_max_capacity
+    self.l1_sz = 0
+
+  def __init__(self, fd: File, l1_start_capacity = 64, l1_max_capacity = 64):
+    self.l0_buffer = UInt[N](0)
+    self.l0_sz = 0
+    self.l1_buffer = Ptr[byte](l1_start_capacity)
+    self.l1_max_cap = l1_max_capacity
     self.l1_sz = 0
     self.fd = fd
 
@@ -48,11 +55,14 @@ class Bits[N: int]:
   def pack(self, val: int, nbits, stuff: bool = False, stuff_on: int = 0, stuff_with: int = 0):
     self._pack(UInt[64](val), nbits, stuff, u8(stuff_on), u8(stuff_with))
 
-  def pack[T: int](self, val: Int[T], nbits, stuff: bool = False, stuff_on: Int[T] = Int[T](0), stuff_with: Int[T] = Int[T](0)):
+  def pack[T: int](self, val: Int[T], nbits, stuff: bool = False, stuff_on: UInt[8] = UInt[8](0), stuff_with: UInt[8] = UInt[8](0)):
     self._pack(UInt[T](val), nbits, stuff, u8(stuff_on), u8(stuff_with))
 
-  def pack[T: int](self, val: UInt[T], nbits, stuff: bool = False, stuff_on: UInt[T] = UInt[T](0), stuff_with: UInt[T] = UInt[T](0)):
+  def pack[T: int](self, val: UInt[T], nbits, stuff: bool = False, stuff_on: UInt[8] = UInt[8](0), stuff_with: UInt[8] = UInt[8](0)):
     self._pack(val, nbits, stuff, u8(stuff_on), u8(stuff_with))
+
+  def pack(self, val: byte, nbits, stuff: bool = False, stuff_on: UInt[8] = UInt[8](0), stuff_with: UInt[8] = UInt[8](0)):
+    self._pack(u8(val), nbits, stuff, stuff_on, stuff_with)
 
   # see if we need to move bits from l0_buffer to l1_buffer
   def _put_if(self, bound: int = N//2, stuff: bool = False, stuff_on: u8 = u8(0), stuff_with: u8 = u8(0)):
@@ -64,21 +74,28 @@ class Bits[N: int]:
       self.l1_sz += 1      
       self.l0_buffer <<= UInt[N](8) # get rid of the byte we just did
       self.l0_sz -= 8
-      self.flush_output_if()
-      if stuff and u8(bt) == u8(0xFF):
+      self.flush_or_resize_output_if()
+      if stuff and u8(bt) == stuff_on:
         self.l1_buffer[self.l1_sz] = byte(stuff_with)
         self.l1_sz += 1
-        self.flush_output_if()
+        self.flush_or_resize_output_if()
 
-  # see if we need to flush our output buffer to file
-  def flush_output_if(self):
-    if self.l1_sz == 64:
-      assert _C.fwrite(self.l1_buffer, 1, 64, self.fd.fp) == 64
-      self.l1_sz = 0
-      self.fd.flush()
+  # see if we need to flush our output buffer to file (or resize)
+  def flush_or_resize_output_if(self):
+    if self.l1_sz == self.l1_max_cap:
+      if self.fd:
+        # write to file
+        assert _C.fwrite(self.l1_buffer, 1, self.l1_sz, self.fd.fp) == self.l1_sz
+        self.l1_sz = 0
+        self.fd.flush()
+      else:
+        # resize
+        print('resizing')
+        self.l1_max_cap = self.l1_max_cap * 2
+        self.l1_buffer = self.l1_buffer.resize(self.l1_max_cap)
 
-  # force l0_buffer to be put to l1_buffer, then flush output buffer
-  def flush_all(self):
+  # force l0_buffer to be put to l1_buffer, then flush output buffer to file (if have file mode)
+  def flush_all(self, reset_l1: bool = True):
     # TODO allow specifying how to stuff partial bytes (0 or 1)
     # pack on 1s if we have partial bytes
     partial = self.l0_sz & 7
@@ -93,9 +110,11 @@ class Bits[N: int]:
       self.l0_buffer = uval
     # flush everything to the l1_buffer
     self._put_if(0)
-    assert  _C.fwrite(self.l1_buffer, 1, self.l1_sz, self.fd.fp) == self.l1_sz
-    self.l1_sz = 0
-    self.fd.flush()
+    if self.fd:
+      assert  _C.fwrite(self.l1_buffer, 1, self.l1_sz, self.fd.fp) == self.l1_sz
+      if reset_l1:
+        self.l1_sz = 0
+      self.fd.flush()
 
   # dumps the current state of the l0 and l1 buffers. just prints in decimal for now cause
   # I'm lazy
@@ -114,7 +133,30 @@ class Bits[N: int]:
       mask = ~((1 << (N - self.l0_sz)) - 1)
       s += '\n' + str(self.l0_buffer & UInt[N](mask))
     return s
-    
+
+  def ingest(ingest_from: File, nbytes: int = -1, flush_to_l1: bool = True) -> Bits[64]:
+    bits = Bits[64]()
+    if nbytes == -1:
+      ingest_from.seek(0, _C.seek_end())
+      nbytes = ingest_from.tell()
+      ingest_from.seek(0, _C.seek_set())
+    # TODO naively read one byte at a time. make this better later cause it's gonna be slow
+    for i in range(nbytes):
+      bits.pack(ingest_from.read_b(), 8)
+    if flush_to_l1:
+      bits.flush_all() # shouldn't need to pack any stuffing bits since you read whole bytes
+    return bits    
+
+  def __len__(self):
+    return self.l0_sz + self.l1_sz * 8
+
+  def flush_to_file(self, flush_to: File, reset_l1: bool = False):
+    # just flush whatever is in l0 and l1 to file
+    tmp = self.fd
+    self.fd = flush_to
+    self.flush_all(reset_l1)
+    self.fd = tmp
+
 @extend
 class UInt[N: int]:
 
@@ -128,6 +170,13 @@ class UInt[N: int]:
       return UInt[N].process_ext(val)
     else:
       return UInt[N].process_trunc(val)
+  def process(val: byte) -> UInt[N]:
+    if 8 == N:
+      return UInt[N].process_eq(val)
+    elif 8 < N:
+      return UInt[N].process_ext(val)
+    else:
+      return UInt[N].process_trunc(val)
   @llvm
   def process_trunc[T: int](val: UInt[T]) -> UInt[N]:
     %0 = trunc i{=T} %val to i{=N}
@@ -138,6 +187,17 @@ class UInt[N: int]:
     ret i{=N} %0
   @llvm
   def process_eq[T: int](val: UInt[T]) -> UInt[N]:
+    ret i{=N} %val
+  @llvm
+  def process_trunc(val: byte) -> UInt[N]:
+    %0 = trunc i8 %val to i{=N}
+    ret i{=N} %0
+  @llvm
+  def process_ext(val: byte) -> UInt[N]:
+    %0 = zext i8 %val to i{=N}
+    ret i{=N} %0
+  @llvm
+  def process_eq(val: byte) -> UInt[N]:
     ret i{=N} %val
 
       
@@ -203,8 +263,17 @@ class File:
     self._errcheck("error in read")
     return buf.convert_s[T*8]()
 
+  def read_b(self) -> byte:
+    self._ensure_open()
+    buf = Ptr[byte](1)
+    assert _C.fread(buf, 1, 1, self.fp) == 1
+    self._errcheck("error in read")    
+    return buf[0]
+
 @extend
 class Ptr[T]:
+  def resize(self, new_cap: int) -> Ptr[T]:
+    return Ptr[T](gc.realloc(self, new_cap * gc.sizeof[T]()))
   @llvm
   def convert_u[N: int](self) -> UInt[N]:
     %0 = bitcast {=T}* %self to i{=N}*

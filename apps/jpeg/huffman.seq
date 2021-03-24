@@ -115,8 +115,8 @@ def encode[T,N:int](bits: Bits[N], blk: View[T], ehufco_dc: list[int], ehufco_ac
 
   if nbits > max_coeff_bits:
     raise HuffmanError()
-  bits.pack(ehufco_dc[nbits], ehufsi_dc[nbits], True, 0xFF, 0x00)
-  bits.pack(UInt[32](tmp2), nbits, True, u32(0xFF), u32(0x00))
+  bits.pack(ehufco_dc[nbits], ehufsi_dc[nbits], True, u8(0xFF), u8(0x00))
+  bits.pack(UInt[32](tmp2), nbits, True, u8(0xFF), u8(0x00))
   r = 0
   zz = iter(zigzag[8]()(blk))
   next(zz) # skip over DC coefficient
@@ -126,7 +126,7 @@ def encode[T,N:int](bits: Bits[N], blk: View[T], ehufco_dc: list[int], ehufco_ac
       r += 1
     else:
       while r > 15:
-        bits.pack(ehufco_ac[0xF0], ehufsi_ac[0xF0], True, 0xFF, 0x00)
+        bits.pack(ehufco_ac[0xF0], ehufsi_ac[0xF0], True, u8(0xFF), u8(0x00))
         r -= 16
       temp2 = temp
       if temp < 0:
@@ -140,11 +140,11 @@ def encode[T,N:int](bits: Bits[N], blk: View[T], ehufco_dc: list[int], ehufco_ac
       if nbits > max_coeff_bits:
         raise HuffmanError()
       i = (r << 4) + nbits
-      bits.pack(ehufco_ac[i], ehufsi_ac[i], True, 0xFF, 0x00)
-      bits.pack(UInt[32](temp2), nbits, True, u32(0xFF), u32(0x00))
+      bits.pack(ehufco_ac[i], ehufsi_ac[i], True, u8(0xFF), u8(0x00))
+      bits.pack(UInt[32](temp2), nbits, True, u8(0xFF), u8(0x00))
       r = 0
   if r > 0:
-    bits.pack(ehufco_ac[0], ehufsi_ac[0], True, 0xFF, 0x00)
+    bits.pack(ehufco_ac[0], ehufsi_ac[0], True, u8(0xFF), u8(0x00))
 
 def generate_optimal_htable(freqs: list[int]) -> Tuple[list[int], list[int]]:
   assert len(freqs) >= 257

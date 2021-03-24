@@ -16,6 +16,8 @@ from C import seq_rlock_new() -> cobj
 from C import seq_rlock_acquire(cobj, bool, float) -> bool
 from C import seq_rlock_release(cobj)
 from C import seq_i32_to_float(i32) -> float
+from C import seek_end() -> int
+from C import seek_set() -> int
 
 # <ctype.h>
 from C import isdigit(int) -> int

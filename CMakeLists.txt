@@ -201,6 +201,7 @@ set(SEQ_CPPFILES
         compiler/parser/visitors/typecheck/typecheck_infer.cpp
         compiler/parser/visitors/typecheck/typecheck_stmt.cpp
         compiler/parser/visitors/visitor.cpp
+        compiler/sir/analyze/analysis.cpp
         compiler/sir/analyze/dataflow/cfg.cpp
         compiler/sir/analyze/dataflow/reaching.cpp
         compiler/sir/attribute.cpp
@@ -215,6 +216,7 @@ set(SEQ_CPPFILES
         compiler/sir/module.cpp
         compiler/sir/transform/cleanup/replacer.cpp
         compiler/sir/transform/manager.cpp
+        compiler/sir/transform/pass.cpp
         compiler/sir/transform/pipeline.cpp
         compiler/sir/types/types.cpp
         compiler/sir/util/cloning.cpp

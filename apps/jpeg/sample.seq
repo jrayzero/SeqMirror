@@ -52,8 +52,8 @@ def downsample_h2v2_average[T](data: View[T]) -> Block[T]:
   downsampled = Block[T](downsample_h2v2(data))
   bias = T(1)
   # here, I split data into 2x2 blocks and iterate through those
-  for ds, NxN in scan(downsampled, grid_rmaj(data,2)[0]):
-     ds[0] = (NxN(0,0) + NxN(0,1) + NxN(1,0) + NxN(1,1) + bias) >> T(2)
+  for ds, NxN in zip(downsampled, grid_rmaj(data,2)[0]):
+     ds[0,0] = (NxN(0,0) + NxN(0,1) + NxN(1,0) + NxN(1,1) + bias) >> T(2)
      bias ^= T(3)
   return downsampled
 
@@ -65,8 +65,8 @@ def downsample_h2v1_average[T](data: View[T]) -> Block[T]:
   downsampled = Block[T](downsample_h2v1(data))
   bias = T(0)  
   # here, I split data into 1x2 blocks and iterate through those
-  for ds, MxN in scan(downsampled, gridlike_rmaj(data, 1, 2)[0]):
-    ds[0] = (MxN(0,0) + MxN(0,1) + bias) >> T(1)
+  for ds, MxN in zip(downsampled, gridlike_rmaj(data, 1, 2)[0]):
+    ds[0,0] = (MxN(0,0) + MxN(0,1) + bias) >> T(1)
     bias ^= 1
   return downsampled
 

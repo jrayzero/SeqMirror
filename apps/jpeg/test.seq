@@ -18,12 +18,14 @@ outfile = sys.argv[2]
 # quantization
 quality = 75
 scale = quality_to_scaling(quality)
+print('scale')
 l_qtable = scale_quant_table(jpeg_luma_qtable, scale, True)
 c_qtable = scale_quant_table(jpeg_chroma_qtable, scale, True)
 # I'm using float DCT, so float divisors
+print('divisors')
 l_divisors = compute_qdivisors_AAN_idct_float_rmaj(jpeg_luma_qtable)
 c_divisors = compute_qdivisors_AAN_idct_float_rmaj(jpeg_chroma_qtable)
-
+print('huffman')
 l_dc_ehufco, l_dc_ehufsi = make_derived_huffman_table(bits_dc_luminance, val_dc_luminance, True)
 c_dc_ehufco, c_dc_ehufsi = make_derived_huffman_table(bits_dc_chrominance, val_dc_chrominance, True)
 l_ac_ehufco, l_ac_ehufsi = make_derived_huffman_table(bits_ac_luminance, val_ac_luminance, False)
@@ -45,22 +47,19 @@ tock_read = _C.seq_time_monotonic()
 # we don't just return a View here because the Block then goes out of scope
 rgb_table = generate_rgb_ycc_table_rmaj()
 # convert to non-interleaved b/c that's what jpeglib does. so the components are the outer dim
-
 h = image_data.dims()[0]
 w = image_data.dims()[1]
 c = image_data.dims()[2]
 
-ycc_data = Block(image_data).shuffle_dims(2,0,1)
+print('color conv')
+ycc_data = Block(c,h,w)
 rgb_ycc_convert_rmaj(View(image_data), View(ycc_data), rgb_table, interleaved_rgb = False)
 tock_conv = _C.seq_time_monotonic()
 
-#for r,g,b in scan(ycc_data[0,:,:], ycc_data[1,:,:], ycc_data[2,:,:]):
-#  print('r ' + str(r()) + ' g ' + str(g()) + ' b ' + str(b()))
-
 # TODO if do downsampling, need to calculate dims separate for y vs c
-_Y = ycc_data[0,:,:].reshape(h,w)
-_Cb = ycc_data[1,:,:].reshape(h,w)
-_Cr = ycc_data[2,:,:].reshape(h,w)
+_Y = ycc_data[0,:,:].elide_front()
+_Cb = ycc_data[1,:,:].elide_front()
+_Cr = ycc_data[2,:,:].elide_front()
 p_h = calculate_padding[8](h)
 p_w = calculate_padding[8](w)
 
@@ -69,16 +68,17 @@ Cb = _Cb
 Cr = _Cr
 
 if p_h == h and p_w == w:
-  Y = Y.reshape(p_h, p_w)
-  Cb = Cb.reshape(p_h, p_w)
-  Cr = Cr.reshape(p_h, p_w)
+  Y = Y#.reshape(p_h, p_w)
+  Cb = Cb#.reshape(p_h, p_w)
+  Cr = Cr#.reshape(p_h, p_w)
 else:
-  Y = expand_edges_rmaj[u8,8](Y).reshape(p_h,p_w)
-  Cb = expand_edges_rmaj[u8,8](Cb).reshape(p_h,p_w)
-  Cr = expand_edges_rmaj[u8,8](Cr).reshape(p_h,p_w)  
+  Y = View(expand_edges_rmaj[u8,8](Y))#.reshape(p_h,p_w)
+  Cb = View(expand_edges_rmaj[u8,8](Cb))#.reshape(p_h,p_w)
+  Cr = View(expand_edges_rmaj[u8,8](Cr))#.reshape(p_h,p_w)  
 
 tock_pad = _C.seq_time_monotonic()
 
+print('write headers')
 write_SOI_marker(bits)
 write_jfif_header_no_thumbnail(bits)
 # These can either be written in one segment, or as separate segments (like I do here)
@@ -97,24 +97,19 @@ tock_headers = _C.seq_time_monotonic()
 def jpeg_core_inner(component, divisors):
   shift_component = Block[int](component.dims())
   miter = iter(component)
-  for m2 in shift_component:      
-    m1 = next(miter)
+  for m2,m1 in zip(shift_component,component):
     m2[0] = int(m1()) - 128
-  miter.destroy()
   dctd = fdct_float_rmaj(View(shift_component))
   quantized = Block[int](dctd.dims())
-  qiter = iter(quantized)
-  for p,q in scan(dctd,divisors):
-    qi = next(qiter)
+  for p,q,qi in zip(dctd,divisors,quantized):
     qi[0] = fquantize(p(), q())
-  qiter.destroy()
   return quantized
 
 # stores interleaved format for no downsampling (Y then Cb then Cr)
 def jpeg_core_interleaved_full(Y,Cb,Cr):
   Y_split, Cb_split, Cr_split = grid_rmaj(Y,8)[0], grid_rmaj(Cb,8)[0], grid_rmaj(Cr,8)[0]
   Y_last_dc, Cb_last_dc, Cr_last_dc = 0, 0, 0  
-  for y,cb,cr in scan(Y_split, Cb_split, Cr_split):
+  for y,cb,cr in zip(Y_split, Cb_split, Cr_split):
     # level shift everything
     # cast to an int otherwise an i8 can overflow in the dct computation
     # when added together

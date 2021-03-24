@@ -133,7 +133,7 @@ def write_jfif_frame_header[N: int, B:int](bits: Bits[B], P: int, Y: int,
   bits.pack(X, 16)
   bits.pack(Nf, 8)
   Ci = [1,2,3]
-  for c,h,v,tq in scan(Ci,Hi,Vi,Tqi):
+  for c,h,v,tq in zip(Ci,Hi,Vi,Tqi):
     bits.pack(c, 8)
     bits.pack((h << 4) | v, 8)
     bits.pack(tq, 8)
@@ -147,7 +147,7 @@ def write_scan_header[B:int](bits: Bits[B], Csj: list[int], Tdj: list[int],
   Ls = 6 + 2 * Ns
   bits.pack(Ls, 16)
   bits.pack(Ns, 8)
-  for cs,td,ta in scan(Csj, Tdj, Taj):
+  for cs,td,ta in zip(Csj, Tdj, Taj):
     bits.pack(cs, 8)
     bits.pack((td << 4) | ta, 8)
   bits.pack(Ss, 8)

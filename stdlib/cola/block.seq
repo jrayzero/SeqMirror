@@ -15,16 +15,16 @@ class Slice:
 # TODO make dims and stuff like that be uints (and exslices stop be int sand allow ti to be negative)
 
 class Multidim[T]:
-  dims: list[int]
+  dims: list[int] # dims for just your little region
   buffer_mapping: list[Slice] # the mapping to your immediate parent
   # views contain a pointer to their referenced buffer
   buffer: Array[T]
-  buffer_dims: list[int] # original dims of the buffer
+#  buffer_parent.dims: list[int] # original dims of the buffer. use for linearization
   buffer_parent: Multidim[T]
   unique_id: str
   is_backing_buffer: bool  
-  dim_offset: int
-  back_dim_offset: int
+  dim_offset: int # total front dimensions elided
+#  back_dim_offset: int # total back dimensions elided
 
 class View[T]:
   base: Multidim[T]
@@ -41,7 +41,6 @@ class Multidim[T]:
     self.unique_id = ''.join(random.choices(string.printable, k=5))
     self.is_backing_buffer = False
     self.dim_offset = 0
-    self.back_dim_offset = 0
     
   def __init__(self, other: Block[T], set_as_parent: bool):
     self.__init__()
@@ -50,13 +49,12 @@ class Multidim[T]:
       self.buffer_parent = other.base.buffer_parent
       self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
       self.buffer = other.base.buffer
-      self.buffer_dims = other.base.buffer_dims
     else:
-      self.buffer_parent = other.base.buffer_parent
+      self.buffer_parent = self#other.base.buffer_parent
       self.buffer = Array[T](self.nunits())
       self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
       self.is_backing_buffer = True
-      self.buffer_dims = self.dims
+    self.dim_offset = other.base.dim_offset
 
   def __init__(self, other: View[T], set_as_parent: bool):
     self.__init__()
@@ -65,13 +63,14 @@ class Multidim[T]:
       self.buffer_parent = other.base.buffer_parent
       self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
       self.buffer = other.base.buffer
-      self.buffer_dims = other.base.buffer_dims
     else:
+      raise ColaError()
       self.buffer_parent = other.base.buffer_parent
       self.buffer = Array[T](self.nunits())
       self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
       self.is_backing_buffer = True
-      self.buffer_dims = self.dims
+    self.dim_offset = other.base.dim_offset
+#    self.back_dim_offset = other.base.back_dim_offset
 
   def __init__(self, other: int, _:bool):
     self.__init__()
@@ -80,20 +79,17 @@ class Multidim[T]:
     self.buffer_parent = self
     self.is_backing_buffer = True
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_dims = self.dims
 
-  def __init__(self, dims: list[int]):
+  def __init__(self, dims: list[int], _:bool):
     self.__init__()
     self.dims = [d for d in dims]
     self.buffer = Array[T](self.nunits())
     self.buffer_parent = self
     self.is_backing_buffer = True
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_dims = self.dims
 
   # 2D and above
   def __init__(self, dim0, dim1, *dims):
-    assert isinstance(dims, tuple)
     self.__init__()
     self.dims = [dim0, dim1]
     if staticlen(dims) > 0:
@@ -102,36 +98,32 @@ class Multidim[T]:
     self.buffer = Array[T](self.nunits())
     self.is_backing_buffer = True
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_dims = self.dims
 
   # init dims and fill immediately (MAKES A SHALLOW COPY)
   def __init__(self, dims, data: Array[T]):
     self.__init__()
-    assert isinstance(dims, list) or isinstance(dims, tuple)
     self.dims = [d for d in dims]
     self.buffer = data
     self.buffer_parent = self
     self.is_backing_buffer = True
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_dims = self.dims
 
   def __init__(self, dims, data: list[T]):
     self.__init__()
-    assert isinstance(dims, list) or isinstance(dims, tuple)
     self.dims = [d for d in dims]
     self.buffer = data.arr
     self.buffer_parent = self
     self.is_backing_buffer = True
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_dims = self.dims
 
   def _linearize(self, coord: list[int]) -> int:
-    assert len(self.buffer_dims) == len(coord)
+    if len(self.buffer_parent.dims) != len(coord):
+      raise ColaError()
     linear = 0
     for idx,c in enumerate(reversed(coord)):
       s = c
       for i in range(idx):
-        s *= self.buffer_dims[len(coord) - i - 1]
+        s *= self.buffer_parent.dims[len(coord) - i - 1]
       linear += s
     return linear
 
@@ -155,6 +147,7 @@ class Multidim[T]:
 
   # gets origin relative to buffer
   def origin(self) -> list[int]:
+    raise NotImplementedError()
     if self.buffer_mapping:
       return [~p.start for p in self.parent_mapping]
     else:
@@ -164,25 +157,33 @@ class Multidim[T]:
   # reshaping doesn't create a parent mapping
 
   # can elide size one dimensions
-  def elide_front(self) -> Multidim[T]:
-    assert self.dims[self.dim_offset] == 1
+  def elide_front(self, amt: int = 1) -> Multidim[T]:    
+    for i in range(amt):
+      if i >= len(self.dims):
+        raise ColaError("eliding too much")
+      if self.dims[i] != 1:
+        raise ColaError("non-unit dimension")
     md = Multidim[T]()
-    md.dims = [d for d in self.dims]
-    md.dim_offset = self.dim_offset + 1
+    md.dims = [d for d in self.dims[amt:]]
+    md.dim_offset = self.dim_offset + amt
+#    md.back_dim_offset = self.back_dim_offset
     md.buffer_parent = self.buffer_parent
     md.buffer = self.buffer
-    md.buffer_dims = self.buffer_dims
     md.buffer_mapping = self.buffer_mapping    
     return md
 
-  def elide_back(self) -> Multidim[T]:
-    assert self.dims[len(self.dims) - 1 - self.back_dim_offset] == 1
+  def elide_back(self, amt: int = 1) -> Multidim[T]:
+    for i in range(amt):
+      if i >= len(self.dims):
+        raise ColaError("eliding too much")
+      if self.dims[len(self.dims) - i - 1] != 1:
+        raise ColaError("non-unit dimension")
     md = Multidim[T]()
-    md.dims = [d for d in self.dims]
-    md.back_dim_offset = self.back_dim_offset + 1
+    md.dims = [d for d in self.dims[:len(self.dims) - amt]]
+    md.dim_offset = self.dim_offset
+ #   md.back_dim_offset = self.back_dim_offset + amt
     md.buffer_parent = self.buffer_parent
     md.buffer = self.buffer
-    md.buffer_dims = self.buffer_dims
     md.buffer_mapping = self.buffer_mapping
     return md
     
@@ -190,27 +191,33 @@ class Multidim[T]:
     return 1,Slice(idx,idx+1,1)
     
   def _convert(self, idx: Slice, it: int):
-    idx2 = idx.adjust_indices(self.dims[self.dim_offset+it])
+    idx2 = idx.adjust_indices(self.dims[it])
     idx = Slice(idx2[0], idx2[1], idx2[2])
     # compute effective end
     end = idx.compute_range()
     return end,idx  
   
   def __getitem__(self, idx: int) -> Multidim[T]:
-    assert len(self.dims) - (self.dim_offset+self.back_dim_offset) == 1
-    assert 0 <= idx < self.dims[self.dim_offset]
+    if len(self.dims) != 1:
+      raise ColaError("Must be 1D Multidim")
+    if idx >= self.dims[0]:
+      raise ColaError("Invalid index")
+    if idx < 0:
+      idx = idx + self.dims[0]
+    if idx < 0:
+      raise ColaError("Bad idx")
 
-    # update the mapping
+    # update the mapping, which contains all dimensions
     mapping = [sl for sl in self.buffer_mapping]
-    mapping[self.dim_offset] = Slice(idx,idx+1,1)
+    orig = mapping[self.dim_offset]
+    mapping[self.dim_offset] = Slice(~orig.start + idx, ~orig.start + idx+1,1)
     # update dims
-    dims = [d for d in self.dims]
-    dims[self.dim_offset] = 1
+    dims = [1]
 
     md = Multidim[T]()
     md.dim_offset = self.dim_offset
-    md.back_dim_offset = self.back_dim_offset
-    md.buffer_dims = self.buffer_dims
+  #  md.back_dim_offset = self.back_dim_offset
+  #    md.buffer_parent.dims = self.buffer_parent.dims
     md.buffer = self.buffer
     md.buffer_parent = self.buffer_parent
     md.dims = dims
@@ -219,40 +226,19 @@ class Multidim[T]:
   
   def __getitem__(self, idx: Slice) -> Multidim[T]:
     return self[[idx]]
-#    assert len(self.dims) - (self.dim_offset+self.back_dim_offset) == 1
-#    d,sl = self._convert(idx,0)
-#
-#    # update mapping
-#    mapping = [sl for sl in self.buffer_mapping]
-#    mapping[self.dims_offset] += idx
-#
-#    # update dims
-#    dims = [d for d in self.dims]
-#    dims[self.dim_offset] = idx.compute_range()
-#    
-#    md = Multidim[T]()
-#    md.dim_offset = self.dim_offset
-#    md.back_dim_offset = self.back_dim_offset
-#    md.buffer = self.buffer
-#    md.buffer_dims = self.buffer_dims
-#    md.buffer_parent = self.buffer_parent
-#    md.dims = dims
-#    md.buffer_mapping = mapping
-#    return md
 
   # should be a tuple of things
   def __getitem__(self, idxs) -> Multidim[T]:    
-    assert isinstance(idxs, tuple) or isinstance(idxs, list)
-    if len(idxs) != len(self.dims) - (self.dim_offset + self.back_dim_offset):
+    if len(idxs) != len(self.dims):
       raise ColaError()
-#    assert len(idxs) == len(self.dims) - (self.dim_offset + self.back_dim_offset)
+    # get current mappings
     mapping = [sl for sl in self.buffer_mapping]
     dims = [d for d in self.dims]
-
+    # and now update
     i = 0
     for idx in idxs:
       d,sl = self._convert(idx, i)
-      dims[i + self.dim_offset] = d
+      dims[i] = d
       repl = mapping[i + self.dim_offset]
       # sl is relative to self, repl is relative to buffer
       start = ~repl.start + ~sl.start * ~repl.step
@@ -263,9 +249,9 @@ class Multidim[T]:
       
     md = Multidim[T]()
     md.dim_offset = self.dim_offset
-    md.back_dim_offset = self.back_dim_offset
+#    md.back_dim_offset = self.back_dim_offset
     md.buffer = self.buffer
-    md.buffer_dims = self.buffer_dims
+ #   md.buffer_parent.dims = self.buffer_parent.dims
     md.buffer_parent = self.buffer_parent
     md.dims = dims
     md.buffer_mapping = mapping
@@ -275,7 +261,8 @@ class Multidim[T]:
   
   # all the calls realized a SINGLE element
   def __call__(self) -> T:
-    assert self.nunits() == 1
+    if self.nunits() != 1:
+      raise ColaError()
     coord = [~sl.start for sl in self.buffer_mapping]
     return self.buffer[self._linearize(coord)]
 
@@ -289,10 +276,15 @@ class Multidim[T]:
   ### __SETITEM__ AND ASSOCIATED FUNCTIONS
 
   def _iterate(self):
+    # default iterators are from the buffer mapping since we may have some back elided dimensions
+    return self._iterate([~d.start for d in self.buffer_mapping], 0)
+
+  def iterate(self):
+    # default iterators are from the buffer mapping since we may have some back elided dimensions
     return self._iterate([~d.start for d in self.buffer_mapping], 0)
 
   def _iterate(self, iterators: list[int], cur_depth: int):
-    if cur_depth == len(self.dims) - (1 + self.dim_offset + self.back_dim_offset):
+    if cur_depth == len(self.dims) - 1:#(1 + self.dim_offset + self.back_dim_offset):
       cmap = self.buffer_mapping[cur_depth+self.dim_offset]
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
         iterators[cur_depth+self.dim_offset] = i
@@ -308,25 +300,28 @@ class Multidim[T]:
     return self._slice_iterate([~d.start for d in self.buffer_mapping], 0)
 
   def _slice_iterate(self, iterators: list[int], cur_depth: int):
-    if cur_depth == len(self.dims) - (1 + self.dim_offset + self.back_dim_offset):
+    if cur_depth == len(self.dims) - 1:#(1 + self.dim_offset + self.back_dim_offset):
       cmap = self.buffer_mapping[cur_depth+self.dim_offset]
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
         iterators[cur_depth+self.dim_offset] = i
-        yield self.buffer_parent[iterators]
+        elide_amt = len(self.buffer_parent.dims) - 1
+        yield self.buffer_parent[iterators].elide_back(elide_amt)
     else:
       cmap = self.buffer_mapping[cur_depth+self.dim_offset]
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
         iterators[cur_depth+self.dim_offset] = i
         yield from self._slice_iterate(iterators, cur_depth+1)
 
-  def __iter__(self) -> Generator[Multidim[T]]:      
+  def __iter__(self) -> Generator[Multidim[T]]:
     return self.slice_iterate()
 
   # The setitems work by slicing into self with the idxs, and then performing the write
   def __setitem__(self, idx: int, item: T):
     sliced = self[idx]
-    coord = [~sl.start for sl in sliced.buffer_mapping]
-    sliced.buffer[sliced.linearize(coord)] = item
+    sliced._write(item)
+#    coord = [~sl.start for sl in sliced.buffer_mapping]
+#    print(coord)
+#    sliced.buffer[sliced._linearize(coord)] = item
 
   def __setitem__(self, idxs, item):
     sliced = self[idxs]
@@ -358,7 +353,7 @@ class Multidim[T]:
   # iterate through the whole buffer mapping, but make it seem
   # like it is an elided region
   def _str_iterate(self, iterators: list[int], cur_depth: int):
-    if cur_depth == len(self.dims) - (1 + self.dim_offset + self.back_dim_offset):
+    if cur_depth == len(self.dims) - 1:#(1 + self.dim_offset + self.back_dim_offset):
       cmap = self.buffer_mapping[cur_depth+self.dim_offset]
       s = ''
       if cur_depth == 0:
@@ -373,9 +368,9 @@ class Multidim[T]:
       s = ''
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
         iterators[cur_depth+self.dim_offset] = i
-        if cur_depth == 0 and (len(self.dims) - (self.dim_offset + self.back_dim_offset)) > 2:
+        if cur_depth == 0 and len(self.dims) > 2:#(len(self.dims) - (self.dim_offset + self.back_dim_offset)) > 2:
           s += '\ndims idxs: ' + str(iterators[cur_depth+self.dim_offset])
-        elif cur_depth < (len(self.dims) - (self.dim_offset + self.back_dim_offset)) - 2:
+        elif cur_depth < (len(self.dims) - 2):#(self.dim_offset + self.back_dim_offset)) - 2:
           s += ',' + str(iterators[cur_depth+self.dim_offset])
         else:
           s += '\n'
@@ -563,13 +558,13 @@ class Block[T]:
   def __init__(self, dim0, dim1, *dims):
     self.base = Multidim[T](dim0, dim1, *dims)    
 
-  def elide_front(self):
-    return View[T](self.base.elide_front())
+#  def elide_front(self, amt: int = 1):
+#    return View[T](self.base.elide_front(amt))
 
-  def elide_back(self):
-    return View[T](self.base.elide_back())
+#  def elide_back(self, amt: int = 1):
+#    return View[T](self.base.elide_back(amt))
 
-  def dims(self):
+  def dims(self) -> list[int]:
     return self.base.dims
 
   def nunits(self):
@@ -687,13 +682,13 @@ class View[T]:
   def __init__(self, base: Multidim[T]):
     self.base = base
 
-  def elide_front(self):
-    return View[T](self.base.elide_front())
+  def elide_front(self, amt: int = 1):
+    return View[T](self.base.elide_front(amt))
 
-  def elide_back(self):
-    return View[T](self.base.elide_back())
+  def elide_back(self, amt: int = 1):
+    return View[T](self.base.elide_back(amt))
 
-  def dims(self):
+  def dims(self) -> list[int]:
     return self.base.dims
 
   def nunits(self):

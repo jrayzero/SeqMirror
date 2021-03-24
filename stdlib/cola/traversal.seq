@@ -204,11 +204,10 @@ class AppliedTraversal[T]:
     self.origin = [o for o in origin]
 
   # generates view values
-  # flattens
   def __iter__(self) -> Generator[View[T]]:
     assert len(self.origin) > 0
     for coord in self.traversal.iter_with_origin(self.origin):
-      yield self.root[coord].flatten()
+      yield self.root[coord]#.flatten()
 
   def __str__(self) -> str:
     return ' -> '.join([str(item()) for item in self])

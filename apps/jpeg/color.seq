@@ -40,7 +40,7 @@ def rgb_ycc_convert_rmaj[T](input_data: View[T], output_data: View[T], rgb_ycc_t
     Y = output_data[0,:,:]
     Cb = output_data[1,:,:]
     Cr = output_data[2,:,:]
-  for _r,_g,_b,y,cb,cr in scan(R,G,B,Y,Cb,Cr):
+  for _r,_g,_b,y,cb,cr in zip(R,G,B,Y,Cb,Cr):
     r,g,b = int(_r()), int(_g()), int(_b())
     y[0] = T((rgb_ycc_table(0,r) + rgb_ycc_table(1,g) + rgb_ycc_table(2,b)) >> shift)
     cb[0] = T((rgb_ycc_table(3,r) + rgb_ycc_table(4,g) + rgb_ycc_table(5,b)) >> shift)
@@ -54,7 +54,7 @@ def rgb_gray_convert_rmaj[T](input_data: View[T], output_data: View[T], rgb_ycc_
   B = input_data[:,:,2]
   Y = output_data[:,:,0]
   shft = T(shift)
-  for _r,_g,_b,y in scan(R,G,B,Y):
+  for _r,_g,_b,y in zip(R,G,B,Y):
     r,g,b = int(_r()), int(_g()), int(_b())
     y[0] = T(rgb_ycc_table(0,r) + rgb_ycc_table(1,g) + rgb_ycc_table(2,b)) >> shft
 
@@ -69,7 +69,7 @@ def cmyk_ycck_convert_rmaj[T](input_data: View[T], output_data: View[T], rgb_ycc
   Cr = output_data[:,:,2]
   K2 = output_data[:,:,4]
   shft = T(shift)
-  for c,m,y1,k1,y2,cb,cr,k2 in scan(C,M,Y1,K1,Y2,Cb,Cr,K2):
+  for c,m,y1,k1,y2,cb,cr,k2 in zip(C,M,Y1,K1,Y2,Cb,Cr,K2):
     r = max_sample - int(c())
     g = max_sample - int(m())
     b = max_sample - int(y1())

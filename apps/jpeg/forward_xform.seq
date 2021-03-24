@@ -16,8 +16,8 @@ def fdct_float_rmaj[T](data: View[T]) -> Block[float]:
  # iter_blk = iter(MxN_partition_rmaj[1,8,float](View(blk))[0])
   #  for row in MxN_partition_rmaj[1,8,T](data)[0]:
   for r in range(8):
-    row = data[r,:].flatten()
-    brow = blk[r,:].flatten()
+    row = data[r,:].elide_front()
+    brow = blk[r,:].elide_front()
     tmp0 = row(0) + row(7)
     tmp7 = row(0) - row(7)
     tmp1 = row(1) + row(6)
@@ -53,7 +53,7 @@ def fdct_float_rmaj[T](data: View[T]) -> Block[float]:
     brow[1] = float(z11 + z4)
     brow[7] = float(z11 - z4)
   for c in range(8):
-    col = blk[:,c].flatten()
+    col = blk[:,c].elide_back()
     tmp0 = col(0) + col(7)
     tmp7 = col(0) - col(7)
     tmp1 = col(1) + col(6)

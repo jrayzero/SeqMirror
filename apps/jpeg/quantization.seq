@@ -39,7 +39,7 @@ def quality_to_scaling(quality: int):
 ### scale actual quantization tables
 
 def scale_quant_table2(qtable: Block[int], out_qtable: Block[int], scale_factor: int, force_baseline: bool):
-  for q,sq in scan(qtable, out_qtable):
+  for q,sq in zip(qtable, out_qtable):
     tmp = (q() * scale_factor + 50) // 100
     if tmp <= 0:
       tmp = 1
@@ -72,7 +72,7 @@ def compute_qdivisors_AAN_idct_short(qtable: Block[int], divisors: Block[u16]):
 	                   u16(12873), u16(17855), u16(16819), u16(15137), u16(12873), u16(10114), u16( 6967), u16( 3552),
 	                   u16(8867), u16(12299), u16(11585), u16(10426), u16(8867), u16( 6967), u16(4799), u16(2446),
 	                   u16(4520), u16(6270), u16(5906), u16(5315), u16(4520), u16(3552), u16(2446), u16(1247)])
-  for q,s,d in scan(qtable, aan_scales, divisors):
+  for q,s,d in zip(qtable, aan_scales, divisors):
     d[0] = (u16(q()) * s() + (u16(1) << u16(10))) >> u16(11)
 
 def compute_qdivisors_AAN_idct_float_rmaj(qtable: Block[int]) -> Block[float]:

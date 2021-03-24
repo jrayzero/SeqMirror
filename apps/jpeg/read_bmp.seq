@@ -57,7 +57,7 @@ def read_bmp(fd: File) -> Tuple[View[u8],int]:
     #   for this, it would require negative strides and swapping start/bottom
     for i in range(bi_height):
       row = bi_height - i - 1
-      for br,bg,bb in scan(bmp_data[row,:,0],bmp_data[row,:,1],bmp_data[row,:,2]):
+      for br,bg,bb in zip(bmp_data[row,:,0],bmp_data[row,:,1],bmp_data[row,:,2]):
         bb[0] = fd.read_u[1]()
         bg[0] = fd.read_u[1]()
         br[0] = fd.read_u[1]()

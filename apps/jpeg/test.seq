@@ -132,7 +132,12 @@ else:
   jpeg_core_interleaved_full(Y, Cb, Cr)
 
 write_EOI_marker(bits)
-bits.flush_all()
+if not bits.flush_to_file():
+  print('need to stuff')
+  nbits_to_pack = 8 - len(bits) & 7
+  for _ in range(nbits_to_pack):
+    bits.pack(1,1)
+  assert bits.flush_to_file()
 
 output_fd.close()
 tock = _C.seq_time_monotonic()

@@ -44,6 +44,8 @@ protected:
   vector<string> ptree_stack;
   /// stack of vars representing traversal creation blocks.
   vector<string> trav_stack;
+  /// stack of names giving the most recent ptree or trav nest
+  vector<string> ptree_or_trav_stack;
 
 private:
   /// Set of current context flags.
@@ -134,7 +136,7 @@ public:
   // COLA
   void pushPTree(string ptree) { ptree_stack.push_back(ptree); }
 
-  string popPtree() { string pt = ptree_stack.back(); ptree_stack.pop_back(); return pt; }
+  string popPTree() { string pt = ptree_stack.back(); ptree_stack.pop_back(); return pt; }
 
   string ptreePeekBack() const { return !ptreeEmpty() ? ptree_stack.back() : ""; }
 
@@ -147,6 +149,18 @@ public:
   string travPeekBack() const { return !travEmpty() ? trav_stack.back() : ""; }
 
   bool travEmpty() const { return trav_stack.empty(); }
+
+  void pushPTreePTreeOrTrav() { ptree_or_trav_stack.push_back("ptree"); }
+
+  void pushTravPTreeOrTrav() { ptree_or_trav_stack.push_back("trav"); }
+
+  bool ptreeOrTravEmpty() { return ptree_or_trav_stack.empty(); }
+
+  bool isPTreeMostRecent() { return ptree_or_trav_stack.back() == "ptree"; }
+
+  bool isTravMostRecent() { return ptree_or_trav_stack.back() == "trav"; }
+
+  void popPTreeOrTrav() { ptree_or_trav_stack.pop_back(); }
 
 private:
   /// Remove an identifier from the map only.

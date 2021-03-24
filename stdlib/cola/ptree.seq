@@ -57,7 +57,7 @@ class AndPTree[T]:
   def _inner_str(self, indent) -> str:
     s = ''
     if self.leaf:
-      s += ' ' * indent + 'LEAF @' + str(self.leaf.base.abs_origin()) + '\n'
+      s += ' ' * indent + 'LEAF @' + str(self.leaf.base.origin()) + '\n'
     elif self.root:
       s += ' ' * indent + 'ROOT\n'
       for child in self.children:
@@ -96,7 +96,7 @@ class AndPTree[T]:
       ref_dims = ref_leaf[0]
       ref_origin = ref_leaf[1]
       this_dims = leaf.base.dims
-      this_origin = leaf.base.abs_origin()
+      this_origin = leaf.base.origin()
       if len(ref_dims) != len(this_dims):
         return False
       if len(ref_origin) != len(this_origin):
@@ -314,9 +314,9 @@ class PTree[T]:
   def _inner_str(self, indent):
     s = ''
     if self.leaf:
-      s += ' ' * indent + 'LEAF ' + str(self.nandtrees) + ' ' + str(self.leaf.dims()) + '@' + str(self.leaf.base.abs_origin()) + '\n'
+      s += ' ' * indent + 'LEAF ' + str(self.nandtrees) + ' ' + str(self.leaf.dims()) + '@' + str(self.leaf.base.origin()) + '\n'
     elif self.root:
-      s += ' ' * indent + 'ROOT ' + str(self.nandtrees) + ' ' + str(self.root.dims()) + '@' + str(self.root.base.abs_origin()) + '\n'
+      s += ' ' * indent + 'ROOT ' + str(self.nandtrees) + ' ' + str(self.root.dims()) + '@' + str(self.root.base.origin()) + '\n'
       for child in self.children:
         s += child._inner_str(indent+2)
     elif self.is_and_node:

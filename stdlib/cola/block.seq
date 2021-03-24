@@ -145,13 +145,10 @@ class Multidim[T]:
       n *= d
     return n
 
-  # gets origin relative to buffer
+  # gets origin relative to direct ancestors block
+  # TODO have another function that can specify which thing to be relative to
   def origin(self) -> list[int]:
-    raise NotImplementedError()
-    if self.buffer_mapping:
-      return [~p.start for p in self.parent_mapping]
-    else:
-      return [0] * len(self.dims)
+    return [~p.start for p in self.buffer_mapping]
 
   # call these from Block/View.reshape
   # reshaping doesn't create a parent mapping
@@ -567,6 +564,9 @@ class Block[T]:
   def dims(self) -> list[int]:
     return self.base.dims
 
+  def dims(self, idx: int) -> int:
+    return self.base.dims[idx]
+
   def nunits(self):
     return self.base.nunits()
 
@@ -690,6 +690,9 @@ class View[T]:
 
   def dims(self) -> list[int]:
     return self.base.dims
+
+  def dims(self, idx: int) -> int:
+    return self.base.dims[idx]
 
   def nunits(self):
     return self.base.nunits()

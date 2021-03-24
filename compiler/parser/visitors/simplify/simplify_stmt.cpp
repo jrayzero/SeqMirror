@@ -468,6 +468,7 @@ void SimplifyVisitor::visit(FunctionStmt *stmt) {
   if (attr.has(Attr::Traversal)) {
     string trav = ctx->cache->getTemporaryVar("trav");
     ctx->pushTrav(trav);
+    ctx->pushTravPTreeOrTrav();
     // for the most part, the stuff in a traversal definition can be normal code
     // but there should NOT be any return statements or manual calls to Traversal.__init__(). These are added
     // by me here
@@ -476,6 +477,7 @@ void SimplifyVisitor::visit(FunctionStmt *stmt) {
 if (attr.has(Attr::PTree)) {
     string ptree = ctx->cache->getTemporaryVar("ptree");
     ctx->pushPTree(ptree);
+    ctx->pushPTreePTreeOrTrav();
   }
 
   auto canonicalName = ctx->generateCanonicalName(stmt->name, true);
@@ -582,6 +584,7 @@ if (attr.has(Attr::PTree)) {
     full_body.push_back(move(ret));
     suite = N<SuiteStmt>(move(full_body));
     ctx->popTrav();
+    ctx->popPTreeOrTrav();
   }
   if (attr.has(Attr::PTree)) {
     // stick on a return statement
@@ -590,7 +593,8 @@ if (attr.has(Attr::PTree)) {
     full_body.push_back(move(suite));
     full_body.push_back(move(ret));
     suite = N<SuiteStmt>(move(full_body));
-    ctx->popPtree();
+    ctx->popPTree();
+    ctx->popPTreeOrTrav();
   }
 
   // Now fill the internal attributes that will be used later...
@@ -926,7 +930,7 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
                                                                 N<BoolExpr>(stmt->head->getId()->value == "pt_and")));
     ctx->pushPTree(pt_new);
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
-    ctx->popPtree();
+    ctx->popPTree();
     vector<StmtPtr> stmts;
     stmts.reserve(2);
     stmts.push_back(move(node));
@@ -959,6 +963,22 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
   } else if (head == "trav_build") {
     seqassert(false, "not supported this way anymore");
   } else if (head == "rrot" || head == "arot" || head == "rstep" || head == "astep" || head == "aseek" || head == "link") {
+    if (head == "link") {
+      // this can be either for traversals or ptree
+      seqassert(!ctx->ptreeOrTravEmpty(), "not in a traversal or ptree build block");
+      if (ctx->isPTreeMostRecent()) {
+          std::cerr << "Found ptree link" << std::endl;
+        std::string parent = ctx->ptreePeekBack();
+        vector<StmtPtr> suite;
+        suite.reserve(stmt->args.size());
+        for (auto &leaf : stmt->args) {
+          // add this as a child of the parent
+          suite.emplace_back(N<ExprStmt>(N<CallExpr>(N<DotExpr>(N<IdExpr>(parent), "add_child"), transform(leaf))));
+        }
+        resultStmt = N<SuiteStmt>(move(suite));
+        return;
+      } // else just follow the rest of the traversal stuff
+    }
     seqassert(!ctx->travEmpty(), "not in a traversal build block");
     string movement = "add_" + head;
     string trav = ctx->travPeekBack();

@@ -100,7 +100,6 @@ class Bits[N: int]:
         self.fd.flush()
       else:
         # resize
-        print('resizing')
         self.l1_max_cap = self.l1_max_cap * 2
         self.l1_buffer = self.l1_buffer.resize(self.l1_max_cap)
 
@@ -133,8 +132,8 @@ class Bits[N: int]:
         return True
     return False
    
-  def bits_left(self, at_least: int = 0) -> int:
-    return len(self) - self.offset >= at_least
+  def bits_left(self, at_least: int = 0) -> bool:
+    return (len(self) - self.offset) >= at_least
 
   # dumps the current state of the l0 and l1 buffers. just prints in decimal for now cause
   # I'm lazy
@@ -184,16 +183,16 @@ class Bits[N: int]:
 #      self.offset += 1
 #    return bits
 
+
   # TODO refactor theses since they are both the same except for the offset ctr
 
   # only supports up to 64 bits at a time (cause I can't seem to add a generic to __call__)
   # advances offset
   def __call__(self, nbits: int) -> UInt[64]:  
-    print(self.offset)
     mx = self.offset + nbits
     if nbits > 64:
       raise ColaError()
-    if mx >= len(self):
+    if mx > len(self):
       raise ColaError()       
     ret = UInt[64](0)
     # naively read bit by bit
@@ -223,8 +222,8 @@ class Bits[N: int]:
     mx = self.offset + nbits
     if 0 < nbits > 64:
       raise ColaError()
-    if mx >= len(self):
-      raise ColaError()       
+    if mx > len(self):      
+      raise ColaError(str(mx))       
     ret = UInt[64](0)
     # naively read bit by bit
     idx = self.offset

@@ -526,6 +526,26 @@ void SimplifyVisitor::visit(CallExpr *expr) {
     ctx->popBlock();
     return;
   }
+  if (expr->expr->isId("cola_debug")) {
+    if (expr->args.size() != 1)
+      error("cola_debug accepts a single argument");
+    if (!expr->args[0].value->getId() and !expr->args[0].value->getDot())
+      error("cola_debug arg must be an ID or dot");
+    string name;
+    if (expr->args[0].value->getId()) {
+      name = expr->args[0].value->getId()->value + ": ";
+    } else {
+      auto *dot = expr->args[0].value->getDot();
+      name = dot->member + ": ";
+    }
+    ExprPtr ename = N<StringExpr>(name);
+    auto t = transform(expr->args[0].value);
+    vector<ExprPtr> args;
+    args.push_back(move(ename));
+    args.push_back(move(t));
+    resultExpr = N<CallExpr>(transform(N<IdExpr>("print")), move(args));
+    return;
+  }
 
   auto e = transform(expr->expr.get(), true);
   // 8. namedtuple

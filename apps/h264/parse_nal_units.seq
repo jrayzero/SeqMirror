@@ -1,75 +1,7 @@
 from cola.bitseq import *
+from video import *
 from golomb import *
-
-class NALError:
-  _hdr: ExcHeader
-
-  def __init__(self):
-    self._hdr = ('NALError', '', '', '', 0, 0)
-    
-  def __init__(self, message: str):
-    self._hdr = ('NALError', message, '', '', 0, 0)
-      
-  @property
-  def message(self):
-    return self._hdr.msg
-
-def check_val(val, ref, val_name):
-  if val != ref:
-    raise NALError(val_name + "(" + str(val) + ") != " + str(ref))
-  else:
-    return val
-
-class SeqParameterSet:
-  profile_idc: int
-  constraint_set0_flag: bool
-  constraint_set1_flag: bool
-  constraint_set2_flag: bool
-  constraint_set3_flag: bool
-  constraint_set4_flag: bool
-  constraint_set5_flag: bool
-  level_idc: int
-  seq_parameter_set_id: u64
-  chroma_format_idc: u64
-  separate_colour_plane_flag: bool
-  bit_depth_luma_minus8: u64
-  bit_depth_chroma_minus8: u64
-  qpprime_y_zero_transform_bypass_flag: bool
-  seq_scaling_matrix_present_flag: bool
-  seq_scaling_list_present_flag: Array[bool]
-  scaling_list: Array[Array[int]]
-  log2_max_frame_num_minus4: u64
-  pic_order_cnt_type: u64
-  log2_max_pic_order_cnt_lsb_minus4: u64
-  delta_pic_order_always_zero_flag: bool
-  offset_for_non_ref_pic: int
-  offset_for_top_to_bottom_field: int
-  num_ref_frames_in_pic_order_cnt_cycle: u64
-  offset_for_ref_frame: Array[int]
-  max_num_ref_frames: u64
-  gaps_in_frame_num_value_allowed_flag: bool
-  pic_width_in_mbs_minus1: u64
-  pic_height_in_map_units_minus1: u64
-  frame_mbs_only_flag: bool
-  mb_adaptive_frame_field_flag: bool
-  direct_8x8_inference_flag: bool
-  frame_cropping_flag: bool
-  frame_crop_left_offset: u64
-  frame_crop_right_offset: u64
-  frame_crop_top_offset: u64
-  frame_crop_bottom_offset: u64
-  vui_parameters_present_flag: bool
-  
-
-class NALUnit:
-  original_stream: Bits[64]
-  nal_unit_type: int
-  nal_ref_idc: int
-  svc_extension_flag: bool
-  avc_3d_extension_flag: bool
-  rbsp_bytes: Bits[64]    
-  # the stuff here is conditionally filled based on the nal unit type
-  sps: Optional[SeqParameterSet]
+import math
 
 @extend
 class SeqParameterSet:
@@ -83,36 +15,36 @@ class SeqParameterSet:
     self.constraint_set4_flag = False
     self.constraint_set5_flag = False
     self.level_idc = 0
-    self.seq_parameter_set_id = u64(0)
-    self.chroma_format_idc = u64(0)
+    self.seq_parameter_set_id = 0
+    self.chroma_format_idc = 0
     self.separate_colour_plane_flag = False
-    self.bit_depth_luma_minus8 = u64(0)
-    self.bit_depth_chroma_minus8 = u64(0)
+    self.bit_depth_luma_minus8 = 0
+    self.bit_depth_chroma_minus8 = 0
     self.qpprime_y_zero_transform_bypass_flag = False
     self.seq_scaling_matrix_present_flag = False
  #   self.seq_scaling_list_present_flag = Array[bool]()    
     # not using block here because these are arrays of different sizes (so not a block shape)
     #    self.scaling_list = SeqParameterSet.make_default_scaling_lists()
-    self.log2_max_frame_num_minus4 = u64(0)
-    self.pic_order_cnt_type = u64(0)
-    self.log2_max_pic_order_cnt_lsb_minus4 = u64(0)
+    self.log2_max_frame_num_minus4 = 0
+    self.pic_order_cnt_type = 0
+    self.log2_max_pic_order_cnt_lsb_minus4 = 0
     self.delta_pic_order_always_zero_flag = False
     self.offset_for_non_ref_pic = 0
     self.offset_for_top_to_bottom_field = 0
-    self.num_ref_frames_in_pic_order_cnt_cycle = u64(0)
+    self.num_ref_frames_in_pic_order_cnt_cycle = 0
 #    self.offset_for_ref_frame = Array[int]()
-    self.max_num_ref_frames = u64(0)
+    self.max_num_ref_frames = 0
     self.gaps_in_frame_num_value_allowed_flag = False
-    self.pic_width_in_mbs_minus1 = u64(0)
-    self.pic_height_in_map_units_minus1 = u64(0)
+    self.pic_width_in_mbs_minus1 = 0
+    self.pic_height_in_map_units_minus1 = 0
     self.frame_mbs_only_flag = False
     self.mb_adaptive_frame_field_flag = False
     self.direct_8x8_inference_flag = False
     self.frame_cropping_flag = False
-    self.frame_crop_left_offset = u64(0)
-    self.frame_crop_right_offset = u64(0)
-    self.frame_crop_top_offset = u64(0)
-    self.frame_crop_bottom_offset = u64(0)
+    self.frame_crop_left_offset = 0
+    self.frame_crop_right_offset = 0
+    self.frame_crop_top_offset = 0
+    self.frame_crop_bottom_offset = 0
     self.vui_parameters_present_flag = False
 
 
@@ -194,7 +126,7 @@ class SeqParameterSet:
     self.constraint_set5_flag = bool(rbsp(1))
     check_val(rbsp(2), u64(0), "reserved_zero_bits")
     self.level_idc = int(rbsp(8))
-    self.seq_parameter_set_id = ExpGolomb.udecode(rbsp)
+    self.seq_parameter_set_id = int(ExpGolomb.udecode(rbsp))
     if self.profile_idc == 100 or self.profile_idc == 110 \
        or self.profile_idc == 122 or self.profile_idc == 244 \
        or self.profile_idc == 44 or self.profile_idc == 83 \
@@ -202,49 +134,375 @@ class SeqParameterSet:
        or self.profile_idc == 128 or self.profile_idc == 138 \
        or self.profile_idc == 139 or self.profile_idc == 134 \
        or self.profile_idc == 135:
-      self.chroma_format_idc = ExpGolomb.udecode(rbsp)
-      if self.chroma_format_idc == u64(3):
+      self.chroma_format_idc = int(ExpGolomb.udecode(rbsp))
+      if self.chroma_format_idc == 3:
         self.separate_colour_plane_flag = bool(rbsp(1))
-      self.bit_depth_luma_minus8 = ExpGolomb.udecode(rbsp)
-      self.bit_depth_chroma_minus8 = ExpGolomb.udecode(rbsp)
+      self.bit_depth_luma_minus8 = int(ExpGolomb.udecode(rbsp))
+      self.bit_depth_chroma_minus8 = int(ExpGolomb.udecode(rbsp))
       self.qpprime_y_zero_transform_bypass_flag = bool(rbsp(1))
       self.seq_scaling_matrix_present_flag = bool(rbsp(1))
       if self.seq_scaling_matrix_present_flag:
-        amt = 8 if self.chroma_format_idc != u64(3) else 12
+        amt = 8 if self.chroma_format_idc != 3 else 12
         self.seq_scaling_list_present_flag = Array[bool](amt)
         for i in range(amt):
           b = bool(rbsp(1))
           self.seq_scaling_list_present_flag[i] = b
           raise NotImplementedError()
-    self.log2_max_frame_num_minus4 = ExpGolomb.udecode(rbsp)
-    self.pic_order_cnt_type = ExpGolomb.udecode(rbsp)
-    if self.pic_order_cnt_type == u64(0):
-      self.log2_max_pic_order_cnt_lsb_minus4 = ExpGolomb.udecode(rbsp)
-    elif self.pic_order_cnt_type == u64(1):
+    self.log2_max_frame_num_minus4 = int(ExpGolomb.udecode(rbsp))
+    self.pic_order_cnt_type = int(ExpGolomb.udecode(rbsp))
+    if self.pic_order_cnt_type == 0:
+      self.log2_max_pic_order_cnt_lsb_minus4 = int(ExpGolomb.udecode(rbsp))
+    elif self.pic_order_cnt_type == 1:
       self.delta_pic_order_always_zero_flag = bool(rbsp(1))
       self.offset_for_non_ref_pic = ExpGolomb.sdecode(rbsp)
       self.offset_for_top_to_bottom_field = ExpGolomb.sdecode(rbsp)
-      self.num_ref_frames_in_pic_order_cnt_cycle = ExpGolomb.udecode(rbsp)
-      self.offset_for_ref_frame = Array[int](int(self.num_ref_frames_in_pic_order_cnt_cycle))
-      for i in range(int(self.num_ref_frames_in_pic_order_cnt_cycle)):
+      self.num_ref_frames_in_pic_order_cnt_cycle = int(ExpGolomb.udecode(rbsp))
+      self.offset_for_ref_frame = Array[int](self.num_ref_frames_in_pic_order_cnt_cycle)
+      for i in range(self.num_ref_frames_in_pic_order_cnt_cycle):
         self.offset_for_ref_frame[i] = ExpGolomb.sdecode(rbsp)
-    self.max_num_ref_frames = ExpGolomb.udecode(rbsp)
+    self.max_num_ref_frames = int(ExpGolomb.udecode(rbsp))
     self.gaps_in_frame_num_value_allowed_flag = bool(rbsp(1))
-    self.pic_width_in_mbs_minus1 = ExpGolomb.udecode(rbsp) 
-    self.pic_height_in_map_units_minus1 = ExpGolomb.udecode(rbsp)
+    self.pic_width_in_mbs_minus1 = int(ExpGolomb.udecode(rbsp))
+    self.pic_height_in_map_units_minus1 = int(ExpGolomb.udecode(rbsp))
     self.frame_mbs_only_flag = bool(rbsp(1))
     if not self.frame_mbs_only_flag:
       self.mb_adaptive_frame_field_flag = bool(rbsp(1))
     self.direct_8x8_inference_flag = bool(rbsp(1))
     self.frame_cropping_flag = bool(rbsp(1))
     if self.frame_cropping_flag:
-      self.frame_crop_left_offset = ExpGolomb.udecode(rbsp)
-      self.frame_crop_right_offset = ExpGolomb.udecode(rbsp)
-      self.frame_crop_top_offset = ExpGolomb.udecode(rbsp)
-      self.frame_crop_bottom_offset = ExpGolomb.udecode(rbsp)
+      self.frame_crop_left_offset = int(ExpGolomb.udecode(rbsp))
+      self.frame_crop_right_offset = int(ExpGolomb.udecode(rbsp))
+      self.frame_crop_top_offset = int(ExpGolomb.udecode(rbsp))
+      self.frame_crop_bottom_offset = int(ExpGolomb.udecode(rbsp))
     self.vui_parameters_present_flag = bool(rbsp(1))
     if self.vui_parameters_present_flag:
       raise NotImplementedError()
+
+@extend
+class PicParameterSet:
+
+  def __init__(self):
+    pic_parameter_set_id = 0
+    seq_parameter_set_id = 0
+    entropy_coding_mode_flag = False
+    bottom_field_pic_order_in_frame_present_flag = False
+    num_slice_groups_minus1 = 0
+    slice_group_map_type = 0
+    slice_group_change_direction_flag = False
+    slice_group_change_rate_minus1 = 0
+    pic_size_in_map_units_minus1 = 0
+    num_ref_idx_l0_default_active_minus1 = 0
+    num_ref_idx_l1_default_active_minus1 = 0
+    weighted_pred_flag = False
+    weighted_bipred_idc = 0
+    pic_init_qp_minus26 = 0
+    pic_init_qs_minus26 = 0
+    chroma_qp_index_offset = 0
+    deblocking_filter_control_present_flag = False
+    constrained_intra_pred_flag = False
+    redundant_pic_cnt_present_flag = False
+    transform_8x8_mode_flag = False
+    pic_scaling_matrix_present_flag = False
+    second_chroma_qp_index_offset = 0
+
+  def dump(self):
+    cola_debug(self.pic_parameter_set_id)
+    cola_debug(self.seq_parameter_set_id)
+    cola_debug(self.entropy_coding_mode_flag)
+    cola_debug(self.bottom_field_pic_order_in_frame_present_flag)
+    cola_debug(self.num_slice_groups_minus1)
+    cola_debug(self.slice_group_map_type)
+    cola_debug(self.run_length_minus1)
+    cola_debug(self.top_left)
+    cola_debug(self.bottom_right)
+    cola_debug(self.slice_group_change_direction_flag)
+    cola_debug(self.slice_group_change_rate_minus1)
+    cola_debug(self.pic_size_in_map_units_minus1)
+    cola_debug(self.slice_group_id)
+    cola_debug(self.num_ref_idx_l0_default_active_minus1)
+    cola_debug(self.num_ref_idx_l1_default_active_minus1)
+    cola_debug(self.weighted_pred_flag)
+    cola_debug(self.weighted_bipred_idc)
+    cola_debug(self.pic_init_qp_minus26)
+    cola_debug(self.pic_init_qs_minus26)
+    cola_debug(self.chroma_qp_index_offset)
+    cola_debug(self.deblocking_filter_control_present_flag)
+    cola_debug(self.constrained_intra_pred_flag)
+    cola_debug(self.redundant_pic_cnt_present_flag)
+    cola_debug(self.transform_8x8_mode_flag)
+    cola_debug(self.pic_scaling_matrix_present_flag)
+    cola_debug(self.pic_scaling_list_present_flag)
+    cola_debug(self.second_chroma_qp_index_offset)
+    
+  def parse(self, nal_unit, video: Video):
+    self.pic_parameter_set_rbsp(nal_unit, video)
+
+  def pic_parameter_set_rbsp(self, nal_unit, video):
+    rbsp = nal_unit.rbsp_bytes
+    self.pic_parameter_set_id = int(ExpGolomb.udecode(rbsp))
+    self.seq_parameter_set_id = int(ExpGolomb.udecode(rbsp))
+    self.entropy_coding_mode_flag = bool(rbsp(1))
+    self.bottom_field_pic_order_in_frame_present_flag = bool(rbsp(1))
+    self.num_slice_groups_minus1 = int(ExpGolomb.udecode(rbsp))
+    if self.num_slice_groups_minus1 > 0:
+      self.slice_group_map_type = int(ExpGolomb.udecode(rbsp))
+      if self.slice_group_map_type == 0:
+        self.run_length_minus1 = Array[int](self.num_slice_groups_minus1)
+        for i in range(self.num_slice_groups_minus1):
+          self.run_length_minus1[i] = int(ExpGolomb.udecode(rbsp))
+      elif self.slice_group_map_type == 2:
+        self.top_left = Array[int](self.num_slice_groups_minus1)
+        self.bottom_right = Array[int](self.num_slice_groups_minus1)
+        for i in range(self.num_slice_groups_minus1):
+          self.top_left[i] = int(ExpGolomb.udecode(rbsp))        
+          self.bottom_right[i] = int(ExpGolomb.udecode(rbsp))        
+      elif self.slice_group_map_type == 3 or \
+           self.slice_group_map_type == 4 or \
+           self.slice_group_map_type == 5:
+        self.slice_group_change_direction_flag = bool(rbsp(1))
+        self.slice_group_change_rate_minus1 = int(ExpGolomb.udecode(rbsp))
+      elif self.slice_group_map_type == 6:
+        self.pic_size_in_map_units_minus1 = int(ExpGolomb.udecode(rbsp))
+        self.slice_group_id = Array[int](self.pic_size_in_map_units_minus1)
+        for i in range(self.pic_size_in_map_units_minus1):
+          self.slice_group_id[i] = int(rbsp(int(math.ceil(math.log2(self.num_slice_groups_minus1)+1))))
+    self.num_ref_idx_l0_default_active_minus1 = int(ExpGolomb.udecode(rbsp))
+    self.num_ref_idx_l1_default_active_minus1 = int(ExpGolomb.udecode(rbsp))
+    self.weighted_pred_flag = bool(rbsp(1))
+    self.weighted_bipred_idc = int(rbsp(2))
+    self.pic_init_qp_minus26 = ExpGolomb.sdecode(rbsp)
+    self.pic_init_qs_minus26 = ExpGolomb.sdecode(rbsp)
+    self.chroma_qp_index_offset = ExpGolomb.sdecode(rbsp)
+    self.deblocking_filter_control_present_flag = bool(rbsp(1))
+    self.constrained_intra_pred_flag = bool(rbsp(1))
+    self.redundant_pic_cnt_present_flag = bool(rbsp(1))
+    if rbsp.bits_left():
+      self.transform_8x8_mode_flag = bool(rbsp(1))
+      self.pic_scaling_matrix_present_flag = bool(rbsp(1))
+      if self.pic_scaling_matrix_present_flag:
+        raise NotImplementedError()
+        chroma_format_idc = video.find_sps_with_id(self.seq_parameter_set_id).chroma_format_idc
+        bound = 6 + (2 if chroma_format_idc != 3 else 6) * int(self.transform_8x8_mode_flag)
+        self.pic_scaling_list_present_flag = Array[bool](bound)
+        for i in range(bound):
+          self.pic_scaling_list_present_flag[i] = bool(rbsp(1))
+          if self.pic_scaling_list_present_flag[i]:
+            pass
+        self.second_chroma_qp_index_offset = ExpGolomb.sdecode(rbsp)          
+    
+@extend
+class VSlice:
+
+  def __init__(self):
+    self.first_mb_in_slice = 0
+    self.slice_type = 0
+    self.pic_parameter_set_id = 0
+    self.colour_plane_id = 0
+    self.frame_num = 0
+    self.field_pic_flag = False
+    self.bottom_field_flag = False
+    self.idr_pic_id = 0
+    self.pic_order_cnt_lsb = 0
+    self.delta_pic_order_cnt_bottom = 0
+    self.delta_pic_order_cnt = Array[int](2)
+    self.delta_pic_order_cnt[0] = 0
+    self.delta_pic_order_cnt[1] = 0
+    self.redundant_pic_cnt = 0
+    self.direct_spatial_mv_pred_flag = False
+    self.num_ref_idx_active_override_flag = False
+    self.num_ref_idx_l0_active_minus1 = 0
+    self.num_ref_idx_l1_active_minus1 = 0
+    self.cabac_init_idc = 0
+    self.slice_qp_delta = 0
+    self.sp_for_switch_flag = False
+    self.slice_qs_delta = 0
+    self.disable_deblocking_filter_idc = 0
+    self.slice_alpha_c0_offset_div2 = 0
+    self.slice_beta_offset_div2 = 0
+    self.slice_group_change_cycle = 0
+    self.ref_pic_list_modification_flag_l0 = False
+    self.modification_of_pic_nums_idc = 0
+    self.abs_diff_pic_num_minus1 = 0
+    self.long_term_pic_num = 0
+    self.ref_pic_list_modification_flag_l1 = False
+    self.no_output_of_prior_pics_flag = False
+    self.long_term_reference_flag = False
+    self.adaptive_ref_pic_marking_mode_flag = False
+    self.memory_management_control_operation = 0
+    self.difference_of_pic_nums_minus1 = 0
+    self.max_long_term_frame_idx_plus1 = 0
+    self.long_term_frame_idx = 0
+
+  def dump(self):
+    cola_debug(self.first_mb_in_slice)
+    cola_debug(self.slice_type)
+    cola_debug(self.pic_parameter_set_id)
+    cola_debug(self.colour_plane_id)
+    cola_debug(self.frame_num)
+    cola_debug(self.field_pic_flag)
+    cola_debug(self.bottom_field_flag)
+    cola_debug(self.idr_pic_id)
+    cola_debug(self.pic_order_cnt_lsb)
+    cola_debug(self.delta_pic_order_cnt_bottom)
+    cola_debug(self.delta_pic_order_cnt)
+    cola_debug(self.redundant_pic_cnt)
+    cola_debug(self.direct_spatial_mv_pred_flag)
+    cola_debug(self.num_ref_idx_active_override_flag)
+    cola_debug(self.num_ref_idx_l0_active_minus1)
+    cola_debug(self.num_ref_idx_l1_active_minus1)
+    cola_debug(self.cabac_init_idc)
+    cola_debug(self.slice_qp_delta)
+    cola_debug(self.sp_for_switch_flag)
+    cola_debug(self.slice_qs_delta)
+    cola_debug(self.disable_deblocking_filter_idc)
+    cola_debug(self.slice_alpha_c0_offset_div2)
+    cola_debug(self.slice_beta_offset_div2)
+    cola_debug(self.slice_group_change_cycle)
+    cola_debug(self.ref_pic_list_modification_flag_l0)
+    cola_debug(self.modification_of_pic_nums_idc)
+    cola_debug(self.abs_diff_pic_num_minus1)
+    cola_debug(self.long_term_pic_num)
+    cola_debug(self.ref_pic_list_modification_flag_l1)
+    cola_debug(self.no_output_of_prior_pics_flag)
+    cola_debug(self.long_term_reference_flag)
+    cola_debug(self.adaptive_ref_pic_marking_mode_flag)
+    cola_debug(self.memory_management_control_operation)
+    cola_debug(self.difference_of_pic_nums_minus1)
+    cola_debug(self.max_long_term_frame_idx_plus1)
+    cola_debug(self.long_term_frame_idx)
+
+  def parse(self, nal_unit, video):
+    self.slice_header(nal_unit, video)
+
+  def slice_header(self, nal_unit, video):
+    rbsp = nal_unit.rbsp_bytes
+    self.first_mb_in_slice = int(ExpGolomb.udecode(rbsp))
+    self.slice_type = int(ExpGolomb.udecode(rbsp))
+    self.pic_parameter_set_id = int(ExpGolomb.udecode(rbsp))
+    pps = video.find_pps_with_id(self.pic_parameter_set_id)
+    sps_id = pps.seq_parameter_set_id
+    sps = video.find_sps_with_id(sps_id)
+    if sps.separate_colour_plane_flag == True:
+      self.colour_plane_id = int(rbsp(2))
+    self.frame_num = int(rbsp(int(sps.log2_max_frame_num_minus4)+4))
+    if not sps.frame_mbs_only_flag:
+      self.field_pic_flag = bool(rbsp(1))
+      if self.field_pic_flag:        
+        self.bottom_field_flag = bool(rbsp(1))
+    idr_pic_flag = 1 if nal_unit.nal_unit_type == 5 else 0
+    if idr_pic_flag:
+      self.idr_pic_id = int(ExpGolomb.udecode(rbsp))
+    if sps.pic_order_cnt_type == 0:
+      self.pic_order_cnt_lsb = int(rbsp(int(sps.log2_max_pic_order_cnt_lsb_minus4)+4))
+      if pps.bottom_field_pic_order_in_frame_present_flag and not self.field_pic_flag:
+        self.delta_pic_order_cnt_bottom = ExpGolomb.sdecode(rbsp)
+    if sps.pic_order_cnt_type == 1 and not sps.delta_pic_order_always_zero_flag:
+      self.delta_pic_order_cnt[0] = ExpGolomb.sdecode(rbsp)
+      if pps.bottom_field_pic_order_in_frame_present_flag and not self.field_pic_flag:
+        self.delta_pic_order_cnt[1]
+    if pps.redundant_pic_cnt_present_flag:
+      self.redundant_pic_cnt = int(ExpGolomb.udecode(rbsp))
+    if is_B_slice(self.slice_type):
+      self.direct_spatial_mv_pred_flag = bool(rbsp(1))
+    if is_P_slice(self.slice_type) or is_SP_slice(self.slice_type) or \
+       is_B_slice(self.slice_type):
+      self.num_ref_idx_active_override_flag = bool(rbsp(1))
+      if self.num_ref_idx_active_override_flag:
+        self.num_ref_idx_l0_active_minus1 = int(ExpGolomb.udecode(rbsp))
+        if is_B_slice(self.slice_type):
+          self.num_ref_idx_l1_active_minus1 = int(ExpGolomb.udecode(rbsp))
+    if nal_unit.nal_unit_type == 20 or nal_unit.nal_unit_type == 21:
+      raise NotImplementedError()
+    else:
+      self.ref_pic_list_modification(nal_unit, video)
+    if (pps.weighted_pred_flag and \
+        (is_P_slice(self.slice_type) or is_SP_slice(self.slice_type))) or \
+        (pps.weighted_bipred_idc == 1 and is_B_slice(self.slice_type)):
+      raise NotImplementedError()
+    if nal_unit.nal_ref_idc != 0:
+      self.dec_ref_pic_marking(nal_unit, video)
+    if pps.entropy_coding_mode_flag and \
+       not is_I_slice(self.slice_type) and not is_SI_slice(self.slice_type):
+      self.cabac_init_idc = int(ExpGolomb.udecode(rbsp))
+    self.slice_qp_delta = ExpGolomb.sdecode(rbsp)
+    if is_SP_slice(self.slice_type) or is_SI_slice(self.slice_type):
+      if is_SP_slice(self.slice_type):
+        self.sp_for_switch_flag = bool(rbsp(1))
+      self.slice_qs_delta = ExpGolomb.sdecode(rbsp)
+    if pps.deblocking_filter_control_present_flag:
+      self.disable_deblocking_filter_idc = int(ExpGolomb.udecode(rbsp))
+      if self.disable_deblocking_filter_idc != 1:
+        self.slice_alpha_c0_offset_div2 = ExpGolomb.sdecode(rbsp)
+        self.slice_beta_offset_div2 = ExpGolomb.sdecode(rbsp)
+    if pps.num_slice_groups_minus1 > 0 and pps.slice_group_map_type >= 3 and \
+       pps.slice_group_map_type <= 5:
+      self.slice_group_change_cycle = int(rbsp(int(math.ceil(math.log2((pps.pic_size_in_map_units_minus1 + 1) / (pps.slice_group_change_rate_minus1 + 1) + 1)))))
+
+  def dec_ref_pic_marking(self, nal_unit, video):
+    rbsp = nal_unit.rbsp_bytes
+    idr_pic_flag = 1 if nal_unit.nal_unit_type == 5 else 0    
+    if idr_pic_flag:
+      self.no_output_of_prior_pics_flag = bool(rbsp(1))
+      self.long_term_reference_flag = bool(rbsp(1))
+    else:
+      self.adaptive_ref_pic_marking_mode_flag = bool(rbsp(1))
+      if self.adaptive_ref_pic_marking_mode_flag:
+        idx = 0
+        while idx == 0 or self.memory_management_control_operation != 0:
+          idx += 1
+          self.memory_management_control_operation = int(ExpGolomb.udecode(rbsp))
+          if self.memory_management_control_operation == 1 or \
+             self.memory_management_control_operation == 3:
+            self.difference_of_pic_nums_minus1 = int(ExpGolomb.udecode(rbsp))
+          if self.memory_management_control_operation == 2:
+            self.long_term_pic_num = int(ExpGolomb.udecode(rbsp))
+          if self.memory_management_control_operation == 3 or \
+             self.memory_management_control_operation == 6:            
+            self.long_term_frame_idx = int(ExpGolomb.udecode(rbsp))
+          if self.memory_management_control_operation == 4:
+            self.max_long_term_frame_idx_plus1 = int(ExpGolomb.udecode(rbsp))            
+      
+  def ref_pic_list_modification(self, nal_unit, video):
+    rbsp = nal_unit.rbsp_bytes
+    if self.slice_type % 5 != 2 and self.slice_type % 5 != 4:
+      self.ref_pic_list_modification_flag_l0 = bool(rbsp(1))
+      if self.ref_pic_list_modification_flag_l0:
+        idx = 0
+        # is there a do-while in seq?
+        while idx == 0 or self.modification_of_pic_nums_idc != 3:
+          idx += 1
+          self.modification_of_pic_nums_idc = int(ExpGolomb.udecode(rbsp))
+          if self.modification_of_pic_nums_idc == 0 or \
+             self.modification_of_pic_nums_idc == 1:
+            self.abs_diff_pic_num_minus1 = int(ExpGolomb.udecode(rbsp))
+          elif self.modification_of_pic_nums_idc == 2:
+            self.long_term_pic_num = int(ExpGolomb.udecode(rbsp))          
+    if self.slice_type % 5 == 1:
+      self.ref_pic_list_modification_flag_l1 = bool(rbsp(1))
+      if self.ref_pic_list_modification_flag_l1:
+        idx = 0
+        # is there a do-while in seq?
+        while idx == 0 or self.modification_of_pic_nums_idc != 3:
+          idx += 1
+          self.modification_of_pic_nums_idc = int(ExpGolomb.udecode(rbsp))
+          if self.modification_of_pic_nums_idc == 0 or \
+             self.modification_of_pic_nums_idc == 1:
+            self.abs_diff_pic_num_minus1 = int(ExpGolomb.udecode(rbsp))
+          elif self.modification_of_pic_nums_idc == 2:
+            self.long_term_pic_num = int(ExpGolomb.udecode(rbsp))          
+      
+
+@extend
+class IDRCodedSlice:
+  
+  def __init__(self):
+    self.slc = VSlice()
+
+  def dump(self):
+    self.slc.dump()
+
+  def parse(self, nal_unit, video: Video):
+    self.slc.parse(nal_unit, video)
 
 @extend    
 class NALUnit:
@@ -259,6 +517,8 @@ class NALUnit:
     self.avc_3d_extension_flag = False
     self.rbsp_bytes = Bits[64]()
     self.sps = None
+    self.pps = None
+    self.idr_cs = None
 
   def dump(self):
     cola_debug(self.nal_unit_type)
@@ -269,14 +529,67 @@ class NALUnit:
     cola_debug(rbsp_nbytes)
     if self.sps:
       self.sps.dump()
+    if self.pps:
+      self.pps.dump()
+    if self.idr_cs:
+      self.idr_cs.dump()
 
   # parse the correct thing based on nal_unit_type
-  def interpret_rbsp(self):
-    if self.nal_unit_type == 7:
+  def interpret_rbsp(self, video: Video):
+    if self.nal_unit_type == 0:
+      raise NALError("undefined")
+    elif self.nal_unit_type == 1:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 2:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 3:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 4:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 5:
+      self.idr_cs = IDRCodedSlice()
+      self.idr_cs.parse(self, video)
+    elif self.nal_unit_type == 6:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 7:
       self.sps = SeqParameterSet()
       self.sps.parse(self)
-      # TODO
-#      self.rbsp_bytes.clear()
+    elif self.nal_unit_type == 8:
+      self.pps = PicParameterSet()
+      self.pps.parse(self, video)
+    elif self.nal_unit_type == 9:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 10:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 11:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 12:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 13:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 14:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 15:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 16:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 17:
+      raise NALError("reserved")
+    elif self.nal_unit_type == 18:
+      raise NALError("reserved")
+    elif self.nal_unit_type == 19:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 20:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 21:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 22:
+      raise NotImplementedError()
+    elif self.nal_unit_type == 23:
+      raise NALError("reserved")
+    else:
+      raise NALError("unspecified")
+
 
   # annex G
   def nal_unit_header_svc_extension(self):

@@ -1,0 +1,193 @@
+from cola.bitseq import *
+# contains all the classes that hold the parameters you parse from the NALs
+
+class NALError:
+  _hdr: ExcHeader
+
+  def __init__(self):
+    self._hdr = ('NALError', '', '', '', 0, 0)
+    
+  def __init__(self, message: str):
+    self._hdr = ('NALError', message, '', '', 0, 0)
+      
+  @property
+  def message(self):
+    return self._hdr.msg
+
+def check_val(val, ref, val_name):
+  if val != ref:
+    raise NALError(val_name + "(" + str(val) + ") != " + str(ref))
+  else:
+    return val
+
+P_SLICE = [0,5]
+B_SLICE = [1,6]
+I_SLICE = [2,7]
+SP_SLICE = [3,8]
+SI_SLICE = [4,9]
+
+def is_P_slice(id):
+  return P_SLICE[0] == id or P_SLICE[1] == id
+
+def is_B_slice(id):
+  return B_SLICE[0] == id or B_SLICE[1] == id
+
+def is_I_slice(id):
+  return I_SLICE[0] == id or I_SLICE[1] == id
+
+def is_SP_slice(id):
+  return SP_SLICE[0] == id or SP_SLICE[1] == id
+
+def is_SI_slice(id):
+  return SI_SLICE[0] == id or SI_SLICE[1] == id
+
+# I've made everything except bools be int types. In the standard, many things
+# are specified as unsigned integers, but having to do casts everywhere is a pain
+# in the ass. And the reference code never uses more than unsigned int. Since seq's 
+# int is actually int64_t, all the unsigned stuff can be safely held in the 
+# int
+
+class SeqParameterSet:
+  profile_idc: int
+  constraint_set0_flag: bool
+  constraint_set1_flag: bool
+  constraint_set2_flag: bool
+  constraint_set3_flag: bool
+  constraint_set4_flag: bool
+  constraint_set5_flag: bool
+  level_idc: int
+  seq_parameter_set_id: int
+  chroma_format_idc: int
+  separate_colour_plane_flag: bool
+  bit_depth_luma_minus8: int
+  bit_depth_chroma_minus8: int
+  qpprime_y_zero_transform_bypass_flag: bool
+  seq_scaling_matrix_present_flag: bool
+  seq_scaling_list_present_flag: Array[bool]
+  scaling_list: Array[Array[int]]
+  log2_max_frame_num_minus4: int
+  pic_order_cnt_type: int
+  log2_max_pic_order_cnt_lsb_minus4: int
+  delta_pic_order_always_zero_flag: bool
+  offset_for_non_ref_pic: int
+  offset_for_top_to_bottom_field: int
+  num_ref_frames_in_pic_order_cnt_cycle: int
+  offset_for_ref_frame: Array[int]
+  max_num_ref_frames: int
+  gaps_in_frame_num_value_allowed_flag: bool
+  pic_width_in_mbs_minus1: int
+  pic_height_in_map_units_minus1: int
+  frame_mbs_only_flag: bool
+  mb_adaptive_frame_field_flag: bool
+  direct_8x8_inference_flag: bool
+  frame_cropping_flag: bool
+  frame_crop_left_offset: int
+  frame_crop_right_offset: int
+  frame_crop_top_offset: int
+  frame_crop_bottom_offset: int
+  vui_parameters_present_flag: bool
+  
+class PicParameterSet:
+  pic_parameter_set_id: int
+  seq_parameter_set_id: int
+  entropy_coding_mode_flag: bool
+  bottom_field_pic_order_in_frame_present_flag: bool
+  num_slice_groups_minus1: int
+  slice_group_map_type: int
+  run_length_minus1: Array[int]
+  top_left: Array[int]
+  bottom_right: Array[int]
+  slice_group_change_direction_flag: bool
+  slice_group_change_rate_minus1: int
+  pic_size_in_map_units_minus1: int
+  slice_group_id: Array[int]
+  num_ref_idx_l0_default_active_minus1: int
+  num_ref_idx_l1_default_active_minus1: int
+  weighted_pred_flag: bool
+  weighted_bipred_idc: int
+  pic_init_qp_minus26: int
+  pic_init_qs_minus26: int
+  chroma_qp_index_offset: int
+  deblocking_filter_control_present_flag: bool
+  constrained_intra_pred_flag: bool
+  redundant_pic_cnt_present_flag: bool
+  transform_8x8_mode_flag: bool
+  pic_scaling_matrix_present_flag: bool
+  pic_scaling_list_present_flag: Array[bool]
+  second_chroma_qp_index_offset: int  
+
+# generic slice stuff
+# called ASlice since "Slice" is already a codon thing
+class VSlice:
+  first_mb_in_slice: int
+  slice_type: int
+  pic_parameter_set_id: int
+  colour_plane_id: int
+  frame_num: int
+  field_pic_flag: bool
+  bottom_field_flag: bool
+  idr_pic_id: int
+  pic_order_cnt_lsb: int
+  delta_pic_order_cnt_bottom: int
+  delta_pic_order_cnt: Array[int]
+  redundant_pic_cnt: int
+  direct_spatial_mv_pred_flag: bool
+  num_ref_idx_active_override_flag: bool
+  num_ref_idx_l0_active_minus1: int
+  num_ref_idx_l1_active_minus1: int
+  cabac_init_idc: int
+  slice_qp_delta: int
+  sp_for_switch_flag: bool
+  slice_qs_delta: int
+  disable_deblocking_filter_idc: int
+  slice_alpha_c0_offset_div2: int
+  slice_beta_offset_div2: int
+  slice_group_change_cycle: int
+  ref_pic_list_modification_flag_l0: bool
+  modification_of_pic_nums_idc: int
+  abs_diff_pic_num_minus1: int
+  long_term_pic_num: int
+  ref_pic_list_modification_flag_l1: bool
+  no_output_of_prior_pics_flag: bool
+  long_term_reference_flag: bool
+  adaptive_ref_pic_marking_mode_flag: bool
+  memory_management_control_operation: int
+  difference_of_pic_nums_minus1: int
+  max_long_term_frame_idx_plus1: int 
+  long_term_frame_idx: int
+
+class IDRCodedSlice:
+  slc: VSlice
+
+class NALUnit:
+  original_stream: Bits[64]
+  nal_unit_type: int
+  nal_ref_idc: int
+  svc_extension_flag: bool
+  avc_3d_extension_flag: bool
+  rbsp_bytes: Bits[64]    
+  # the stuff here is conditionally filled based on the nal unit type
+  sps: Optional[SeqParameterSet]
+  pps: Optional[PicParameterSet]
+  idr_cs: Optional[IDRCodedSlice]
+
+class Video:
+  
+  # all nal units
+  nal_units: list[NALUnit]
+
+  def dump(self):
+    for nal in self.nal_units:
+      nal.dump()
+
+  def find_sps_with_id(self, seq_parameter_set_id):
+    for nal in self.nal_units:
+      if nal.sps and nal.sps.seq_parameter_set_id == seq_parameter_set_id:
+        return nal.sps
+    raise NALError()
+
+  def find_pps_with_id(self, pic_parameter_set_id):
+    for nal in self.nal_units:
+      if nal.pps and nal.pps.pic_parameter_set_id == pic_parameter_set_id:
+        return nal.pps
+    raise NALError()

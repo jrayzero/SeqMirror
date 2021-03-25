@@ -5,6 +5,7 @@ from decoder import *
 from utils import *
 from parse_annexb import *
 from parse_nal_units import *
+from video import *
 import sys
 
 check_config()
@@ -20,14 +21,18 @@ input_fd.close()
 
 drop_leading_zeros(input_stream)
 
+video = Video()
+
 idx = 0
 while input_stream.bits_left():
   print('NAL ' + str(idx))
   cur_nal_unit_bits = byte_stream_nal_unit(input_stream)
   cur_nal_unit = nal_unit(cur_nal_unit_bits)
-  cur_nal_unit.interpret_rbsp()
+  video.nal_units.append(cur_nal_unit)
+  cur_nal_unit.interpret_rbsp(video)
   cur_nal_unit.dump()
   idx += 1
+video.dump()
 
 
 output_fd.close()

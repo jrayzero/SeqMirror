@@ -1,0 +1,16 @@
+from cola.bitseq import *
+import math
+
+class ExpGolomb:
+
+  def udecode(bits):
+    leading_zeros = 0
+    while bits(1) == u64(0):
+      leading_zeros += 1
+    code_num = u64(2 ** leading_zeros - 1) + bits(leading_zeros)
+    return code_num
+
+  def sdecode(bits):
+    code_num = int(ExpGolomb.udecode(bits))
+    return (-1 ** (code_num+1)) * int(math.ceil(code_num/2))
+    

@@ -1,0 +1,101 @@
+from cola.block import *
+from common import *
+from config import *
+
+def intra_16x16_luma_m0(y_cgrid, smb, rblk) -> Optional[Block[int]]:
+  # we already know that smb is derived from the same parent
+  # block location as rblk, so just get the origin
+  loc_ref = smb.origin()
+  # get a view on the row above you in rblk
+  if loc_ref[1] == 0:
+    # at the top edge, mode can't be used
+    return None
+  # get the whole recons macroblock so we can figure out its slice
+  row = rblk[loc_ref[0],loc_ref[1]-1,loc_ref[2]:loc_ref[2]+16]
+  pred = Block[int](y_cgrid, 1,16,16)
+  for prow in range(16):
+    for i,r in enumerate(row):
+      pred[0,prow,i] = int(r())
+  return pred
+  
+def intra_16x16_luma_m1(y_cgrid, smb, rblk) -> Optional[Block[int]]:
+  # we already know that smb is derived from the same parent
+  # block location as rblk, so just get the origin
+  loc_ref = smb.origin()
+  # get a view on the row above you in rblk
+  if loc_ref[2] == 0:
+    # at the left edge, mode can't be used
+    return None
+  # get the whole recons macroblock so we can figure out its slice
+  col = rblk[loc_ref[0],loc_ref[1]:loc_ref[1]+16,loc_ref[2]-1]
+  pred = Block[int](y_cgrid, 1, 16,16)
+  for pcol in range(16):
+    for i,c in enumerate(col):
+      pred[0,i,pcol] = int(c())
+  return pred  
+
+def intra_16x16_luma_m2(y_cgrid, smb, rblk) -> Optional[Block[int]]:
+  f,h,w = smb.origin()
+  if h > 0 and w > 0:
+    row = rblk[f,h-1,w:w+16]
+    col = rblk[f,h:h+16,w-1]
+    # reductions
+    sum_x = 0
+    sum_y = 0
+    for r,c in zip(row,col):
+      sum_x += int(r())
+      sum_y += int(c())
+    pred = Block[int](y_cgrid,1,16,16)
+    pred[:,:,:] = (sum_x + sum_y + 16) >> 5
+    return pred
+  elif w > 0:
+    col = rblk[f,h:h+16,w-1]
+    # reductions
+    sum_y = 0
+    for c in col:
+      sum_y += int(c())
+    pred = Block[int](y_cgrid,1,16,16)
+    pred[:,:,:] = (sum_y + 8) >> 4
+    return pred
+  elif h > 0:
+    row = rblk[f,h-1,w:w+16]
+    # reductions
+    sum_x = 0
+    for r in row:
+      sum_x += int(r())
+    pred = Block[int](y_cgrid,1,16,16)
+    pred[:,:,:] = (sum_x + 8) >> 4
+    return pred    
+  else:
+    pred = Block[int](y_cgrid,1,16,16)
+    pred[:,:,:] = 1 << (bit_depth_y - 1)
+    return pred
+
+def intra_16x16_luma_m3(y_cgrid, smb, rblk) -> Optional[Block[int]]:
+  f,h,w = smb.origin()
+  if h > 0 and w > 0:
+    row = rblk[f,h-1,w-1:w+16]
+    col = rblk[f,h:h+16,w-1]
+    # pull out the pieces to compute H    
+    H = 0
+    pH1 = row[0,:,8:]
+    pH2 = row[0,:,:7]    
+    for r,h1,h2 in zip(range(8),pH1, pH2):
+      H += (r+1)*int(h1()-h2())      
+    # and the pieces for V
+    V = 0
+    pV1 = col[0,8:,:]
+    pV2 = col[0,:7,:]
+    for r,v1,v2 in zip(range(8),pV1, pV2):
+      V += (r+1)*int(v1()-v2())          
+    a = 16 * int(rblk(15,0)+rblk(0,16))
+    b = (5 * H + 32) >> 6
+    c = (5 * V + 32) >> 6
+    pred = Block[int](y_cgrid,1,16,16)
+    for y in range(16):
+      for x in range(16):
+        clip_val = (a + b * (x - 7) + c * (y - 7) + 16) >> 5
+        pred[0,y,x] = (clip1y(clip_val))
+    return pred    
+  else:
+    return None

@@ -1,0 +1,242 @@
+from cola.block import *
+
+def forward4x4[T](inp_blk: View[T], out_blk: View[int]):
+  # horizontal
+  for r in range(4):
+    in_row = inp_blk[0,r,:]
+    out_row = out_blk[0,r,:]
+    p0 = in_row(0,0,0)
+    p1 = in_row(0,0,1)
+    p2 = in_row(0,0,2)
+    p3 = in_row(0,0,3)
+    t0 = p0 + p3
+    t1 = p1 + p2
+    t2 = p1 - p2
+    t3 = p0 - p3
+    out_row[0,0,0] = t0 + t1
+    out_row[0,0,1] = (t3 << T(1)) + t2
+    out_row[0,0,2] = t0 - t1
+    out_row[0,0,3] = t3 - (t2 << T(1))
+  # vertical
+  for c in range(4):
+    in_col = out_blk[0,:,c]
+    p0 = in_col(0,0,0)
+    p1 = in_col(0,1,0)
+    p2 = in_col(0,2,0)
+    p3 = in_col(0,3,0)
+    t0 = p0 + p3
+    t1 = p1 + p2
+    t2 = p1 - p2
+    t3 = p0 - p3
+    in_col[0,0,0] = t0 + t1
+    in_col[0,1,0] = t2 + (t3 << T(1))
+    in_col[0,2,0] = t0 - t1
+    in_col[0,3,0] = t3 - (t2 << T(1))
+
+def hadamard4x4[T](inp_blk: Block[T], out_blk: Block[T]):
+  # horizontal
+  for r in range(4):
+    in_row = inp_blk[0,r,:]
+    out_row = out_blk[0,r,:]
+    p0 = in_row(0,0,0)
+    p1 = in_row(0,0,1)
+    p2 = in_row(0,0,2)
+    p3 = in_row(0,0,3)
+    t0 = p0 + p3
+    t1 = p1 + p2
+    t2 = p1 - p2
+    t3 = p0 - p3
+    out_row[0,0,0] = t0 + t1
+    out_row[0,0,1] = t3 + t2
+    out_row[0,0,2] = t0 - t1
+    out_row[0,0,3] = t3 - t2
+  # vertical
+  for c in range(4):
+    in_col = out_blk[0,:,c]
+    p0 = in_col(0,0,0)
+    p1 = in_col(0,1,0)
+    p2 = in_col(0,2,0)
+    p3 = in_col(0,3,0)
+    t0 = p0 + p3
+    t1 = p1 + p2
+    t2 = p1 - p2
+    t3 = p0 - p3
+    in_col[0,0,0] = (t0 + t1) >> T(1)
+    in_col[0,1,0] = (t2 + t3) >> T(1)
+    in_col[0,2,0] = (t0 - t1) >> T(1)
+    in_col[0,3,0] = (t3 - t2) >> T(1)
+
+def xform_luma_16x16_mb[T](input_mb: Block[T]):
+  transform_out = Block[T](input_mb.dims(), input_mb.cgrid())
+  # process as 4x4 transforms
+  for r in range(0,16,4):
+    for c in range(0,16,4):
+      out = transform_out[0,r:r+4,c:c+4]
+      forward4x4(input_mb[0,r:r+4,c:c+4],out)
+  # now transform the DC coeffecients
+  dcs = Block[T](input_mb.cgrid(),1,4,4)  
+  dcs[0,:,:] = transform_out[0,::4,::4]
+  dcs_out = Block[T](dcs)
+  hadamard4x4(dcs, dcs_out)
+  # copy back the transformed DCs
+  transform_out[0,::4,::4] = dcs_out
+  return transform_out
+
+
+  
+# hadamard4x2
+#def hadamard2x4(inp_blk):
+#  out_blk = Block(inp_blk)
+#  out_blk[0,0] = inp_blk(0,0) + inp_blk(1,0)
+#  out_blk[0,1] = inp_blk(0,1) + inp_blk(1,1)
+#  out_blk[0,2] = inp_blk(0,2) + inp_blk(1,2)
+#  out_blk[0,3] = inp_blk(0,3) + inp_blk(1,3)
+#  out_blk[1,0] = inp_blk(0,0) - inp_blk(1,0)
+#  out_blk[1,1] = inp_blk(0,1) - inp_blk(1,1)
+#  out_blk[1,2] = inp_blk(0,2) - inp_blk(1,2)
+#  out_blk[1,3] = inp_blk(0,3) - inp_blk(1,3)
+#  for r in range(2):
+#    in_row = out_blk[r,:].flatten()
+#    p0 = in_row(0)
+#    p1 = in_row(1)
+#    p2 = in_row(2)
+#    p3 = in_row(3)
+#
+#    t0 = p0 + p3;
+#    t1 = p1 + p2;
+#    t2 = p1 - p2;
+#    t3 = p0 - p3;
+#
+#    in_row[0] = t0 + t1
+#    in_row[1] = t3 + t2
+#    in_row[2] = t0 - t1
+#    in_row[3] = t3 - t2
+#  return out_blk
+#
+#def forward8x8(inp_blk):
+#  out_blk = Block(inp_blk)
+#  for r in range(8):
+#    in_row = inp_blk[r,:].flatten()
+#    out_row = out_blk[r,:].flatten()
+#    p0 = in_row(0)
+#    p1 = in_row(1)
+#    p2 = in_row(2)
+#    p3 = in_row(3)
+#    p4 = in_row(4)
+#    p5 = in_row(5)
+#    p6 = in_row(6)
+#    p7 = in_row(7)
+#
+#    a0 = p0 + p7;
+#    a1 = p1 + p6;
+#    a2 = p2 + p5;
+#    a3 = p3 + p4;
+#
+#    b0 = a0 + a3;
+#    b1 = a1 + a2;
+#    b2 = a0 - a3;
+#    b3 = a1 - a2;
+#
+#    a0 = p0 - p7;
+#    a1 = p1 - p6;
+#    a2 = p2 - p5;
+#    a3 = p3 - p4;
+#
+#    b4 = a1 + a2 + ((a0 >> 1) + a0);
+#    b5 = a0 - a3 - ((a2 >> 1) + a2);
+#    b6 = a0 + a3 - ((a1 >> 1) + a1);
+#    b7 = a1 - a2 + ((a3 >> 1) + a3);
+#
+#    out_row[0] =  b0 + b1;
+#    out_row[1] =  b4 + (b7 >> 2);
+#    out_row[2] =  b2 + (b3 >> 1);
+#    out_row[3] =  b5 + (b6 >> 2);
+#    out_row[4] =  b0 - b1;
+#    out_row[5] =  b6 - (b5 >> 2);
+#    out_row[6] = (b2 >> 1) - b3;                 
+#    out_row[7] = (b4 >> 2) - b7;
+#  for c in range(8):
+#    in_col = out_blk[:,c].flatten()
+#    p0 = in_col(0)
+#    p1 = in_col(1)
+#    p2 = in_col(2)
+#    p3 = in_col(3)
+#    p4 = in_col(4)
+#    p5 = in_col(5)
+#    p6 = in_col(6)
+#    p7 = in_col(7)
+#
+#    a0 = p0 + p7;
+#    a1 = p1 + p6;
+#    a2 = p2 + p5;
+#    a3 = p3 + p4;
+#
+#    b0 = a0 + a3;
+#    b1 = a1 + a2;
+#    b2 = a0 - a3;
+#    b3 = a1 - a2;
+#
+#    a0 = p0 - p7;
+#    a1 = p1 - p6;
+#    a2 = p2 - p5;
+#    a3 = p3 - p4;
+#
+#    b4 = a1 + a2 + ((a0 >> 1) + a0);
+#    b5 = a0 - a3 - ((a2 >> 1) + a2);
+#    b6 = a0 + a3 - ((a1 >> 1) + a1);
+#    b7 = a1 - a2 + ((a3 >> 1) + a3);
+#
+#    in_col[0] =  b0 + b1;
+#    in_col[1] =  b4 + (b7 >> 2);
+#    in_col[2] =  b2 + (b3 >> 1);
+#    in_col[3] =  b5 + (b6 >> 2);
+#    in_col[4] =  b0 - b1;
+#    in_col[5] =  b6 - (b5 >> 2);
+#    in_col[6] = (b2 >> 1) - b3;
+#    in_col[7] = (b4 >> 2) - b7;
+#
+#  return out_blk
+#
+#inp_blk = Block[int](4,4)
+#inp_blk2 = Block[int](2,4)
+#inp_blk3 = Block[int](8,8)
+#inp_blk[0,0] = 0
+#inp_blk[0,1] = 1
+#inp_blk[0,2] = 2
+#inp_blk[0,3] = 3
+#inp_blk[1,0] = 4
+#inp_blk[1,1] = 5
+#inp_blk[1,2] = 6
+#inp_blk[1,3] = 7
+#inp_blk[2,0] = 8
+#inp_blk[2,1] = 9
+#inp_blk[2,2] = 10
+#inp_blk[2,3] = 11
+#inp_blk[3,0] = 12
+#inp_blk[3,1] = 13
+#inp_blk[3,2] = 14
+#inp_blk[3,3] = 15
+#inp_blk2[0,0] = 0
+#inp_blk2[0,1] = 1
+#inp_blk2[0,2] = 2
+#inp_blk2[0,3] = 3
+#inp_blk2[1,0] = 4
+#inp_blk2[1,1] = 5
+#inp_blk2[1,2] = 6
+#inp_blk2[1,3] = 7
+#
+#idx = 0
+#for i in range(8):
+#  for j in range(8):
+#    inp_blk3[i,j] = idx
+#    idx += 1
+#
+#print('forward4x4')
+#print(forward4x4(inp_blk))
+#print('hadamard4x4')
+#print(hadamard4x4(inp_blk))
+#print('hadamard2x4')
+#print(hadamard2x4(inp_blk2))
+#print('forward8x8')
+#print(forward8x8(inp_blk3))
+#

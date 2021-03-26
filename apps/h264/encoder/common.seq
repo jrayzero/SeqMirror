@@ -1,0 +1,13 @@
+from config import *
+
+def clip3(x,y,z):
+  if z < x:
+    return x
+  elif z > y:
+    return y
+  else:
+    return z
+
+def clip1y(x):
+  return clip3(0, (1<<bit_depth_y)-1,x)
+

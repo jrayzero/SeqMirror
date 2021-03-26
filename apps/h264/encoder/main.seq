@@ -1,0 +1,59 @@
+from read_yuv import *
+from intra import *
+from config import *
+from cola.block import *
+from transform import *
+
+y_frames,u_frames,v_frames = ingest_yuv_420_interleaved_all()
+
+y_cgrid = y_frames.base.cgrid
+u_cgrid = u_frames.base.cgrid
+v_cgrid = v_frames.base.cgrid
+
+# reconstructed frames
+ry_frames = Block[int](y_frames.dims(), y_cgrid)
+ru_frames = Block[int](u_frames.dims(), u_cgrid)
+rv_frames = Block[int](v_frames.dims(), v_cgrid)
+
+# decoded picture buffer
+dpb = list[View[u8]]()
+
+# no slices
+for f in range(nframes):
+  y_frame = y_frames[f,:,:]
+  ry_frame = ry_frames[f,:,:]
+  for r in range(0,y_frame.dims(0),16):
+    for c in range(0,y_frame.dims(1),16):
+      mb = y_frame[0,r:r+16,c:c+16]
+      # try 16x16 intra-prediction
+      intra_16x16_m0 = intra_16x16_luma_m0(y_cgrid, mb, ry_frame)
+      intra_16x16_m1 = intra_16x16_luma_m1(y_cgrid, mb, ry_frame)
+      intra_16x16_m2 = intra_16x16_luma_m2(y_cgrid, mb, ry_frame)
+      intra_16x16_m3 = intra_16x16_luma_m3(y_cgrid, mb, ry_frame)
+      # TODO inter-prediction      
+      
+      # residuals, transform, and quantize
+      # run 4x4 on each within the macroblock
+      if intra_16x16_m0:
+        residual = mb - ~intra_16x16_m0
+        cola_debug(residual)
+        xform_intra_16x16_m0 = xform_luma_16x16_mb(residual)
+        cola_debug(xform_intra_16x16_m0)
+      if intra_16x16_m1:
+        residual = mb - ~intra_16x16_m1
+        cola_debug(residual)
+        xform_intra_16x16_m1 = xform_luma_16x16_mb(residual)
+        cola_debug(xform_intra_16x16_m1)
+      if intra_16x16_m2:
+        residual = mb - ~intra_16x16_m2
+        cola_debug(residual)
+        xform_intra_16x16_m2 = xform_luma_16x16_mb(residual)
+        cola_debug(xform_intra_16x16_m2)
+      if intra_16x16_m3:
+        residual = mb - ~intra_16x16_m3
+        cola_debug(residual)
+        xform_intra_16x16_m3 = xform_luma_16x16_mb(residual)
+        cola_debug(xform_intra_16x16_m3)
+
+      assert False
+

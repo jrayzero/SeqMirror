@@ -1,0 +1,67 @@
+from cola.block import *
+from cola.bitseq import *
+from config import *
+
+def pad_below(view, height, padded_height):
+  for row in range(height, padded_height):
+    view[0, row, :] = view[0, height-1,:]
+
+def pad_right(view, width, padded_width):
+  for col in range(width, padded_width):
+    view[0, :, col] = view[0, :, width-1]
+
+# reads whole yuv file at once
+def ingest_yuv_420_interleaved_all():
+  fd = open(input_file, 'rb')
+  padded_source_height = source_height
+  padded_source_width = source_width
+  if source_height & 15 != 0:
+    padded_source_height += 16 - source_height & 15
+  if source_width & 15 != 0:
+    padded_source_width += 16 - source_width & 15
+  padded_source_height_d2 = source_height // 2
+  padded_source_width_d2 = source_width // 2
+  if (source_height//2) & 15 != 0:
+    padded_source_height_d2 += 16 - (source_height//2) & 15
+  if (source_width//2) & 15 != 0:
+    padded_source_width_d2 += 16 - (source_width//2) & 15
+  y_cgrid = CoordGrid(nframes, padded_source_height, padded_source_width)
+  u_cgrid = CoordGrid(nframes, padded_source_height_d2, padded_source_width_d2)
+  v_cgrid = CoordGrid(nframes, padded_source_height_d2, padded_source_width_d2)
+  y_block = Block[int](y_cgrid, nframes, padded_source_height, padded_source_width)
+  u_block = Block[int](u_cgrid, nframes, padded_source_height_d2, padded_source_width_d2)
+  v_block = Block[int](v_cgrid, nframes, padded_source_height_d2, padded_source_width_d2)
+  for i in range(nframes):
+    # y
+    for j in range(source_height):
+      for k in range(source_width):
+        y_block[i,j,k] = int(fd.read_u[1]())
+    if padded_source_height != source_height:
+      pad_below(y_block[0,:,:], source_height, padded_source_height)
+    if padded_source_width != source_width:
+      pad_right(y_block[0,:,:], source_width, padded_source_width)
+    # u
+    for j in range(source_height//2):
+      for k in range(source_width//2):
+        u_block[i,j,k] = int(fd.read_u[1]())
+    if padded_source_height_d2 != source_height//2:
+      # pad below 
+      pad_below(u_block[0,:,:], source_height//2, padded_source_height_d2)
+    if padded_source_width_d2 != source_width//2:
+      # pad right
+      pad_right(u_block[0,:,:], source_width//2, padded_source_width_d2)
+
+    # v
+    for j in range(source_height//2):
+      for k in range(source_width//2):
+        v_block[i,j,k] = int(fd.read_u[1]())
+
+    if padded_source_height_d2 != source_height//2:
+      # pad below 
+      pad_below(v_block[0,:,:], source_height//2, padded_source_height_d2)
+    if padded_source_width_d2 != source_width//2:
+      # pad right
+      pad_right(v_block[0,:,:], source_width//2, padded_source_width_d2)
+
+  fd.close()
+  return y_block,u_block,v_block

@@ -14,17 +14,40 @@ class Slice:
 
 # TODO make dims and stuff like that be uints (and exslices stop be int sand allow ti to be negative)
 
-class Multidim[T]:
-  dims: list[int] # dims for just your little region
-  buffer_mapping: list[Slice] # the mapping to your immediate parent
-  # views contain a pointer to their referenced buffer
-  buffer: Array[T]
-#  buffer_parent.dims: list[int] # original dims of the buffer. use for linearization
-  buffer_parent: Multidim[T]
+class CoordGrid:
+
+  dims: list[int]
   unique_id: str
-  is_backing_buffer: bool  
-  dim_offset: int # total front dimensions elided
-#  back_dim_offset: int # total back dimensions elided
+  
+  def __init__(self, dims: list[int]):
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+    self.dims = [d for d in dims]
+
+  def __init__(self, *dims):
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+    self.dims = [d for d in dims]
+
+  def __eq__(self, other: CoordGrid):
+    return self.unique_id == other.unique_id  
+
+  def ndims(self):
+    return len(self.dims)
+
+# You always maintain a direct pointer to your closest Block parent
+# If you want to go further up, need to do some extra computation
+class Multidim[T]:
+  dims: list[int]
+  # Points to the buffer that you map to
+  buffer: Array[T]
+  # the mapping to your buffer 
+  buffer_mapping: list[Slice]
+  # your parent with the buffer
+  buffer_parent: Multidim[T]
+  # your backing coordinate system
+  cgrid: CoordGrid
+  # your mapping to the coordinate system
+  coord_mapping: list[Slice]  
+  unique_id: str
 
 class View[T]:
   base: Multidim[T]
@@ -39,103 +62,118 @@ class Multidim[T]:
 
   def __init__(self):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
-    self.is_backing_buffer = False
-    self.dim_offset = 0
     
-  def __init__(self, other: Block[T], set_as_parent: bool):
+  def __init__(self, other: Block[T], make_buffer: bool):
     self.__init__()
     self.dims = [d for d in other.dims()]
-    if set_as_parent:
-      self.buffer_parent = other.base.buffer_parent
-      self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-      self.buffer = other.base.buffer
+    if make_buffer: 
+      self.buffer = Array[T](self.nunits())      
     else:
-      self.buffer_parent = self#other.base.buffer_parent
-      self.buffer = Array[T](self.nunits())
-      self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-      self.is_backing_buffer = True
-    self.dim_offset = other.base.dim_offset
+      self.buffer = other.base.buffer
+    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self
+    self.cgrid = other.base.cgrid
+    self.coord_mapping = [cm for cm in other.base.coord_mapping]
 
-  def __init__(self, other: View[T], set_as_parent: bool):
+  def __init__(self, other: Multidim[T], make_buffer: bool):
+    self.__init__()
+    self.dims = [d for d in other.dims]
+    if make_buffer: 
+      self.buffer = Array[T](self.nunits())      
+    else:
+      self.buffer = other.buffer
+    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self
+    self.cgrid = other.cgrid
+    self.coord_mapping = [cm for cm in other.coord_mapping]
+
+  def __init__(self, other: View[T], make_buffer: bool):
     self.__init__()
     self.dims = [d for d in other.dims()]
-    if set_as_parent:
-      self.buffer_parent = other.base.buffer_parent
-      self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-      self.buffer = other.base.buffer
-    else:
-      raise ColaError()
-      self.buffer_parent = other.base.buffer_parent
+    if make_buffer: 
       self.buffer = Array[T](self.nunits())
-      self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-      self.is_backing_buffer = True
-    self.dim_offset = other.base.dim_offset
-#    self.back_dim_offset = other.base.back_dim_offset
+    else:
+      self.buffer = other.base.buffer
+    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self
+    self.cgrid = other.base.cgrid
+    self.coord_mapping = [cm for cm in other.base.coord_mapping]
 
-  def __init__(self, other: int, _:bool):
+  def __init__(self, other: int, cgrid: CoordGrid):
     self.__init__()
     self.dims = [other]
     self.buffer = Array[T](other)
-    self.buffer_parent = self
-    self.is_backing_buffer = True
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self    
+    self.cgrid = cgrid
+    self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+    if cgrid.ndims() != 1:
+      raise ColaError()
 
-  def __init__(self, dims: list[int], _:bool):
+  def __init__(self, dims: list[int], cgrid: CoordGrid):
     self.__init__()
     self.dims = [d for d in dims]
     self.buffer = Array[T](self.nunits())
-    self.buffer_parent = self
-    self.is_backing_buffer = True
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self
+    self.cgrid = cgrid
+    self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+    if cgrid.ndims() != self.ndims():
+      raise ColaError()
 
   # 2D and above
-  def __init__(self, dim0, dim1, *dims):
+  def __init__(self, cgrid: CoordGrid, dim0, dim1, *dims):
     self.__init__()
     self.dims = [dim0, dim1]
     if staticlen(dims) > 0:
       self.dims += [d for d in dims]
-    self.buffer_parent = self
     self.buffer = Array[T](self.nunits())
-    self.is_backing_buffer = True
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self
+    self.cgrid = cgrid
+    self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+    if cgrid.ndims() != self.ndims():
+      raise ColaError()
 
   # init dims and fill immediately (MAKES A SHALLOW COPY)
-  def __init__(self, dims, data: Array[T]):
+  def __init__(self, dims, data: Array[T], cgrid: CoordGrid):
     self.__init__()
     self.dims = [d for d in dims]
     self.buffer = data
-    self.buffer_parent = self
-    self.is_backing_buffer = True
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self
+    self.cgrid = cgrid
+    self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+    if cgrid.ndims() != self.ndims():
+      raise ColaError()
 
-  def __init__(self, dims, data: list[T]):
+  def __init__(self, dims, data: list[T], cgrid: CoordGrid):
     self.__init__()
     self.dims = [d for d in dims]
     self.buffer = data.arr
-    self.buffer_parent = self
-    self.is_backing_buffer = True
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self
+    self.cgrid = cgrid
+    self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+    if cgrid.ndims() != self.ndims():
+      raise ColaError()
 
-  def _linearize(self, coord: list[int]) -> int:
-    if len(self.buffer_parent.dims) != len(coord):
+  def linearize(dims: list[int], coord: list[int]) -> int:
+    if len(dims) != len(coord):
       raise ColaError()
     linear = 0
     for idx,c in enumerate(reversed(coord)):
       s = c
       for i in range(idx):
-        s *= self.buffer_parent.dims[len(coord) - i - 1]
+        s *= dims[len(coord) - i - 1]
       linear += s
     return linear
 
+  def ndims(self):
+    return len(self.dims)
+
   ### INTERNAL NON-STATIC UTILITY FUNCTIONS
 
-  def _broadcast_binary_arithmetic[S=T](self, other: T, op_func_ptr) -> Multidim[S]:
-    for l in self._iterate():
-      self.buffer[l] = op_func_ptr(self.buffer[l], other)
-
-  def _elementwise_binary_arithmetic[S=T](self, other: Multidim[T], op_func_ptr) -> Multidim[S]:
-    for l1,l2 in zip(self._iterate(), other._iterate()):
-      self.buffer[l1] = op_func_ptr(self.buffer[l1], other.buffer[l2])
 
   ### PUBLIC UTILITY FUNCTIONS
 
@@ -145,44 +183,11 @@ class Multidim[T]:
       n *= d
     return n
 
-  # gets origin relative to direct ancestors block
-  # TODO have another function that can specify which thing to be relative to
-  def origin(self) -> list[int]:
+  # gets your origin relative to your closest ancestor block or ZEROS if you
+  # are a Block
+  def origin(self) -> list[int]:    
     return [~p.start for p in self.buffer_mapping]
 
-  # call these from Block/View.reshape
-  # reshaping doesn't create a parent mapping
-
-  # can elide size one dimensions
-  def elide_front(self, amt: int = 1) -> Multidim[T]:    
-    for i in range(amt):
-      if i >= len(self.dims):
-        raise ColaError("eliding too much")
-      if self.dims[i] != 1:
-        raise ColaError("non-unit dimension")
-    md = Multidim[T]()
-    md.dims = [d for d in self.dims[amt:]]
-    md.dim_offset = self.dim_offset + amt
-#    md.back_dim_offset = self.back_dim_offset
-    md.buffer_parent = self.buffer_parent
-    md.buffer = self.buffer
-    md.buffer_mapping = self.buffer_mapping    
-    return md
-
-  def elide_back(self, amt: int = 1) -> Multidim[T]:
-    for i in range(amt):
-      if i >= len(self.dims):
-        raise ColaError("eliding too much")
-      if self.dims[len(self.dims) - i - 1] != 1:
-        raise ColaError("non-unit dimension")
-    md = Multidim[T]()
-    md.dims = [d for d in self.dims[:len(self.dims) - amt]]
-    md.dim_offset = self.dim_offset
- #   md.back_dim_offset = self.back_dim_offset + amt
-    md.buffer_parent = self.buffer_parent
-    md.buffer = self.buffer
-    md.buffer_mapping = self.buffer_mapping
-    return md
     
   def _convert(self, idx: int, i: int):
     return 1,Slice(idx,idx+1,1)
@@ -204,54 +209,167 @@ class Multidim[T]:
     if idx < 0:
       raise ColaError("Bad idx")
 
-    # update the mapping, which contains all dimensions
-    mapping = [sl for sl in self.buffer_mapping]
-    orig = mapping[self.dim_offset]
-    mapping[self.dim_offset] = Slice(~orig.start + idx, ~orig.start + idx+1,1)
-    # update dims
-    dims = [1]
-
     md = Multidim[T]()
-    md.dim_offset = self.dim_offset
-  #  md.back_dim_offset = self.back_dim_offset
-  #    md.buffer_parent.dims = self.buffer_parent.dims
-    md.buffer = self.buffer
+    md.dims = [1]
+    orig = self.buffer_mapping[0]
+    md.buffer_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
     md.buffer_parent = self.buffer_parent
-    md.dims = dims
-    md.buffer_mapping = mapping
+    md.buffer = self.buffer
+    md.cgrid = self.cgrid
+    orig = self.coord_mapping[0]
+    md.coord_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
     return md
   
   def __getitem__(self, idx: Slice) -> Multidim[T]:
     return self[[idx]]
 
-  # should be a tuple of things
+#  def _combine_mappings(self, relative_to: Multidim[T]):
+#    other_id = relative_to.unique_id
+#    cur_mapping = [b for b in self.buffer_mapping]
+#    cur = self
+#    while cur.unique_id != other_id:
+#      idx = 0
+#      for cm,c in zip(cur_mapping, cur.buffer_mapping):
+#        start = ~cm.start + ~c.start * ~cm.step
+#        stop = min(~cm.start + ~c.stop * ~cm.step, ~cm.stop)
+#        step = ~cm.step * ~c.step
+#        cur_mapping[idx] = Slice(start, stop, step)
+#        idx += 1
+#      cur = cur.buffer_parent
+#    return cur_mapping
+
+  # return a view on self that corresponds to the location of idx
+  # this requires them to both have the same immediate buffer parents, unless
+  # relative_to is specified, then you make sure they both relate to that
+#  def __getitem__(self, idx: Multidim[T], relative_to: Optional[Multidim[T]] = None):
+#    if not relative_to:
+#      self_id = self.unique_id if self.buffer else self.buffer_parent.unique_id
+#      other_id = idx.unique_id if idx.buffer else idx.buffer_parent.unique_id 
+#      if self_id != other_id:
+#        raise ColaError("objs do not share the same immediate buffer parent")    
+#    else:
+#      if not relative_to.buffer:
+#        raise ColaError("relative_to must be a Block")
+#      other_id = relative_to.unique_id
+#      # check that they are both relative to this thing
+#      cur = self
+#      found = False
+#      if cur.unique_id == other_id:
+#        found = True
+#      else:
+#        while cur.unique_id != other_id:
+#          if cur.buffer_parent:
+#            cur = cur.buffer_parent
+#          else:
+#            break
+#        if cur.unique_id == other_id:
+#          found = True
+#      if not found:
+#        raise ColaError("relative_to not in tree of self")
+#      cur = idx
+#      found = False
+#      if cur.unique_id == other_id:
+#        found = True
+#      else:
+#        while cur.unique_id != other_id:
+#          if cur.buffer_parent:
+#            cur = cur.buffer_parent
+#          else:
+#            break
+#        if cur.unique_id == other_id:
+#          found = True
+#      if not found:
+#        raise ColaError("relative to not in tree of idx")
+#    # okay at this point we know that this is a good ancestor
+#    # we need our mappings to that buffer
+#    self_mapping = self._combine_mappings(relative_to)
+#    other_mapping = idx._combine_mappings(relative_to)
+#    for m0,m1 in zip(self_mapping, other_mapping):
+#      if ~m0.step > 1 or ~m1.step > 1:
+#        raise NotImplementedError('not really sure what a stride means here')
+#    self_origin = [~s.start for s in self_mapping]
+#    other_origin = [~s.start for s in other_mapping]
+#    new_origin = []
+#    # get the new start
+#    for s,o in zip(self_origin,other_origin):
+#      og = o-s
+#      if og < 0:
+#        return None # idx is not within self
+#      new_origin.append(og)
+#    # get the new stop
+#    self_stops = [~s.stop for s in self_mapping]
+#    other_stops = [~s.stop for s in other_mapping]
+#    new_stops = []
+#    for b,s in zip(other_stops,self_stops):
+#      new_stops.append(b-s)
+#    # create the new slices
+#    return self[[Slice(start,stop,1) for start,stop in zip(new_origin,new_stops)]]
+
+  # this gets a view on self that corresponds to the location of blk
+  # self and blk must share the same buffer for this case
+  # TODO implement other case where you can specify the backing buffer Block
+  # to reference (then they must both have that somewhere in the hierarchy)
+#  def __getitem__(self, blk: Multidim[T]) -> Optional[Multidim[T]]:
+#    if self.buffer_parent.unique_id != blk.buffer_parent.unique_id:
+#      cola_debug(self.buffer_parent.unique_id)
+#      cola_debug(blk.buffer_parent.unique_id)
+#      raise ColaError("objs do not share the same immediate buffer parent")
+#    # blk must be fully contained within self, otherwise you get None
+#    borigin = blk.origin()
+#    sorigin = self.origin()
+#    new_origin = []
+#    i = 0
+#    for b,s in zip(borigin,sorigin):
+#      new_origin.append(b-s)
+#      if new_origin[i] < 0:
+#        return None
+#      i += 1
+#    # new_origin is our start
+#    # now get the stop
+#    bstops = [~sl.stop for sl in blk.buffer_mapping]
+#    sstops = [~sl.stop for sl in self.buffer_mapping]
+#    new_stops = []
+#    i = 0
+#    for b,s in zip(bstops,sstops):
+#      new_stops.append(b-s)
+#      i += 1
+#    slices = []
+#    idx = 0
+#    for o,stop,sl in zip(list(new_origin),list(new_stops),blk.buffer_mapping):
+#      slices.append(Slice(o,stop,~sl.step))
+#      idx += 1
+#    return self.__getitem__(slices)
+
   def __getitem__(self, idxs) -> Multidim[T]:    
     if len(idxs) != len(self.dims):
       raise ColaError()
-    # get current mappings
-    mapping = [sl for sl in self.buffer_mapping]
     dims = [d for d in self.dims]
-    # and now update
+    mapping = [sl for sl in self.buffer_mapping]
+    cmapping = [sl for sl in self.coord_mapping]
     i = 0
     for idx in idxs:
-      d,sl = self._convert(idx, i)
+      d,sl = self._convert(idx,i)
       dims[i] = d
-      repl = mapping[i + self.dim_offset]
-      # sl is relative to self, repl is relative to buffer
-      start = ~repl.start + ~sl.start * ~repl.step
-      stop = min(~repl.start + ~sl.stop * ~repl.step, ~repl.stop)
-      step = ~repl.step * ~sl.step
-      mapping[i + self.dim_offset] = slice(start, stop, step) 
-      i += 1
-      
+      # combine with the original mapping
+      replace = mapping[i]
+      start = ~replace.start + ~sl.start * ~replace.step
+      stop = min(~replace.start + ~sl.stop * ~replace.step, ~replace.stop)
+      step = ~replace.step * ~sl.step
+      mapping[i] = slice(start, stop, step)         
+      replace = cmapping[i]
+      start = ~replace.start + ~sl.start * ~replace.step
+      stop = min(~replace.start + ~sl.stop * ~replace.step, ~replace.stop)
+      step = ~replace.step * ~sl.step
+      cmapping[i] = slice(start, stop, step)         
+      i += 1      
+
     md = Multidim[T]()
-    md.dim_offset = self.dim_offset
-#    md.back_dim_offset = self.back_dim_offset
     md.buffer = self.buffer
- #   md.buffer_parent.dims = self.buffer_parent.dims
-    md.buffer_parent = self.buffer_parent
     md.dims = dims
     md.buffer_mapping = mapping
+    md.buffer_parent = self.buffer_parent
+    md.coord_mapping = cmapping
+    md.cgrid = self.cgrid
     return md
 
   ### __CALL__ AND ASSOCIATED FUNCTIONS
@@ -260,53 +378,53 @@ class Multidim[T]:
   def __call__(self) -> T:
     if self.nunits() != 1:
       raise ColaError()
-    coord = [~sl.start for sl in self.buffer_mapping]
-    return self.buffer[self._linearize(coord)]
+    coord = self.origin()
+    return self.buffer[Multidim.linearize(self.buffer_parent.dims, coord)]      
 
   def __call__(self, idxs) -> T:
     return self[idxs]()
 
-  def __call__(self, idx0, idx1, *idx) -> T:
-    tup = (idx0, idx1) + tuple(iter(i) for i in idx)
+  def __call__(self, idx0, *idx) -> T:
+    tup = (idx0,) + tuple(i for i in idx)
     return self.__getitem__(tup)()
 
   ### __SETITEM__ AND ASSOCIATED FUNCTIONS
 
   def _iterate(self):
-    # default iterators are from the buffer mapping since we may have some back elided dimensions
-    return self._iterate([~d.start for d in self.buffer_mapping], 0)
+    return self._iterate([0]*len(self.dims), 0)
 
   def iterate(self):
-    # default iterators are from the buffer mapping since we may have some back elided dimensions
-    return self._iterate([~d.start for d in self.buffer_mapping], 0)
+    return self._iterate([0]*len(self.dims), 0)
 
   def _iterate(self, iterators: list[int], cur_depth: int):
-    if cur_depth == len(self.dims) - 1:#(1 + self.dim_offset + self.back_dim_offset):
-      cmap = self.buffer_mapping[cur_depth+self.dim_offset]
+    bmapping = [d for d in self.buffer_mapping]
+    buffer_dims = self.buffer_parent.dims
+    if cur_depth == len(self.dims) - 1:
+      cmap = bmapping[cur_depth]
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
-        iterators[cur_depth+self.dim_offset] = i
-        linear = self._linearize(iterators)
+        iterators[cur_depth] = i
+        linear = Multidim.linearize(buffer_dims, iterators)
         yield linear
     else:
-      cmap = self.buffer_mapping[cur_depth+self.dim_offset]
+      cmap = bmapping[cur_depth]
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
-        iterators[cur_depth+self.dim_offset] = i
+        iterators[cur_depth] = i
         yield from self._iterate(iterators, cur_depth+1)
 
   def slice_iterate(self):
-    return self._slice_iterate([~d.start for d in self.buffer_mapping], 0)
+    return self._slice_iterate([0]*len(self.dims), 0)
 
   def _slice_iterate(self, iterators: list[int], cur_depth: int):
-    if cur_depth == len(self.dims) - 1:#(1 + self.dim_offset + self.back_dim_offset):
-      cmap = self.buffer_mapping[cur_depth+self.dim_offset]
+    bmapping = [d for d in self.buffer_mapping]
+    if cur_depth == len(self.dims) - 1:
+      cmap = bmapping[cur_depth]
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
-        iterators[cur_depth+self.dim_offset] = i
-        elide_amt = len(self.buffer_parent.dims) - 1
-        yield self.buffer_parent[iterators].elide_back(elide_amt)
+        iterators[cur_depth] = i
+        yield self[iterators]
     else:
-      cmap = self.buffer_mapping[cur_depth+self.dim_offset]
+      cmap = bmapping[cur_depth]
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
-        iterators[cur_depth+self.dim_offset] = i
+        iterators[cur_depth] = i
         yield from self._slice_iterate(iterators, cur_depth+1)
 
   def __iter__(self) -> Generator[Multidim[T]]:
@@ -316,9 +434,6 @@ class Multidim[T]:
   def __setitem__(self, idx: int, item: T):
     sliced = self[idx]
     sliced._write(item)
-#    coord = [~sl.start for sl in sliced.buffer_mapping]
-#    print(coord)
-#    sliced.buffer[sliced._linearize(coord)] = item
 
   def __setitem__(self, idxs, item):
     sliced = self[idxs]
@@ -338,8 +453,9 @@ class Multidim[T]:
 
   def _write(self, item: Multidim[T]):
     assert self.nunits() == item.nunits()
+    item_buffer = item.buffer
     for l1,l2 in zip(self._iterate(), item._iterate()):
-      self.buffer[l1] = item.buffer[l2]
+      self.buffer[l1] = item_buffer[l2]
 
   def _write(self, item: Block[T]):
     self._write(item.base) 
@@ -347,43 +463,36 @@ class Multidim[T]:
   def _write(self, item: View[T]):
     self._write(item.base)
 
-  # iterate through the whole buffer mapping, but make it seem
-  # like it is an elided region
   def _str_iterate(self, iterators: list[int], cur_depth: int):
-    if cur_depth == len(self.dims) - 1:#(1 + self.dim_offset + self.back_dim_offset):
-      cmap = self.buffer_mapping[cur_depth+self.dim_offset]
+    bmapping = [d for d in self.buffer_mapping]
+    buffer_dims = self.buffer_parent.dims
+    buffer = self.buffer
+    if cur_depth == len(self.dims) - 1:
+      cmap = bmapping[cur_depth]
       s = ''
       if cur_depth == 0:
         s += '\n'
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
-        iterators[cur_depth+self.dim_offset] = i
-        linear = self._linearize(iterators)
-        s += ' ' + str(self.buffer[linear])
+        iterators[cur_depth] = i
+        linear = Multidim.linearize(buffer_dims, iterators)
+        s += ' ' + str(buffer[linear])
       return s
     else:
-      cmap = self.buffer_mapping[cur_depth+self.dim_offset]
+      cmap = bmapping[cur_depth]
       s = ''
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
-        iterators[cur_depth+self.dim_offset] = i
-        if cur_depth == 0 and len(self.dims) > 2:#(len(self.dims) - (self.dim_offset + self.back_dim_offset)) > 2:
-          s += '\ndims idxs: ' + str(iterators[cur_depth+self.dim_offset])
-        elif cur_depth < (len(self.dims) - 2):#(self.dim_offset + self.back_dim_offset)) - 2:
-          s += ',' + str(iterators[cur_depth+self.dim_offset])
+        iterators[cur_depth] = i
+        if cur_depth == 0 and len(self.dims) > 2:
+          s += '\ndims idxs: ' + str(iterators[cur_depth])
+        elif cur_depth < (len(self.dims) - 2):
+          s += ',' + str(iterators[cur_depth])
         else:
           s += '\n'
         s += self._str_iterate(iterators, cur_depth+1)
       return s
     
   def __str__(self):
-    return self._str_iterate([~d.start for d in self.buffer_mapping], 0)
-
-  def buffer_equals(self, other: Multidim[T]):
-    if self.nunits() != other.nunits():
-      return False
-    for l1,l2 in zip(self._iterate(), other._iterate()):
-      if self.buffer[l1] != other.buffer[l2]:
-        return False
-    return True
+    return self._str_iterate(self.origin(), 0)
 
   def buffer_equals(self, other: list[T]):
     if self.nunits() != len(other):
@@ -394,146 +503,213 @@ class Multidim[T]:
     return True
 
   ### ARITHMETIC
-    
+
   # broadcast
-  def __add__(self, other: T) -> Multidim[T]:
-    return self._broadcast_binary_arithmetic(other, T.__add__)
 
-  def __radd__(self, other: T) -> Multidim[T]:
-    return self + other
+  def __add__(self, other: T):
+    res = Multidim[T](self, True)
+    for l0,l1 in zip(res._iterate(), self._iterate()):
+      res.buffer[l0] = self.buffer[l1] + other
+    return res
 
-  def __sub__(self, other: T) -> Multidim[T]:
-    return self._broadcast_binary_arithmetic(other, T.__sub__)
+  def __radd__(self, other: T):
+    res = Multidim[T](self, True)
+    for l0,l1 in zip(res._iterate(), self._iterate()):
+      res.buffer[l0] = other + self.buffer[l1]
+    return res
 
-  def __rsub__(self, other: T) -> Multidim[T]:
-    return self - other
+  def __sub__(self, other: T):
+    res = Multidim[T](self, True)
+    for l0,l1 in zip(res._iterate(), self._iterate()):
+      res.buffer[l0] = self.buffer[l1] - other
+    return res
 
-  def __mul__(self, other: T) -> Multidim[T]:
-    return self._broadcast_binary_arithmetic(other, T.__mul__)
+  def __rsub__(self, other: T):
+    res = Multidim[T](self, True)
+    for l0,l1 in zip(res._iterate(), self._iterate()):
+      res.buffer[l0] = other - self.buffer[l1]
+    return res
 
-  def __rmul__(self, other: T) -> Multidim[T]:
-    return self * other
+  def __mul__(self, other: T):
+    res = Multidim[T](self, True)
+    for l0,l1 in zip(res._iterate(), self._iterate()):
+      res.buffer[l0] = self.buffer[l1] * other
+    return res
 
-  def __truediv__(self, other: T) -> Multidim[float]:
-    return self._broadcast_binary_arithmetic[float](other, T.__truediv__)
-
-  def __rtruediv__(self, other: T) -> Multidim[float]:
-    return self / other
-
-  def __floordiv__(self, other: T) -> Multidim[T]:
-    return self._broadcast_binary_arithmetic(other, T.__floordiv__)
-
-  def __rfloordiv__(self, other: T) -> Multidim[T]:
-    return self // other
-
-  def __rshift__(self, other: T) -> Multidim[T]:
-    return self._broadcast_binary_arithmetic(other, T.__rshift__)
-
-  def __rrshift__(self, other: T) -> Multidim[T]:
-    return self >> other
-
-  def __lshift__(self, other: T) -> Multidim[T]:
-    return self._broadcast_binary_arithmetic(other, T.__lshift__)
-
-  def __rlshift__(self, other: T) -> Multidim[T]:
-    return self << other
-
-  def __lt__(self, other: T) -> Multidim[bool]:
-    return self._broadcast_binary_arithmetic[bool](other, T.__lt__)
-
-  def __le__(self, other: T) -> Multidim[bool]:
-    return self._broadcast_binary_arithmetic[bool](other, T.__le__)
-
-  def __gt__(self, other: T) -> Multidim[bool]:
-    return self._broadcast_binary_arithmetic[bool](other, T.__gt__)
-
-  def __ge__(self, other: T) -> Multidim[bool]:
-    return self._broadcast_binary_arithmetic[bool](other, T.__ge__)
-
-  def __eq__(self, other: T) -> Multidim[bool]:
-    return self._broadcast_binary_arithmetic[bool](other, T.__eq__)
-
-  def __ne__(self, other: T) -> Multidim[bool]:
-    return self._broadcast_binary_arithmetic[bool](other, T.__ne__)
+  def __rmul__(self, other: T):
+    res = Multidim[T](self, True)
+    for l0,l1 in zip(res._iterate(), self._iterate()):
+      res.buffer[l0] = other * self.buffer[l1]
+    return res
 
   # elementwise
-  def __add__(self, other: Block[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __add__(self, other: View[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+  def __add__(self, other: Multidim[T]):
+    res = Multidim[T](self, True)
+    for l0,l1,l2 in zip(res._iterate(), self._iterate(), other._iterate()):
+      res.buffer[l0] = self.buffer[l1] + other.buffer[l2]
+    return res
 
-  def __sub__(self, other: Block[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+  def __sub__(self, other: Multidim[T]):
+    res = Multidim[T](self, True)
+    for l0,l1,l2 in zip(res._iterate(), self._iterate(), other._iterate()):
+      res.buffer[l0] = self.buffer[l1] - other.buffer[l2]
+    return res
 
-  def __sub__(self, other: View[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __mul__(self, other: Block[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+  def __mul__(self, other: Multidim[T]):
+    res = Multidim[T](self, True)
+    for l0,l1,l2 in zip(res._iterate(), self._iterate(), other._iterate()):
+      res.buffer[l0] = self.buffer[l1] * other.buffer[l2]
+    return res
 
-  def __mul__(self, other: View[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+    
+  # broadcast
+#  def __add__(self, other: T) -> Multidim[T]:
+#    return Multidim._broadcast_binary_arithmetic(self, other, T.__add__)
+#
+#  def __radd__(self, other: T) -> Multidim[T]:
+#    return Multidim._broadcast_binary_arithmetic(other, self, T.__add__)
+#
+#  def __sub__(self, other: T) -> Multidim[T]:
+#    return Multidim._broadcast_binary_arithmetic(self, other, T.__sub__)
+#
+#  def __rsub__(self, other: T) -> Multidim[T]:
+#    return Multidim._broadcast_binary_arithmetic(other, self, T.__sub__)
+#
+#  def __mul__(self, other: T) -> Multidim[T]:
+#    return Multidim._broadcast_binary_arithmetic(self, other, T.__mul__)
+#
+#  def __rmul__(self, other: T) -> Multidim[T]:
+#    return Multidim._broadcast_binary_arithmetic(other, self, T.__mul__)
+#
+#  def __truediv__(self, other: T) -> Multidim[float]:
+#    return Multidim._broadcast_binary_arithmetic[float](self, other, T.__truediv__)
+#
+#  def __rtruediv__(self, other: T) -> Multidim[float]:
+#    return Multidim._broadcast_binary_arithmetic[float](other, self, T.__truediv__)
+#
+#  def __floordiv__(self, other: T) -> Multidim[T]:
+#    return Multidim._broadcast_binary_arithmetic(self, other, T.__floordiv__)
+#
+#  def __rfloordiv__(self, other: T) -> Multidim[T]:
+#    return Multidim._broadcast_binary_arithmetic(other, self, T.__floordiv__)
+#
+#  def __rshift__(self, other: T) -> Multidim[T]:
+#    return self._broadcast_binary_arithmetic(other, T.__rshift__)
+#
+#  def __rrshift__(self, other: T) -> Multidim[T]:
+#    return self >> other
+#
+#  def __lshift__(self, other: T) -> Multidim[T]:
+#    return self._broadcast_binary_arithmetic(other, T.__lshift__)
+#
+#  def __rlshift__(self, other: T) -> Multidim[T]:
+#    return self << other
+#
+#  def __lt__(self, other: T) -> Multidim[bool]:
+#    return self._broadcast_binary_arithmetic[bool](other, T.__lt__)
+#
+#  def __le__(self, other: T) -> Multidim[bool]:
+#    return self._broadcast_binary_arithmetic[bool](other, T.__le__)
+#
+#  def __gt__(self, other: T) -> Multidim[bool]:
+#    return self._broadcast_binary_arithmetic[bool](other, T.__gt__)
+#
+#  def __ge__(self, other: T) -> Multidim[bool]:
+#    return self._broadcast_binary_arithmetic[bool](other, T.__ge__)
+#
+#  def __eq__(self, other: T) -> Multidim[bool]:
+#    return self._broadcast_binary_arithmetic[bool](other, T.__eq__)
+#
+#  def __ne__(self, other: T) -> Multidim[bool]:
+#    return self._broadcast_binary_arithmetic[bool](other, T.__ne__)
+#
+  # elementwise
 
-  def __truediv__(self, other: Block[T]) -> Multidim[float]:
-    return self._elementwise_binary_arithmetic[float](other.base, T.__truediv__)
+#  def __add__(self, other: Multidim[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other, T.__add__)
 
-  def __truediv__(self, other: View[T]) -> Multidim[float]:
-    return self._elementwise_binary_arithmetic[float](other.base, T.__truediv__)
+#  def __add__(self, other: View[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __floordiv__(self, other: Block[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__floordiv__)
+#  def __radd__(self, other: Block[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __floordiv__(self, other: View[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__floordiv__)
+#  def __radd__(self, other: View[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other.base, T.__add__)
 
-  def __rshift__(self, other: Block[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__rshift__)
-
-  def __rshift__(self, other: View[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__rshift__)
-
-  def __lshift__(self, other: Block[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__lshift__)
-
-  def __lshift__(self, other: View[T]) -> Multidim[T]:
-    return self._elementwise_binary_arithmetic(other.base, T.__lshift__)
-
-  def __lt__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__lt__)
-
-  def __lt__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__lt__)
-
-  def __le__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__le__)
-
-  def __le__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__le__)
-
-  def __gt__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__gt__)
-
-  def __gt__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__gt__)
-
-  def __ge__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__ge__)
-
-  def __ge__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__ge__)
-
-  def __eq__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__eq__)
-
-  def __eq__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__eq__)
-
-  def __ne__(self, other: Block[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__ne__)
-
-  def __ne__(self, other: View[T]) -> Multidim[bool]:
-    return self._elementwise_binary_arithmetic[bool](other.base, T.__ne__)
+#  def __sub__(self, other: Multidim[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other, T.__add__)
+#
+##  def __sub__(self, other: View[T]) -> Multidim[T]:
+##    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+#
+#  def __mul__(self, other: Block[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+#
+#  def __mul__(self, other: View[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other.base, T.__add__)
+#
+#  def __truediv__(self, other: Block[T]) -> Multidim[float]:
+#    return self._elementwise_binary_arithmetic[float](other.base, T.__truediv__)
+#
+#  def __truediv__(self, other: View[T]) -> Multidim[float]:
+#    return self._elementwise_binary_arithmetic[float](other.base, T.__truediv__)
+#
+#  def __floordiv__(self, other: Block[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other.base, T.__floordiv__)
+#
+#  def __floordiv__(self, other: View[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other.base, T.__floordiv__)
+#
+##  def __rshift__(self, other: Block[T]) -> Multidim[T]:
+##    return self._elementwise_binary_arithmetic(other.base, T.__rshift__)
+##
+#  def __rshift__(self, other: View[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other.base, T.__rshift__)
+#
+#  def __lshift__(self, other: Block[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other.base, T.__lshift__)
+#
+#  def __lshift__(self, other: View[T]) -> Multidim[T]:
+#    return self._elementwise_binary_arithmetic(other.base, T.__lshift__)
+#
+#  def __lt__(self, other: Block[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__lt__)
+#
+#  def __lt__(self, other: View[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__lt__)
+#
+#  def __le__(self, other: Block[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__le__)
+#
+#  def __le__(self, other: View[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__le__)
+#
+#  def __gt__(self, other: Block[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__gt__)
+#
+#  def __gt__(self, other: View[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__gt__)
+#
+#  def __ge__(self, other: Block[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__ge__)
+#
+#  def __ge__(self, other: View[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__ge__)
+#
+#  def __eq__(self, other: Block[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__eq__)
+#
+#  def __eq__(self, other: View[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__eq__)
+#
+#  def __ne__(self, other: Block[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__ne__)
+#
+#  def __ne__(self, other: View[T]) -> Multidim[bool]:
+#    return self._elementwise_binary_arithmetic[bool](other.base, T.__ne__)
 
 # TODO appropriate base data type for buffer (is it a list)?
 @extend
@@ -541,19 +717,19 @@ class Block[T]:
 
   # need separate init for block and view so it typechecks
   def __init__(self, other: Block[T]):
-    self.base = Multidim[T](other, False)
+    self.base = Multidim[T](other, True)
 
   def __init__(self, other: View[T]):
-    self.base = Multidim[T](other, False)
+    self.base = Multidim[T](other, True)
 
-  def __init__(self, other):
-    self.base = Multidim[T](other, False)
+  def __init__(self, other, cgrid: CoordGrid):
+    self.base = Multidim[T](other, cgrid)
 
-  def __init__(self, dims, data: list[T]):
-    self.base = Multidim[T](dims, data)
+  def __init__(self, dims, data: list[T], cgrid: CoordGrid):
+    self.base = Multidim[T](dims, data, cgrid)
 
-  def __init__(self, dim0, dim1, *dims):
-    self.base = Multidim[T](dim0, dim1, *dims)    
+  def __init__(self, cgrid: CoordGrid, dim0, dim1, *dims):
+    self.base = Multidim[T](cgrid, dim0, dim1, *dims)    
 
 #  def elide_front(self, amt: int = 1):
 #    return View[T](self.base.elide_front(amt))
@@ -574,6 +750,12 @@ class Block[T]:
   # as a tuple (or just a single item if is a 1D access)
   def __getitem__(self, idxs) -> View[T]:
     return View[T](self.base[idxs])
+
+  def __getitem__(self, idx: View[T]) -> View[T]:
+    return View[T](self.base[idx.base])
+
+  def __getitem__(self, idx: Block[T]) -> View[T]:
+    return View[T](self.base[idx.base])
   
   def __setitem__(self, idxs, items):
     self.base[idxs] = items
@@ -594,65 +776,119 @@ class Block[T]:
   def __str__(self):
     return 'block\n' + str(self.base)
 
-  def __add__(self, other):
+  def __add__(self, other: T):
     return Block(self.base + other)
 
-  def __radd__(self, other):
-    return Block(self.base.__radd__(other))
+  def __add__(self, other: Block[T]):
+    return Block(self.base + other.base)
 
-  def __sub__(self, other):
+  def __add__(self, other: View[T]):
+    return Block(self.base + other.base)
+
+  def __radd__(self, other: T):
+    return Block(other + self.base)
+
+  def __sub__(self, other: T):
     return Block(self.base - other)
 
-  def __rsub__(self, other):
-    return Block(self.base.__rsub__(other))
+  def __sub__(self, other: Block[T]):
+    return Block(self.base - other.base)
 
-  def __mul__(self, other):
+  def __sub__(self, other: View[T]):
+    return Block(self.base - other.base)
+
+  def __rsub__(self, other: T):
+    return Block(other - self.base)
+
+  def __mul__(self, other: T):
     return Block(self.base * other)
 
-  def __rmul__(self, other):
-    return Block(self.base.__rmul__(other))
+  def __mul__(self, other: Block[T]):
+    return Block(self.base * other.base)
 
-  def __truediv__(self, other):
-    return Block[float](self.base / other)
+  def __mul__(self, other: View[T]):
+    return Block(self.base * other.base)
 
-  def __rtruediv__(self, other):
-    return Block[float](self.base.__rtruediv__(other))
+  def __rmul__(self, other: T):
+    return Block(other * self.base)
 
-  def __floordiv__(self, other):
-    return Block(self.base // other)
+  def cgrid(self):
+    return self.base.cgrid
 
-  def __rfloordiv__(self, other):
-    return Block(self.base.__rfloordiv__(other))
-
-  def __rshift__(self, other):
-    return Block(self.base >> other)
-
-  def __rrshift__(self, other):
-    return Block(self.base.__rrshift__(other))
-
-  def __lshift__(self, other):
-    return Block(self.base << other)
-
-  def __rlshift__(self, other):
-    return Block(self.base.__rlshift__(other))
-
-  def __lt__(self, other):
-    return Block[bool](self.base < other)
-
-  def __le__(self, other):
-    return Block[bool](self.base <= other)
-
-  def __gt__(self, other):
-    return Block[bool](self.base > other)
-
-  def __ge__(self, other):
-    return Block[bool](self.base >= other)
-
-  def __eq__(self, other):
-    return Block[bool](self.base == other)
-
-  def __ne__(self, other):
-    return Block[bool](self.base != other)
+#  def __add__(self, other):
+#    return Block(self.base + other)
+#
+#  def __radd__(self, other: T):
+#    return Block(self.base.__radd__(other))
+#
+#  def __radd__(self, other):
+#    return Block(other.base.self.base)
+#
+#  def __sub__(self, other):
+#    return Block(self.base - other)
+#
+#  def __rsub__(self, other: T):
+#    return Block(self.base.__rsub__(other))
+#
+#  def __rsub__(self, other):
+#    return Block(other.base.__sub__(self.base))
+#
+#  def __mul__(self, other):
+#    return Block(self.base * other)
+#
+#  def __rmul__(self, other: T):
+#    return Block(self.base.__rmul__(other))
+#
+#  def __rmul__(self, other):
+#    return Block(other.base * self.base)
+#
+#  def __truediv__(self, other):
+#    return Block[float](self.base / other)
+#
+#  def __rtruediv__(self, other: T):
+#    return Block[float](self.base.__rtruediv__(other))
+#
+#  def __rtruediv__(self, other):
+#    return Block[float](other.base / self.base)
+#
+#  def __floordiv__(self, other):
+#    return Block(self.base // other)
+#
+#  def __rfloordiv__(self, other: T):
+#    return Block(self.base.__rfloordiv__(other))
+#
+#  def __rfloordiv__(self, other):
+#    return Block(other.base // self.base)
+#
+#  def __rshift__(self, other):
+#    return Block(self.base >> other)
+#
+#  def __rrshift__(self, other):
+#    return Block(self.base.__rrshift__(other))
+#
+#  def __lshift__(self, other):
+#    return Block(self.base << other)
+#
+#  def __rlshift__(self, other):
+#    return Block(self.base.__rlshift__(other))
+#
+#  def __lt__(self, other):
+#    return Block[bool](self.base < other)
+#
+#  def __le__(self, other):
+#    return Block[bool](self.base <= other)
+#
+#  def __gt__(self, other):
+#    return Block[bool](self.base > other)
+#
+#  def __ge__(self, other):
+#    return Block[bool](self.base >= other)
+#
+#  def __eq__(self, other):
+#    return Block[bool](self.base == other)
+#
+#  def __ne__(self, other):
+#    return Block[bool](self.base != other)
 
   # iteration, which is just a row-major scan by default
   # yields single view values
@@ -663,6 +899,9 @@ class Block[T]:
   def __bool__(self):
     return bool(self.base)
 
+  def origin(self):
+    return self.base.origin()
+
 @extend
 class View[T]:
 
@@ -671,22 +910,16 @@ class View[T]:
 
   # need separate init for block and view so it typechecks
   def __init__(self, parent: Block[T]):
-    self.base = Multidim[T](parent, True)
+    self.base = Multidim[T](parent, False)
 
   def __init__(self, parent: View[T]):
-    self.base = Multidim[T](parent, True)
+    self.base = Multidim[T](parent, False)
 
-  def __init__(self, parent):
-    self.base = Multidim[T](parent, True)
+  def __init__(self, parent, cgrid: CoordGrid):
+    self.base = Multidim[T](parent, cgrid)
 
   def __init__(self, base: Multidim[T]):
     self.base = base
-
-  def elide_front(self, amt: int = 1):
-    return View[T](self.base.elide_front(amt))
-
-  def elide_back(self, amt: int = 1):
-    return View[T](self.base.elide_back(amt))
 
   def dims(self) -> list[int]:
     return self.base.dims
@@ -701,6 +934,12 @@ class View[T]:
   # as a tuple (or just a single item if is a 1D access)
   def __getitem__(self, idxs) -> View[T]:
     return View[T](self.base[idxs])
+
+  def __getitem__(self, idx: View[T]) -> View[T]:
+    return View[T](self.base[idx.base])
+
+  def __getitem__(self, idx: Block[T]) -> View[T]:
+    return View[T](self.base[idx.base])
   
   def __setitem__(self, idxs, items):
     self.base[idxs] = items
@@ -721,66 +960,120 @@ class View[T]:
   def __call__(self, idx0, idx1, *idxs) -> T:
     return self.base(idx0, idx1, *idxs)
 
-  def __add__(self, other):
+  def __add__(self, other: T):
     return Block(self.base + other)
 
-  def __radd__(self, other):
-    return Block(self.base.__radd__(other))
+  def __add__(self, other: Block[T]):
+    return Block(self.base + other.base)
 
-  def __sub__(self, other):
+  def __add__(self, other: View[T]):
+    return Block(self.base + other.base)
+
+  def __radd__(self, other: T):
+    return Block(other + self.base)
+
+  def __sub__(self, other: T):
     return Block(self.base - other)
 
-  def __rsub__(self, other):
-    return Block(self.base.__rsub__(other))
+  def __sub__(self, other: Block[T]):
+    return Block(self.base - other.base)
 
-  def __mul__(self, other):
+  def __sub__(self, other: View[T]):
+    return Block(self.base - other.base)
+
+  def __rsub__(self, other: T):
+    return Block(other - self.base)
+
+  def __mul__(self, other: T):
     return Block(self.base * other)
 
-  def __rmul__(self, other):
-    return Block(self.base.__rmul__(other))
+  def __mul__(self, other: Block[T]):
+    return Block(self.base * other.base)
 
-  def __truediv__(self, other):
-    return Block[float](self.base / other)
+  def __mul__(self, other: View[T]):
+    return Block(self.base * other.base)
 
-  def __rtruediv__(self, other):
-    return Block[float](self.base.__rtruediv__(other))
+  def __rmul__(self, other: T):
+    return Block(other * self.base)
 
-  def __floordiv__(self, other):
-    return Block(self.base // other)
+  def cgrid(self):
+    return self.base.cgrid
 
-  def __rfloordiv__(self, other):
-    return Block(self.base.__rfloordiv__(other))
-
-  def __rshift__(self, other):
-    return Block(self.base >> other)
-
-  def __rrshift__(self, other):
-    return Block(self.base.__rrshift__(other))
-
-  def __lshift__(self, other):
-    return Block(self.base << other)
-
-  def __rlshift__(self, other):
-    return Block(self.base.__rlshift__(other))
-
-  def __lt__(self, other):
-    return Block[bool](self.base < other)
-
-  def __le__(self, other):
-    return Block[bool](self.base <= other)
-
-  def __gt__(self, other):
-    return Block[bool](self.base > other)
-
-  def __ge__(self, other):
-    return Block[bool](self.base >= other)
-
-  def __eq__(self, other):
-    return Block[bool](self.base == other)
-
-  def __ne__(self, other):
-    return Block[bool](self.base != other)
-
+#  def __add__(self, other):
+#    return Block(self.base + other)
+#
+#  def __radd__(self, other: T):
+#    return Block(self.base.__radd__(other))
+#
+#  def __radd__(self, other):
+#    return Block(other.base + self.base)
+#
+#  def __sub__(self, other):
+#    return Block(self.base - other)
+#
+#  def __rsub__(self, other: T):
+#    return Block(self.base.__rsub__(other))
+#
+#  def __rsub__(self, other):
+#    return Block(other.base - self.base)
+#
+#  def __mul__(self, other):
+#    return Block(self.base * other)
+#
+#  def __rmul__(self, other: T):
+#    return Block(self.base.__rmul__(other))
+#
+#  def __rmul__(self, other):
+#    return Block(other.base * self.base)
+#
+#  def __truediv__(self, other):
+#    return Block[float](self.base / other)
+#
+#  def __rtruediv__(self, other: T):
+#    return Block[float](self.base.__rtruediv__(other))
+#
+#  def __rtruediv__(self, other):
+#    return Block[float](other.base / self.base)
+#
+#  def __floordiv__(self, other):
+#    return Block(self.base // other)
+#
+#  def __rfloordiv__(self, other: T):
+#    return Block(self.base.__rfloordiv__(other))
+#
+#  def __rfloordiv__(self, other):
+#    return Block(other.base // self.base)
+#
+##  def __rshift__(self, other):
+##    return Block(self.base >> other)
+##
+##  def __rrshift__(self, other):
+##    return Block(self.base.__rrshift__(other))
+##
+##  def __lshift__(self, other):
+##    return Block(self.base << other)
+##
+#  def __rlshift__(self, other):
+#    return Block(self.base.__rlshift__(other))
+#
+#  def __lt__(self, other):
+#    return Block[bool](self.base < other)
+#
+#  def __le__(self, other):
+#    return Block[bool](self.base <= other)
+#
+#  def __gt__(self, other):
+#    return Block[bool](self.base > other)
+#
+#  def __ge__(self, other):
+#    return Block[bool](self.base >= other)
+#
+#  def __eq__(self, other):
+#    return Block[bool](self.base == other)
+#
+#  def __ne__(self, other):
+#    return Block[bool](self.base != other)
+#
   # iteration, which is just a row-major scan by default
   # yields single view values
   def __iter__(self) -> Generator[View[T]]:
@@ -789,6 +1082,9 @@ class View[T]:
 
   def __bool__(self):
     return bool(self.base)
+
+  def origin(self):
+    return self.base.origin()
 
 @extend
 class File:
@@ -799,3 +1095,16 @@ class File:
     ret = _C.fread(block.base.buffer.arr.ptr.as_byte(), T.len() // 8, nelems, self.fp)
     self._errcheck("error in read")
     return ret
+
+
+@extend
+class List[T]:
+  
+  def linearize[S](self,relative_to: Multidim[S]):
+    return relative_to.linearize(self)
+
+  def linearize[S](self,relative_to: Block[S]):
+    return relative_to.base.linearize(self)
+
+  def linearize[S](self,relative_to: View[S]):
+    return relative_to.base.linearize(self)

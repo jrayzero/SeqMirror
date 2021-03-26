@@ -153,44 +153,13 @@ class Bits[N: int]:
       s += '\n' + str(self.l0_buffer & UInt[N](mask))
     return s
 
-  # get one bit
-#  def __getitem__(self, idx: int) -> UInt[1]:
-#    idx += self.offset
-#    assert idx < len(self)    
-#    # see if the bit is in l0 or l1
-#    if idx < self.l1_sz * 8:
-#      which_byte = idx // 8
-#      the_byte = u8(self.l1_buffer[which_byte])
-#      which_bit = idx % 8
-#      the_byte >>= u8((8 - which_bit - 1))
-#      the_bit = the_byte & u8(1)
-#      return UInt[1](the_bit)
-#    else:
-#      # in l0
-#      # determine offset in l0
-#      idx -= self.l1_sz * 8
-#      return UInt[1]((self.l0_buffer >> UInt[N](N - idx - 1)) & UInt[N](1))
-#
-#  # get a range of bits 
-#  # TODO this will be slow since it goes one bit at a time
-#  def __getitem__(self, slc: Slice) -> Bits[64]:
-#    bits = Bits[64]()
-#    slc.adjust_indices(len(self))
-#    assert ~slc.stop <= len(self)
-#    for i in range(~slc.start, ~slc.stop, ~slc.step):
-#      print(i)
-#      bits.pack(self[self.offset], 1)
-#      self.offset += 1
-#    return bits
-
-
   # TODO refactor theses since they are both the same except for the offset ctr
 
   # only supports up to 64 bits at a time (cause I can't seem to add a generic to __call__)
   # advances offset
   def __call__(self, nbits: int) -> UInt[64]:  
     mx = self.offset + nbits
-    if nbits > 64:
+    if nbits > 64 and nbits < 0:
       raise ColaError()
     if mx > len(self):
       raise ColaError()       
@@ -220,7 +189,7 @@ class Bits[N: int]:
   # doesn't advance
   def peek(self, nbits: int) -> UInt[64]:
     mx = self.offset + nbits
-    if 0 < nbits > 64:
+    if nbits > 64 and nbits < 0:
       raise ColaError()
     if mx > len(self):      
       raise ColaError(str(mx))       

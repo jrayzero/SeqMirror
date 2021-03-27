@@ -12,6 +12,12 @@ class Slice:
   def compute_range(self):
     return int(math.ceil((~self.stop - ~self.start) / ~self.step))
 
+  def cola_adjust(self, dlen):
+    start = ~self.start if self.start else 0
+    stop = ~self.stop if self.stop else dlen
+    step = ~self.step if self.step else 1
+    return Slice(start, stop, step)
+
 # TODO make dims and stuff like that be uints (and exslices stop be int sand allow ti to be negative)
 
 class CoordGrid:
@@ -29,6 +35,9 @@ class CoordGrid:
 
   def __eq__(self, other: CoordGrid):
     return self.unique_id == other.unique_id  
+
+  def __ne__(self, other: CoordGrid):
+    return not self == other
 
   def ndims(self):
     return len(self.dims)
@@ -122,7 +131,7 @@ class Multidim[T]:
       raise ColaError()
 
   # 2D and above
-  def __init__(self, cgrid: CoordGrid, dim0, dim1, *dims):
+  def __init__(self, cgrid: CoordGrid, dim0: int, dim1: int, *dims):
     self.__init__()
     self.dims = [dim0, dim1]
     if staticlen(dims) > 0:
@@ -134,6 +143,20 @@ class Multidim[T]:
     self.coord_mapping = [Slice(0,d,1) for d in self.dims]
     if cgrid.ndims() != self.ndims():
       raise ColaError()
+
+  def __init__(self, dim0: int, dim1: int, *dims):
+    self.__init__()
+    self.dims = [dim0, dim1]
+    if staticlen(dims) > 0:
+      self.dims += [d for d in dims]
+    self.buffer = Array[T](self.nunits())
+    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self
+    self.cgrid = CoordGrid(self.dims)
+    self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+    if self.cgrid.ndims() != self.ndims():
+      raise ColaError()
+
 
   # init dims and fill immediately (MAKES A SHALLOW COPY)
   def __init__(self, dims, data: Array[T], cgrid: CoordGrid):
@@ -193,7 +216,7 @@ class Multidim[T]:
     return 1,Slice(idx,idx+1,1)
     
   def _convert(self, idx: Slice, it: int):
-    idx2 = idx.adjust_indices(self.dims[it])
+    idx2 = idx.cola_adjust(self.dims[it])
     idx = Slice(idx2[0], idx2[1], idx2[2])
     # compute effective end
     end = idx.compute_range()
@@ -204,15 +227,14 @@ class Multidim[T]:
       raise ColaError("Must be 1D Multidim")
     if idx >= self.dims[0]:
       raise ColaError("Invalid index")
-    if idx < 0:
-      idx = idx + self.dims[0]
-    if idx < 0:
-      raise ColaError("Bad idx")
-
     md = Multidim[T]()
     md.dims = [1]
     orig = self.buffer_mapping[0]
     md.buffer_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
+    # verify that the buffer mapping doesn't go negative (which can happen with neg idx)
+    for b in md.buffer_mapping:
+      if ~b.start < 0:
+        raise ColaError("Bad idx")
     md.buffer_parent = self.buffer_parent
     md.buffer = self.buffer
     md.cgrid = self.cgrid
@@ -223,123 +245,21 @@ class Multidim[T]:
   def __getitem__(self, idx: Slice) -> Multidim[T]:
     return self[[idx]]
 
-#  def _combine_mappings(self, relative_to: Multidim[T]):
-#    other_id = relative_to.unique_id
-#    cur_mapping = [b for b in self.buffer_mapping]
-#    cur = self
-#    while cur.unique_id != other_id:
-#      idx = 0
-#      for cm,c in zip(cur_mapping, cur.buffer_mapping):
-#        start = ~cm.start + ~c.start * ~cm.step
-#        stop = min(~cm.start + ~c.stop * ~cm.step, ~cm.stop)
-#        step = ~cm.step * ~c.step
-#        cur_mapping[idx] = Slice(start, stop, step)
-#        idx += 1
-#      cur = cur.buffer_parent
-#    return cur_mapping
-
-  # return a view on self that corresponds to the location of idx
-  # this requires them to both have the same immediate buffer parents, unless
-  # relative_to is specified, then you make sure they both relate to that
-#  def __getitem__(self, idx: Multidim[T], relative_to: Optional[Multidim[T]] = None):
-#    if not relative_to:
-#      self_id = self.unique_id if self.buffer else self.buffer_parent.unique_id
-#      other_id = idx.unique_id if idx.buffer else idx.buffer_parent.unique_id 
-#      if self_id != other_id:
-#        raise ColaError("objs do not share the same immediate buffer parent")    
-#    else:
-#      if not relative_to.buffer:
-#        raise ColaError("relative_to must be a Block")
-#      other_id = relative_to.unique_id
-#      # check that they are both relative to this thing
-#      cur = self
-#      found = False
-#      if cur.unique_id == other_id:
-#        found = True
-#      else:
-#        while cur.unique_id != other_id:
-#          if cur.buffer_parent:
-#            cur = cur.buffer_parent
-#          else:
-#            break
-#        if cur.unique_id == other_id:
-#          found = True
-#      if not found:
-#        raise ColaError("relative_to not in tree of self")
-#      cur = idx
-#      found = False
-#      if cur.unique_id == other_id:
-#        found = True
-#      else:
-#        while cur.unique_id != other_id:
-#          if cur.buffer_parent:
-#            cur = cur.buffer_parent
-#          else:
-#            break
-#        if cur.unique_id == other_id:
-#          found = True
-#      if not found:
-#        raise ColaError("relative to not in tree of idx")
-#    # okay at this point we know that this is a good ancestor
-#    # we need our mappings to that buffer
-#    self_mapping = self._combine_mappings(relative_to)
-#    other_mapping = idx._combine_mappings(relative_to)
-#    for m0,m1 in zip(self_mapping, other_mapping):
-#      if ~m0.step > 1 or ~m1.step > 1:
-#        raise NotImplementedError('not really sure what a stride means here')
-#    self_origin = [~s.start for s in self_mapping]
-#    other_origin = [~s.start for s in other_mapping]
-#    new_origin = []
-#    # get the new start
-#    for s,o in zip(self_origin,other_origin):
-#      og = o-s
-#      if og < 0:
-#        return None # idx is not within self
-#      new_origin.append(og)
-#    # get the new stop
-#    self_stops = [~s.stop for s in self_mapping]
-#    other_stops = [~s.stop for s in other_mapping]
-#    new_stops = []
-#    for b,s in zip(other_stops,self_stops):
-#      new_stops.append(b-s)
-#    # create the new slices
-#    return self[[Slice(start,stop,1) for start,stop in zip(new_origin,new_stops)]]
-
-  # this gets a view on self that corresponds to the location of blk
-  # self and blk must share the same buffer for this case
-  # TODO implement other case where you can specify the backing buffer Block
-  # to reference (then they must both have that somewhere in the hierarchy)
-#  def __getitem__(self, blk: Multidim[T]) -> Optional[Multidim[T]]:
-#    if self.buffer_parent.unique_id != blk.buffer_parent.unique_id:
-#      cola_debug(self.buffer_parent.unique_id)
-#      cola_debug(blk.buffer_parent.unique_id)
-#      raise ColaError("objs do not share the same immediate buffer parent")
-#    # blk must be fully contained within self, otherwise you get None
-#    borigin = blk.origin()
-#    sorigin = self.origin()
-#    new_origin = []
-#    i = 0
-#    for b,s in zip(borigin,sorigin):
-#      new_origin.append(b-s)
-#      if new_origin[i] < 0:
-#        return None
-#      i += 1
-#    # new_origin is our start
-#    # now get the stop
-#    bstops = [~sl.stop for sl in blk.buffer_mapping]
-#    sstops = [~sl.stop for sl in self.buffer_mapping]
-#    new_stops = []
-#    i = 0
-#    for b,s in zip(bstops,sstops):
-#      new_stops.append(b-s)
-#      i += 1
-#    slices = []
-#    idx = 0
-#    for o,stop,sl in zip(list(new_origin),list(new_stops),blk.buffer_mapping):
-#      slices.append(Slice(o,stop,~sl.step))
-#      idx += 1
-#    return self.__getitem__(slices)
-
+  # get region in self that covers idx
+  def __getitem__(self, idx: Multidim[T]):
+    if self.cgrid != idx.cgrid:
+      raise ColaError("different ancestors")
+    for i in idx.coord_mapping:
+      if ~i.step != 1:
+        raise ColaError("don't know what to do here")
+    for i in self.coord_mapping:
+      if ~i.step != 1:
+        raise ColaError("don't know what to do here")
+    # get offset between self and idx
+    rel_origin = [~s2.start-~s.start for s,s2 in zip(self.coord_mapping,idx.coord_mapping)]
+    new_slices = [Slice(r, r + ~s.stop, 1) for r,s in zip(rel_origin,idx.coord_mapping)]
+    return self[new_slices]    
+  
   def __getitem__(self, idxs) -> Multidim[T]:    
     if len(idxs) != len(self.dims):
       raise ColaError()
@@ -370,6 +290,9 @@ class Multidim[T]:
     md.buffer_parent = self.buffer_parent
     md.coord_mapping = cmapping
     md.cgrid = self.cgrid
+    for b in md.buffer_mapping:
+      if ~b.start < 0:
+        raise ColaError("Bad idx")
     return md
 
   ### __CALL__ AND ASSOCIATED FUNCTIONS
@@ -419,8 +342,11 @@ class Multidim[T]:
     if cur_depth == len(self.dims) - 1:
       cmap = bmapping[cur_depth]
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
-        iterators[cur_depth] = i
-        yield self[iterators]
+        iterators[cur_depth] = i        
+        # this is self.buffer_parent.__getitem__ 
+        # and not self.__getitem__ bc we are computing everything based
+        # on our mapping in buffer_parent
+        yield self.buffer_parent[iterators]
     else:
       cmap = bmapping[cur_depth]
       for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
@@ -728,8 +654,11 @@ class Block[T]:
   def __init__(self, dims, data: list[T], cgrid: CoordGrid):
     self.base = Multidim[T](dims, data, cgrid)
 
-  def __init__(self, cgrid: CoordGrid, dim0, dim1, *dims):
+  def __init__(self, cgrid: CoordGrid, dim0: int, dim1: int, *dims):
     self.base = Multidim[T](cgrid, dim0, dim1, *dims)    
+
+  def __init__(self, dim0: int, dim1: int, *dims):
+    self.base = Multidim[T](dim0, dim1, *dims)    
 
 #  def elide_front(self, amt: int = 1):
 #    return View[T](self.base.elide_front(amt))
@@ -748,15 +677,15 @@ class Block[T]:
 
   # with __setitem__ and __getitem__, we don't need the star arg syntax because args automatically get grouped
   # as a tuple (or just a single item if is a 1D access)
-  def __getitem__(self, idxs) -> View[T]:
-    return View[T](self.base[idxs])
-
   def __getitem__(self, idx: View[T]) -> View[T]:
     return View[T](self.base[idx.base])
 
   def __getitem__(self, idx: Block[T]) -> View[T]:
     return View[T](self.base[idx.base])
-  
+
+  def __getitem__(self, idxs) -> View[T]:
+    return View[T](self.base[idxs])
+
   def __setitem__(self, idxs, items):
     self.base[idxs] = items
 
@@ -932,14 +861,14 @@ class View[T]:
 
   # with __setitem__ and __getitem__, we don't need the star arg syntax because args automatically get grouped
   # as a tuple (or just a single item if is a 1D access)
-  def __getitem__(self, idxs) -> View[T]:
-    return View[T](self.base[idxs])
-
   def __getitem__(self, idx: View[T]) -> View[T]:
     return View[T](self.base[idx.base])
 
   def __getitem__(self, idx: Block[T]) -> View[T]:
     return View[T](self.base[idx.base])
+
+  def __getitem__(self, idxs) -> View[T]:
+    return View[T](self.base[idxs])
   
   def __setitem__(self, idxs, items):
     self.base[idxs] = items

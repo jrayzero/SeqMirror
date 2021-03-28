@@ -5,6 +5,7 @@ class Movement:
   mtype: int
   angle: Optional[int]
   step: list[int]
+  amt: int # for rstep
   step_multiplier: Optional[int]
 
   def __init__(self, mtype: int):
@@ -17,17 +18,18 @@ class Movement:
     assert abs(angle) % 45 == 0
     self.angle = angle
 
-  def set_step(self, step, step_multiplier: int=1):
+  def set_step(self, amt: int, step_multiplier=1):
+    assert self.is_rstep()
+    self.step_multiplier = step_multiplier
+    self.amt = amt
+
+  def set_step(self, step, step_multiplier=1):
     assert self.is_seek() or self.is_astep()
     if self.is_seek():
       assert step_multiplier == 1
       for i in step:
         assert i >= 0 # doesn't make sense to seek to a negative position
     self.step = [s for s in step]
-    self.step_multiplier = step_multiplier
-
-  def set_step(self, step_multiplier):
-    assert self.is_rstep()
     self.step_multiplier = step_multiplier
 
   def is_seek(self):
@@ -65,7 +67,7 @@ class Traversal:
     self.ndims = ndims
     self.movements = []
     self.origin = [0] * ndims
-    self.clockwise_angle_steps = {0:(1,0), 45:(1,1), 90:(0,1), 135:(-1,1), 180:(-1,0), 225:(-1,-1), 270:(0,-1), 315:(1,-1) }
+    self.clockwise_angle_steps = {0:(0,1), 45:(1,1), 90:(1,0), 135:(1,-1), 180:(0,-1), 225:(-1,-1), 270:(-1,0), 315:(-1,1) }
     self.skip_origin_in_step = False
 
   def __init__(self, ndims, origin):
@@ -75,15 +77,20 @@ class Traversal:
     self.ndims = ndims
     self.movements = []
     self.origin = [o for o in origin]
-    self.clockwise_angle_steps = {0:(1,0), 45:(1,1), 90:(0,1), 135:(-1,1), 180:(-1,0), 225:(-1,-1), 270:(0,-1), 315:(1,-1) }
+    self.clockwise_angle_steps = {0:(0,1), 45:(1,1), 90:(1,0), 135:(1,-1), 180:(0,-1), 225:(-1,-1), 270:(-1,0), 315:(-1,1) }
     self.skip_origin_in_step = False
 
   def add_movement(self, movement: Movement):
     self.movements.append(movement)
 
+  def set_origin(self, origin):
+    assert len(origin) == self.ndims
+    self.origin = [o for o in origin]
+    return self
+
   def add_seek(self, coord):
     movement = Movement(0)
-    movement.set_step(coord)
+    movement.set_step(coord, 1)
     self.add_movement(movement)
 
   def add_astep(self, vec, multiplier=1):
@@ -91,9 +98,9 @@ class Traversal:
     movement.set_step(vec, multiplier)
     self.add_movement(movement)
 
-  def add_rstep(self, multiplier):
+  def add_rstep(self, amt, multiplier=1):
     movement = Movement(2)
-    movement.set_step(multiplier)
+    movement.set_step(amt, multiplier)
     self.add_movement(movement)
 
   # Note to self: don't immediately convert these to asteps b/c rotations don't actually
@@ -136,8 +143,10 @@ class Traversal:
           yield cur_coord
       elif movement.is_rstep():
         step = self.clockwise_angle_steps[cur_angle % 360]
+        # multiply by the amt
+        step2 = [s * movement.amt for s in step]
         for _ in range(~movement.step_multiplier):
-          cur_coord = [c0+c1 for c0,c1 in zip(cur_coord, step)]
+          cur_coord = [c0+c1 for c0,c1 in zip(cur_coord, step2)]
           yield cur_coord
       elif movement.is_arot():
         cur_angle = ~movement.angle
@@ -154,6 +163,15 @@ class Traversal:
 
   def __str__(self) -> str:
     return ' -> '.join([str(coord) for coord in self])
+
+  # generate the coordinates and write them to file
+  # for use with plotting
+  def to_file(self, fn: str):
+    fd = open(fn, 'w')
+    for coord in self:
+      fd.write(str(coord[0]) + ',' + str(coord[1]) + '\n')
+    fd.flush()
+    fd.close()      
 
 class AStep:
   step: list[int]

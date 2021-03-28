@@ -185,10 +185,10 @@ small_statement:
   | LEAF FLNE(COMMA, expr) { [$loc, Leaf ($2)] }
   | RROT FLNE(COMMA, expr) { [$loc, RRot ($2)] }
   | AROT FLNE(COMMA, expr) { [$loc, ARot ($2)] }
-  | RSTEP FLNE(COMMA, expr) { [$loc, RStep ($2)] }
+  | RSTEP FLNE(COMMA, by_expr) { [$loc, RStep ($2)] }
   | ASTEP FLNE(COMMA, by_expr) { [$loc, AStep ($2)] }
   | SEEK FLNE(COMMA, expr) { [$loc, Seek ($2)] }
-  | LINK FLNE(COMMA, expr) { [$loc, Link ($2)] }
+  | LINK FLNE(COMMA, by_expr) { [$loc, Link ($2)] }
   | TPARAMS FLNE(COMMA, expr) { [$loc, TParams ($2)] }
   | import_statement { $1 }
   | assign_statement { $1 }

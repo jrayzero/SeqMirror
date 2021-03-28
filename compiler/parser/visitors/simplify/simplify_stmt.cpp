@@ -947,11 +947,11 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
     }
     resultStmt = N<SuiteStmt>(move(suite));
   } else if (head == "tparams") {
-    seqassert(stmt->args.size() == 2, "tparams should have 2 arguments (ndims, origin) ");
+    seqassert(stmt->args.size() == 1, "tparams should have 1 argument (ndims) ");
     seqassert(!ctx->travEmpty(), "not in a traversal build function");
     string trav = ctx->travPeekBack();
     // create a traversal from the parameters
-    ExprPtr create_trav = transform(N<CallExpr>(N<IdExpr>("Traversal"), transform(stmt->args[0]), transform(stmt->args[1])));
+    ExprPtr create_trav = transform(N<CallExpr>(N<IdExpr>("Traversal"), transform(stmt->args[0])));
     StmtPtr trav_assign = N<AssignStmt>(N<IdExpr>(trav), move(create_trav));
     // process the body to create the traversal
     StmtPtr suite = N<SuiteStmt>(transform(stmt->suite));
@@ -985,8 +985,8 @@ void SimplifyVisitor::visit(CustomStmt *stmt) {
     vector<StmtPtr> suite;
     suite.reserve(stmt->args.size());
     for (auto &arg : stmt->args) {
-      // ByExpr can only happen with astep. If we see one, remove it and get its constituent pieces
-      if (head == "astep" && arg->getBy()) {
+      // ByExpr can only happen with astep, link, or rstep. If we see one, remove it and get its constituent pieces
+      if ((head == "astep" || head == "link" || head == "rstep") && arg->getBy()) {
         ExprPtr left = transform(arg->getBy()->left);
         ExprPtr mult = transform(arg->getBy()->multiplier);
         suite.emplace_back(N<ExprStmt>(N<CallExpr>(N<DotExpr>(N<IdExpr>(trav), movement), move(left), move(mult))));

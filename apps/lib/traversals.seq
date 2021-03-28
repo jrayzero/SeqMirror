@@ -1,0 +1,94 @@
+from cola.traversal import *
+
+@traversal
+def _zigzag(N: int, i: int = 1, upper: bool = True):
+  tparams 2
+  if i > 0 and upper:
+    # upper triangle
+    astep (1,-1) by 2*i-1, (1,0), (-1,1) by 2*i, (0,1)
+    link _zigzag(N, i+1, i+1 != N//2)
+  elif i > 1:
+    # lower triangle
+    j = i-1
+    astep (1,-1) by 2*j+1, (0,1), (-1,1) by 2*j, (1,0)
+    link _zigzag(N, j, upper)    
+
+def zigzag(N: int):
+  return AStep([0,1]) + _zigzag(N) + AStep([1,-1]) + AStep([0,1])
+
+# 2 is number of dimensions
+@traversal
+def _diagonal(N: int, i:int=1, upper:bool=True):
+  tparams 2
+  if i > 0 and upper:
+    # upper triangle
+    astep (-1,1) by i
+    astep (i+1,-i)
+    link _diagonal(N, i+1, i+1 != N-1)
+  elif i > 0:
+    # lower triangle
+    astep (-1,1) by i
+    astep (i,-(i-1))
+    link _diagonal(N,  i-1, upper)
+
+def diagonal(N: int):
+  return AStep([1,0]) + _diagonal(N)
+
+@traversal
+def hilbert(order: int, i: int = 0, which: bool = True):
+  tparams 2
+  if i < order:
+    rrot 90 if which else 270
+    link hilbert(order, i+1, not which)
+    rstep 1
+    rrot 270 if which else 90
+    link hilbert(order, i+1, which) 
+    rstep 1 
+    link hilbert(order, i+1, which)
+    rrot 270 if which else 90
+    rstep 1 
+    link hilbert(order, i+1, not which)
+    rrot 90 if which else 270    
+
+@traversal
+def _boustrophedonic(N: int, i: int = 0, which: bool = True):
+  tparams 2
+  rstep 1 by N-1
+  if i < N:
+    rrot 270 if which else 90
+    rstep 1
+    rrot 270 if which else 90
+    link _boustrophedonic(N, i+1, not which)
+
+def boustrophedonic(N: int):
+  return _boustrophedonic(N).set_origin((N,0))
+
+@traversal
+def z_shape(N: int):
+  tparams 2
+  rstep 1 by N-1
+  astep (N-1,-N+1)
+  rstep 1 by N-1
+
+@traversal
+def morton(N: int, i: int = 0):
+  tparams 2
+  # one row
+  for _ in range(N//2-1):
+    link z_shape(2)
+    astep (-1,1)
+  link z_shape(2)
+  # go to next row
+  if i < N//2-1:
+    astep (1,-N+1)
+    link morton(N, i+1)
+  
+@traversal
+def perimeter(N: int):
+  tparams 2
+  astep (0,1) by N-1, (1,0) by N-1, (0,-1) by N-1
+  if N > 2:
+    astep (-1,0) by N-2, (0,1)
+    link perimeter(N-2)
+  
+  

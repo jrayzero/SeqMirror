@@ -57,6 +57,7 @@ class Multidim[T]:
   # your mapping to the coordinate system
   coord_mapping: list[Slice]  
   unique_id: str
+  invalid: bool
 
 class View[T]:
   base: Multidim[T]
@@ -71,6 +72,10 @@ class Multidim[T]:
 
   def __init__(self):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
+    self.invalid = False
+
+  def __init__(self, _: bool):
+    self.invalid = True
     
   def __init__(self, other: Block[T], make_buffer: bool):
     self.__init__()
@@ -257,7 +262,7 @@ class Multidim[T]:
         raise ColaError("don't know what to do here")
     # get offset between self and idx
     rel_origin = [~s2.start-~s.start for s,s2 in zip(self.coord_mapping,idx.coord_mapping)]
-    new_slices = [Slice(r, r + ~s.stop, 1) for r,s in zip(rel_origin,idx.coord_mapping)]
+    new_slices = [Slice(r, r + s.compute_range(), 1) for r,s in zip(rel_origin,idx.coord_mapping)]
     return self[new_slices]    
   
   def __getitem__(self, idxs) -> Multidim[T]:    
@@ -640,6 +645,9 @@ class Multidim[T]:
 # TODO appropriate base data type for buffer (is it a list)?
 @extend
 class Block[T]:
+
+  def __init__(self):
+    self.base = Multidim[T]()
 
   # need separate init for block and view so it typechecks
   def __init__(self, other: Block[T]):

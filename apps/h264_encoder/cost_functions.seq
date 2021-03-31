@@ -2,7 +2,7 @@ from params import *
 from cola.block import *
 
 # min_cost allows for an early exit if you exceed it
-def sad[T](real: View[T], pred: View[T], min_cost: int = INT_MAX) -> int:
+def sad(real, pred, min_cost: int = INT_MAX) -> int:
   cost = 0
   if min_cost == INT_MAX:
     # no early exit
@@ -16,7 +16,7 @@ def sad[T](real: View[T], pred: View[T], min_cost: int = INT_MAX) -> int:
         return min_cost
     return cost
 
-def sse[T](real: View[T], pred: View[T], min_cost: int = INT_MAX) -> int:    
+def sse(real, pred, min_cost: int = INT_MAX) -> int:    
   cost = 0
   if min_cost == INT_MAX:
     # no early exit
@@ -93,7 +93,7 @@ def hadamard_SAD_4x4(diff: Block[int]) -> int:
 # TODO figure out the loop version of the Hadamard and implement a generic one
 # The compiler can unroll it
 def satd_4x4[T](real: View[T], pred: View[T]) -> int:
-  diffs = Block[int](real.dims())
+  diffs = Block[T](real.dims())
   for r,p,d in zip(real, pred, diffs):
     d[ALL] = r() - p()
   return hadamard_SAD_4x4(diffs)

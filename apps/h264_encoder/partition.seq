@@ -17,7 +17,7 @@ def split_16x16_to_4x4(root, M=16):
     q1 = root[0,:M//2,M//2:]
     q2 = root[0,M//2:,:M//2]
     q3 = root[0,M//2:,M//2:]
-    if M > 4:
+    if M > 8:
       link split_16x16_to_4x4(q0,M//2)
       link split_16x16_to_4x4(q1,M//2)
       link split_16x16_to_4x4(q2,M//2)

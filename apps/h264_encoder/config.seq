@@ -11,5 +11,11 @@ constraint_set1_flag  = 1 # constrained baseline
                             # (e.g. ProfileIDC=110, IntraProfile=1  =>  High 10 Intra Profile)
 level_idc = 1
 QP = 28
+
+SAD = 0
+SSE = 1
+SATD = 2
+cost = SAD
+
 # 1 slice per picture
 # 1 frame = 1 picture

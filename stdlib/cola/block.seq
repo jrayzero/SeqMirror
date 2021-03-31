@@ -241,10 +241,21 @@ class Multidim[T]:
   def origin(self) -> list[int]:    
     return [~p.start for p in self.buffer_mapping]
 
+  def origin_relative_to(self, tree_relative) -> list[int]:    
+    if self.cgrid != tree_relative.base.cgrid:
+      raise ColaError("different ancestors")
+    r_origin = [(~s.start-~s2.start) for s,s2 in zip(self.coord_mapping,tree_relative.base.coord_mapping)]
+    return r_origin
+
+
   def origin_within(self, tree_relative) -> list[int]:    
     if self.cgrid != tree_relative.base.cgrid:
       raise ColaError("different ancestors")
-    r_origin = [~s.start-~s2.start for s,s2 in zip(self.coord_mapping,tree_relative.base.coord_mapping)]
+    # TODO check that self is valid within tree_relative, meaning has a multiple location of tree_relative's stride
+    # (other wise it doesn't make sense b/c you wouldn't be WITHIN tree_relative. it would just be relative to)
+    for s,s2 in zip(self.coord_mapping,tree_relative.base.coord_mapping):
+      assert (~s.start-~s2.start)%~s2.step == 0
+    r_origin = [(~s.start-~s2.start)//~s2.step for s,s2 in zip(self.coord_mapping,tree_relative.base.coord_mapping)]
     return r_origin
     
   def _convert(self, idx: int, i: int):
@@ -301,6 +312,7 @@ class Multidim[T]:
     new_slices = [Slice(r, r + s.compute_range(), 1) for r,s in zip(rel_origin,idx.coord_mapping)]
     return self[new_slices]    
   
+  # TODO need to check for out-of-bounds index here
   def __getitem__(self, idxs) -> Multidim[T]:    
     if len(idxs) != len(self.dims):
       raise ColaError(str(len(idxs)) + ' ' + str(len(self.dims)))

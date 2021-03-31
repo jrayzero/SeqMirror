@@ -6,8 +6,16 @@ def quant_dc4x4_normal(blk, qp) -> bool:
   q_bits = Q_BITS + qp_per + 1
   for _coeff in blk:
     coeff = _coeff()
+    cola_debug(coeff)
     if coeff != 0:
-      scaled = coeff * scale_comp_DC[_coeff.origin_within(blk)[1:]]()
+      foo0 = _coeff.origin_within(blk)[1:]
+      cola_debug(foo0)
+      foo1 = scale_comp_DC[foo0]
+      cola_debug(foo1)
+      foo2 = foo1()  
+      cola_debug(foo2)    
+      scaled = abs(coeff) * scale_comp_DC[_coeff.origin_within(blk)[1:]]()
+      cola_debug(scaled)
       level = (scaled + (offset_comp << 1)) >> q_bits
       # for simple case, this seems to always be true
       if level != 0:

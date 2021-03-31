@@ -5,58 +5,77 @@ from params import *
 from quant import *
 from transform import *
 from partition import *
+from cost_functions import *
 from cola.block import *
 from cola.parallel_support import *
 
 # I think the JM implementation is buggy here. It doesn't inv. quantize the AC coeffs?
 def xform_quant_luma_16x16(mb, intra_coded_mb):
   residual = mb - intra_coded_mb
-  # holds the final inverse
-  inverse = Block(residual)
-  # do first pass transform
-  xform_pass1 = Block(residual)
-  smb = split_16x16_to_4x4(residual)[0]
-  xsmb = split_16x16_to_4x4(xform_pass1)[0]
-  for s4x4,xs4x4 in zip(smb,xsmb):
-    forward4x4(s4x4,xs4x4)
+  # result of transform and quantize (pre-entropy coding)
+  coded = Block(residual)
+  mb_reconstruction = Block(residual)
+  mb_reconstruction[:,:,:] = 0
+  residual_split = split_16x16_to_4x4(residual)[0]
+  coded_split = split_16x16_to_4x4(coded)[0]
+  for resid_4x4,coded_4x4 in zip(residual_split,coded_split):
+    forward4x4(resid_4x4,coded_4x4)
+  ### DC ###
   # gather the DCs
-  DCs = xform_pass1[0,::4,::4]  
+  DCs = coded[0,::4,::4]  
   # do second pass on the DCs
-  xform_DCs = Block(DCs)
-  hadamard4x4(DCs,xform_DCs)
+  coded_DCs = Block(DCs)
+  hadamard4x4(DCs,coded_DCs)
   # now quantize the DCs
-  nonzero = quant_dc4x4_normal(xform_DCs, QP)
+  nonzero = quant_dc4x4_normal(coded_DCs, QP)
+  cola_debug(coded_DCs)
+  assert False
   if nonzero:
     # ixform DCs
-    ihadamard4x4(xform_DCs,inverse[0,::4,::4])
+    ihadamard4x4(coded_DCs, mb_reconstruction[0,::4,::4])
+    print(mb_reconstruction)
+    assert False
     # iquant DCs
-    for i in inverse[0,::4,::4]:
+    for i in mb_reconstruction[0,::4,::4]:
+      q = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
       i[ALL] = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
+    print(mb_reconstruction[0,::4,::4])
   else:
-    inverse[0,::4,::4] = 0
-  acs = split_16x16_to_4x4(xform_pass1)[0]
-  ac_inv = split_16x16_to_4x4(inverse)[0]
-  for ac_blk,ac_inv in zip(acs,ac_inv):
+    mb_reconstruction[0,::4,::4] = 0
+
+  ### AC AND IXFORM ###
+  recons_split = split_16x16_to_4x4(mb_reconstruction)[0]
+  for coded_4x4,recons_4x4 in zip(coded_split,recons_split):
     # quant 4x4 ac block
-    quant_ac4x4_normal(ac_blk, QP)
-    # inverse quantize it
-    for a,i in zip(ac_blk,ac_inv):
-      i[ALL] = rshift_rnd_sf((a() * iscale) << qp_per_matrix[QP], 6)
-  # at this point, inverse contains the appropriate dequantized AC and DCs
+    quant_ac4x4_normal(coded_4x4, QP)
+    # inverse quantize
+    citer = iter(recons_4x4)
+    next(citer) # skip this DC
+    for c in citer:
+      c[ALL] = rshift_rnd_sf((c() * iscale) << qp_per_matrix[QP], 6)
+    # inverse transform
+    cola_debug(recons_4x4)
+    assert False
+    xout = Block(recons_4x4)
+    inverse4x4(recons_4x4, xout)
+    recons_4x4[:,:,:] = xout
+    cola_debug(recons_4x4)
+
+  # at this point, mb_reconstruction contains the appropriate dequantized AC and DCs
   # now we need to...
-  # separate residual into 4x4 blocks
-  resid_4x4 = split_16x16_to_4x4(residual)[0]
-  # create the reconstruction
-  recons = Block(mb)
-  # separate that
-  recons_4x4 = split_16x16_to_4x4(recons)[0]
-  for inv,res,rec in zip(ac_inv,resid_4x4,recons_4x4):
-    # run the final inverse on it
-    ixform = Block(inv)
-    inverse4x4(inv,ixform)
-    # add it back to the residual and make the recons
-    rec[0,:,:] = res + ixform
-  return recons  
+#  # separate residual into 4x4 blocks
+#  resid_4x4 = split_16x16_to_4x4(residual)[0]
+#  # create the reconstruction
+#  recons = Block(mb)
+#  # separate that
+#  recons_4x4 = split_16x16_to_4x4(recons)[0]
+#  for inv,res,rec in zip(ac_inv,resid_4x4,recons_4x4):
+#    # run the final mb_reconstruction on it
+#    ixform = Block(inv)
+#    mb_reconstruction4x4(inv,ixform)
+#    # add it back to the residual and make the recons
+#    rec[0,:,:] = res + ixform
+  return mb_reconstruction,coded
 
 y_frames,u_frames,v_frames = ingest_yuv_420_interleaved_all(False)
 
@@ -66,114 +85,37 @@ v_cgrid = v_frames.base.cgrid
 
 # no slices
 # Y
-for idx,f in enumerate(range(nframes)):
+for idx,f in enumerate(range(1)):#range(nframes)):
   y_frame = y_frames[f,:,:]
   for r in range(0,y_frame.dims(1),16):
     for c in range(0,y_frame.dims(2),16):
       mb = y_frame[0,r:r+16,c:c+16]
-            
+      
       ### 16x16 Intra-Prediction 
-
-      # try prediction
+      cola_debug(mb)
       intra_16x16_pred_m0 = intra_16x16_luma_m0(mb)
       intra_16x16_pred_m1 = intra_16x16_luma_m1(mb)
       intra_16x16_pred_m2 = intra_16x16_luma_m2(mb)
       intra_16x16_pred_m3 = intra_16x16_luma_m3(mb)
+
+      costs_16x16 = [INT_MAX] * 4
       
-      # compute residuals and run rest of pipeline
-      residual_16x16_pred_m0 = Block[int]()
-      residual_16x16_pred_m1 = Block[int]()
-      residual_16x16_pred_m2 = Block[int]()
-      residual_16x16_pred_m3 = Block[int]()
       if intra_16x16_pred_m0:
-        xform_quant_luma_16x16(mb, ~intra_16x16_pred_m0)
+        recons,quant = xform_quant_luma_16x16(mb, ~intra_16x16_pred_m0)
+        cost = sad(mb,recons)
+        costs_16x16[0] = cost
       if intra_16x16_pred_m1:
-        xform_quant_luma_16x16(mb, ~intra_16x16_pred_m1)
+        recons,quant = xform_quant_luma_16x16(mb, ~intra_16x16_pred_m1)
+        cost = sad(mb,recons)
+        costs_16x16[1] = cost
       if intra_16x16_pred_m2:
-        xform_quant_luma_16x16(mb, ~intra_16x16_pred_m2)
+        recons,quant = xform_quant_luma_16x16(mb, ~intra_16x16_pred_m2)
+        cost = sad(mb,recons)
+        costs_16x16[2] = cost
       if intra_16x16_pred_m3:
-        xform_quant_luma_16x16(mb, ~intra_16x16_pred_m3)
-
-      # store costs
-#      costs_16x16 = [INT_MAX] * 4
-
+        recons,quant = xform_quant_luma_16x16(mb, ~intra_16x16_pred_m3)
+        cost = sad(mb,recons)
+        costs_16x16[3] = cost
       
-
-      # 8x8 and 4x4 intra-prediction      
-#      submbs_8x8 = split_4x4(mb, 16)[0]
-#      costs_submbs_8x8 = Array[int](len(submbs_8x8))
-#      preds_submbs_8x8 = Array[Block[int]](len(submbs_8x8))
-#      for idx,leaf in par(enumerate(submbs_8x8)):
-#        # do the 8x8 modes
-#        intra_8x8_pred_m0 = intra_8x8_luma_vert(leaf, ry_frame)
-#        intra_8x8_pred_m1 = intra_8x8_luma_horiz(leaf, ry_frame)
-#        intra_8x8_pred_m2 = intra_8x8_luma_DC(leaf, ry_frame)
-#        intra_8x8_pred_m3 = intra_8x8_luma_ddl(leaf, ry_frame)
-#        intra_8x8_pred_m4 = intra_8x8_luma_ddr(leaf, ry_frame)
-#        intra_8x8_pred_m5 = intra_8x8_luma_vertr(leaf, ry_frame)
-#        intra_8x8_pred_m6 = intra_8x8_luma_horizd(leaf, ry_frame)
-#        intra_8x8_pred_m7 = intra_8x8_luma_vertl(leaf, ry_frame)
-#        intra_8x8_pred_m8 = intra_8x8_luma_horizu(leaf, ry_frame)
-#        # xform, quantize, then undo to eventually get cost
-#        costs_submbs_8x8[idx] = idx
-#        preds_submbs_8x8[idx] = intra_8x8_pred_m2
-
-#
-#      task_sync(0,1,2,3)
-#      if not residual_16x16_pred_m0.base.invalid:
-#        cola_debug(residual_16x16_pred_m0)
-#      if not residual_16x16_pred_m1.base.invalid:
-#        cola_debug(residual_16x16_pred_m1)
-#      if not residual_16x16_pred_m2.base.invalid:
-#        cola_debug(residual_16x16_pred_m2)
-#      if not residual_16x16_pred_m3.base.invalid:
-#        cola_debug(residual_16x16_pred_m3)
+      cola_debug(costs_16x16)
       
-      assert False
-
-
-      # residuals, transform, quantize
-      # run 4x4 on each within the macroblock
-#      if intra_16x16_m0:
-#        quantized,residual = xform_code_16x16(mb, ~intra_16x16_m0)
-        # inverse quant, inverse xform, then add to residual
-        # FAKE IT
-#        reconstructed_residual = residual + (residual + 50) 
-        # compute diff between the reconstructed residual and 
-        # the original mb
-#        diff = mb - reconstruced_residual
-        
-
-#      if intra_16x16_m1:
-#        xform_code_16x16(mb, ~intra_16x16_m1)
-
-#      if intra_16x16_m2:
-#        xform_code_16x16(mb, ~intra_16x16_m2)
-
-#      if intra_16x16_m3:
-#        xform_code_16x16(mb, ~intra_16x16_m3)
-        
-        
-
-      # pick the best intra prediction
-
-      # do a ptree thing with 
-
-      # TODO inter-prediction
-#      ptree = make_interptree()
-#      min_cost = MAX_INT
-#      best_inter_pred = Block(mb)
-#      for aptree in ptree(mb):
-#        cost = 0
-#        pred = Block(mb)
-        # process each submacroblock and get the cost
-#        for n in aptree:
-          # if 8x8, then you'd do another split on each quadrant
-          
-#          cost,mode += process(n,pred)
-#        if cost < min_cost:
-#          best_inter_pred[:,:,:] = pred
-#          min_cost = cost 
-
-
-

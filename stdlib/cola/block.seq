@@ -142,6 +142,15 @@ class Multidim[T]:
     if cgrid.ndims() != self.ndims():
       raise ColaError()
 
+  def __init__(self, dims: list[int]):
+    self.__init__()
+    self.dims = [d for d in dims]
+    self.buffer = Array[T](self.nunits())
+    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self
+    self.cgrid = CoordGrid(self.dims)
+    self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+
   # 2D and above
   def __init__(self, cgrid: CoordGrid, dim0: int, dim1: int, *dims):
     self.__init__()
@@ -193,6 +202,15 @@ class Multidim[T]:
     if cgrid.ndims() != self.ndims():
       raise ColaError()
 
+  def __init__(self, dims, data: list[T]):
+    self.__init__()
+    self.dims = [d for d in dims]
+    self.buffer = data.arr
+    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = self
+    self.cgrid = CoordGrid(self.dims)
+    self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+
   def linearize(dims: list[int], coord: list[int]) -> int:
     if len(dims) != len(coord):
       raise ColaError()
@@ -223,6 +241,11 @@ class Multidim[T]:
   def origin(self) -> list[int]:    
     return [~p.start for p in self.buffer_mapping]
 
+  def origin_within(self, tree_relative) -> list[int]:    
+    if self.cgrid != tree_relative.base.cgrid:
+      raise ColaError("different ancestors")
+    r_origin = [~s.start-~s2.start for s,s2 in zip(self.coord_mapping,tree_relative.base.coord_mapping)]
+    return r_origin
     
   def _convert(self, idx: int, i: int):
     return 1,Slice(idx,idx+1,1)
@@ -280,7 +303,7 @@ class Multidim[T]:
   
   def __getitem__(self, idxs) -> Multidim[T]:    
     if len(idxs) != len(self.dims):
-      raise ColaError()
+      raise ColaError(str(len(idxs)) + ' ' + str(len(self.dims)))
     dims = [d for d in self.dims]
     mapping = [sl for sl in self.buffer_mapping]
     cmapping = [sl for sl in self.coord_mapping]
@@ -323,7 +346,7 @@ class Multidim[T]:
     return self.buffer[Multidim.linearize(self.buffer_parent.dims, coord)]      
 
   def __call__(self, idxs) -> T:
-    return self[idxs]()
+    return self.__getitem__(idxs)()
 
   def __call__(self, idx0, *idx) -> T:
     tup = (idx0,) + tuple(i for i in idx)
@@ -396,7 +419,8 @@ class Multidim[T]:
       idx += 1
 
   def _write(self, item: Multidim[T]):
-    assert self.nunits() == item.nunits()
+    if self.nunits() != item.nunits():
+      raise ColaError(str(self.nunits()) + ' ' + str(item.nunits()))
     item_buffer = item.buffer
     for l1,l2 in zip(self._iterate(), item._iterate()):
       self.buffer[l1] = item_buffer[l2]
@@ -672,20 +696,20 @@ class Block[T]:
   def __init__(self, other, cgrid: CoordGrid):
     self.base = Multidim[T](other, cgrid)
 
+  def __init__(self, other):
+    self.base = Multidim[T](other)
+
   def __init__(self, dims, data: list[T], cgrid: CoordGrid):
     self.base = Multidim[T](dims, data, cgrid)
+
+  def __init__(self, dims, data: list[T]):
+    self.base = Multidim[T](dims, data)
 
   def __init__(self, cgrid: CoordGrid, dim0: int, dim1: int, *dims):
     self.base = Multidim[T](cgrid, dim0, dim1, *dims)    
 
   def __init__(self, dim0: int, dim1: int, *dims):
     self.base = Multidim[T](dim0, dim1, *dims)    
-
-#  def elide_front(self, amt: int = 1):
-#    return View[T](self.base.elide_front(amt))
-
-#  def elide_back(self, amt: int = 1):
-#    return View[T](self.base.elide_back(amt))
 
   def dims(self) -> list[int]:
     return self.base.dims
@@ -851,6 +875,9 @@ class Block[T]:
 
   def origin(self):
     return self.base.origin()
+
+  def origin_within(self, ancestor):
+    return self.base.origin_within(ancestor)
 
 @extend
 class View[T]:
@@ -1035,6 +1062,9 @@ class View[T]:
 
   def origin(self):
     return self.base.origin()
+
+  def origin_within(self, ancestor):
+    return self.base.origin_within(ancestor)
 
 @extend
 class File:

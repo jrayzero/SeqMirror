@@ -106,4 +106,4 @@ from C import omp_get_max_threads() -> i32
 from C import omp_get_num_procs() -> i32
 
 # constants
-from C import get_int_max() -> i32
+from C import get_int_max() -> int

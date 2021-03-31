@@ -87,7 +87,7 @@ def hadamard_SAD_4x4(diff: Block[int]) -> int:
 
   cost = 0
   for _m in m:
-    cost += abs(_m)
+    cost += abs(_m())
   return (cost + 1) >> 1
 
 # TODO figure out the loop version of the Hadamard and implement a generic one
@@ -97,3 +97,4 @@ def satd_4x4[T](real: View[T], pred: View[T]) -> int:
   for r,p,d in zip(real, pred, diffs):
     d[ALL] = r() - p()
   return hadamard_SAD_4x4(diffs)
+

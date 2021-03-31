@@ -51,8 +51,8 @@ void seq_exc_init();
 
 int debug;
 
-SEQ_FUNC int get_int_max() {
-  return INT_MAX;
+SEQ_FUNC seq_int_t get_int_max() {
+  return LONG_MAX;
 }
 
 SEQ_FUNC int seek_end() {

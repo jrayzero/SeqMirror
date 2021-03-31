@@ -1,19 +1,62 @@
 from read_yuv import *
 from intra import *
 from config import *
+from params import *
 from quant import *
 from transform import *
 from partition import *
 from cola.block import *
 from cola.parallel_support import *
 
-def xform_code_16x16(mb, intra_coded_mb, rmb):
+# I think the JM implementation is buggy here. It doesn't inv. quantize the AC coeffs?
+def xform_quant_luma_16x16(mb, intra_coded_mb):
   residual = mb - intra_coded_mb
-  xform = xform_luma_16x16_mb(residual)
-  DCs = xform[0,::4,::4]
-  quant_dc4x4_normal(DCs, QP)
-  # TODO pretend I quantized everything 
-  return xform, residual
+  # holds the final inverse
+  inverse = Block(residual)
+  # do first pass transform
+  xform_pass1 = Block(residual)
+  smb = split_16x16_to_4x4(residual)[0]
+  xsmb = split_16x16_to_4x4(xform_pass1)[0]
+  for s4x4,xs4x4 in zip(smb,xsmb):
+    forward4x4(s4x4,xs4x4)
+  # gather the DCs
+  DCs = xform_pass1[0,::4,::4]  
+  # do second pass on the DCs
+  xform_DCs = Block(DCs)
+  hadamard4x4(DCs,xform_DCs)
+  # now quantize the DCs
+  nonzero = quant_dc4x4_normal(xform_DCs, QP)
+  if nonzero:
+    # ixform DCs
+    ihadamard4x4(xform_DCs,inverse[0,::4,::4])
+    # iquant DCs
+    for i in inverse[0,::4,::4]:
+      i[ALL] = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
+  else:
+    inverse[0,::4,::4] = 0
+  acs = split_16x16_to_4x4(xform_pass1)[0]
+  ac_inv = split_16x16_to_4x4(inverse)[0]
+  for ac_blk,ac_inv in zip(acs,ac_inv):
+    # quant 4x4 ac block
+    quant_ac4x4_normal(ac_blk, QP)
+    # inverse quantize it
+    for a,i in zip(ac_blk,ac_inv):
+      i[ALL] = rshift_rnd_sf((a() * iscale) << qp_per_matrix[QP], 6)
+  # at this point, inverse contains the appropriate dequantized AC and DCs
+  # now we need to...
+  # separate residual into 4x4 blocks
+  resid_4x4 = split_16x16_to_4x4(residual)[0]
+  # create the reconstruction
+  recons = Block(mb)
+  # separate that
+  recons_4x4 = split_16x16_to_4x4(recons)[0]
+  for inv,res,rec in zip(ac_inv,resid_4x4,recons_4x4):
+    # run the final inverse on it
+    ixform = Block(inv)
+    inverse4x4(inv,ixform)
+    # add it back to the residual and make the recons
+    rec[0,:,:] = res + ixform
+  return recons  
 
 y_frames,u_frames,v_frames = ingest_yuv_420_interleaved_all(False)
 
@@ -21,22 +64,10 @@ y_cgrid = y_frames.base.cgrid
 u_cgrid = u_frames.base.cgrid
 v_cgrid = v_frames.base.cgrid
 
-
-# reconstructed frames
-# These contain the final selections for reconstruction (i.e. the reconstruction
-# of the "best" choice)
-# NOTE TO SELF: just overwrite the input frame. I don't need it anymore
-#ry_frames = Block[int](y_frames)
-#ru_frames = Block[int](u_frames)
-#rv_frames = Block[int](v_frames)
-
-# decoded picture buffer
-dpb = list[View[u8]]()
-
 # no slices
+# Y
 for idx,f in enumerate(range(nframes)):
   y_frame = y_frames[f,:,:]
-#  ry_frame = ry_frames[f,:,:]
   for r in range(0,y_frame.dims(1),16):
     for c in range(0,y_frame.dims(2),16):
       mb = y_frame[0,r:r+16,c:c+16]
@@ -44,27 +75,27 @@ for idx,f in enumerate(range(nframes)):
       ### 16x16 Intra-Prediction 
 
       # try prediction
-      intra_16x16_pred_m0 = intra_16x16_luma_m0(mb, ry_frame)
-      intra_16x16_pred_m1 = intra_16x16_luma_m1(mb, ry_frame)
-      intra_16x16_pred_m2 = intra_16x16_luma_m2(mb, ry_frame)
-      intra_16x16_pred_m3 = intra_16x16_luma_m3(mb, ry_frame)
+      intra_16x16_pred_m0 = intra_16x16_luma_m0(mb)
+      intra_16x16_pred_m1 = intra_16x16_luma_m1(mb)
+      intra_16x16_pred_m2 = intra_16x16_luma_m2(mb)
+      intra_16x16_pred_m3 = intra_16x16_luma_m3(mb)
       
-      # compute residuals
+      # compute residuals and run rest of pipeline
       residual_16x16_pred_m0 = Block[int]()
       residual_16x16_pred_m1 = Block[int]()
       residual_16x16_pred_m2 = Block[int]()
       residual_16x16_pred_m3 = Block[int]()
       if intra_16x16_pred_m0:
-        residual_16x16_pred_m0 = mb - ~intra_16x16_pred_m0
+        xform_quant_luma_16x16(mb, ~intra_16x16_pred_m0)
       if intra_16x16_pred_m1:
-        residual_16x16_pred_m1 = mb - ~intra_16x16_pred_m1
+        xform_quant_luma_16x16(mb, ~intra_16x16_pred_m1)
       if intra_16x16_pred_m2:
-        residual_16x16_pred_m2 = mb - ~intra_16x16_pred_m2
+        xform_quant_luma_16x16(mb, ~intra_16x16_pred_m2)
       if intra_16x16_pred_m3:
-        residual_16x16_pred_m3 = mb - ~intra_16x16_pred_m3
+        xform_quant_luma_16x16(mb, ~intra_16x16_pred_m3)
 
       # store costs
-      costs_16x16 = [INT_MAX] * 4
+#      costs_16x16 = [INT_MAX] * 4
 
       
 

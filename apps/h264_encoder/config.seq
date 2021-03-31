@@ -1,6 +1,6 @@
 input_file             = "/Users/jray/ColaProjects/ref_code/JM/bin/foreman_part_qcif.yuv"       # Input sequence (raw, so need to explicitly specify sizes)
 subsample = '420'
-nframes     = 3      # Number of frames to be coded
+nframes     = 1      # Number of frames to be coded
 frame_rate             = 30.0   # Frame Rate per second (0.1-100.0)
 source_width           = 176    # Source frame width
 source_height          = 144    # Source frame height
@@ -10,8 +10,6 @@ profile_idx           = 66 # baseline
 constraint_set1_flag  = 1 # constrained baseline
                             # (e.g. ProfileIDC=110, IntraProfile=1  =>  High 10 Intra Profile)
 level_idc = 1
-bit_depth_y = 8
-bit_depth_c = 8
 QP = 28
 # 1 slice per picture
 # 1 frame = 1 picture

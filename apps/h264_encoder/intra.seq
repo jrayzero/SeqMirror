@@ -1,77 +1,71 @@
 from cola.block import *
 from common import *
-from config import *
+from params import *
 
 # TODO for availability, you also hae to check if the recons blk was down with inter mode
 # and see if that isn't allowed
 
-def intra_16x16_luma_m0(smb, rblk) -> Optional[Block[int]]:
-  ref = rblk[smb]
-  f,h,w = ref.origin()
-  # get a view on the row above you in rblk
+# here, the reconstructed pixels are completely in other mbs
+def intra_16x16_luma_m0(mb) -> Optional[Block[int]]:
+  f,h,w = mb.origin()
   if h > 0:
-    row = ref[0,-1,:]
-    pred = Block(smb)
+    row = mb[0,-1,:]
+    pred = Block(mb)
     for i,r in enumerate(row):
       pred[0,:,i] = r()
     return pred
   return None
   
-def intra_16x16_luma_m1(smb, rblk) -> Optional[Block[int]]:
-  ref = rblk[smb]
-  f,h,w = ref.origin()
+def intra_16x16_luma_m1(mb) -> Optional[Block[int]]:
+  f,h,w = mb.origin()
   if w > 0:
-    col = ref[0,:,-1]
-    pred = Block(smb)
+    col = mb[0,:,-1]
+    pred = Block(mb)
     for i,c in enumerate(col):
       pred[0,i,:] = c()
     return pred
   return None
 
-def intra_16x16_luma_m2(smb, rblk) -> Optional[Block[int]]:
-  ref = rblk[smb]
-  f,h,w = ref.origin()
+def intra_16x16_luma_m2(mb) -> Optional[Block[int]]:
+  f,h,w = mb.origin()
   if h > 0 and w > 0:
-    row = ref[0,-1,:]
-    col = ref[0,:,-1]
-    cola_debug(row)
-    cola_debug(col)
+    row = mb[0,-1,:]
+    col = mb[0,:,-1]
     # reductions
     s = 0
     for r,c in zip(row,col):
       s += r() + c()
-    pred = Block[int](smb)
+    pred = Block[int](mb)
     pred[:,:,:] = (s + 16) >> 5
     return pred
   elif w > 0:
-    col = ref[0,:,-1]
+    col = mb[0,:,-1]
     # reductions
     sum_y = 0
     for c in col:
       sum_y += c()
-    pred = Block[int](smb)
+    pred = Block[int](mb)
     pred[:,:,:] = (sum_y + 8) >> 4
     return pred
   elif h > 0:
-    row = ref[0,-1,:]
+    row = mb[0,-1,:]
     # reductions
     sum_x = 0
     for r in row:
       sum_x += r()
-    pred = Block[int](smb)
+    pred = Block[int](mb)
     pred[:,:,:] = (sum_x + 8) >> 4
     return pred    
   else:
-    pred = Block[int](smb)
+    pred = Block[int](mb)
     pred[:,:,:] = 1 << (bit_depth_y - 1)
     return pred
 
-def intra_16x16_luma_m3(smb, rblk) -> Optional[Block[int]]:
-  ref = rblk[smb]
-  f,h,w = ref.origin()
+def intra_16x16_luma_m3(mb) -> Optional[Block[int]]:
+  f,h,w = mb.origin()
   if h > 0 and w > 0:
-    row = ref[0,-1,:]
-    col = ref[0,:,-1]
+    row = mb[0,-1,:]
+    col = mb[0,:,-1]
     # pull out the pieces to compute H    
     H = 0
     pH1 = row[0,:,8:]
@@ -84,10 +78,10 @@ def intra_16x16_luma_m3(smb, rblk) -> Optional[Block[int]]:
     pV2 = col[0,:7,:]
     for r,v1,v2 in zip(range(8),pV1, pV2):
       V += (r+1)*(v1()-v2())          
-    a = 16 * (rblk(0,15,0)+rblk(0,0,16))
+    a = 16 * (col(0,15,0)+row(0,0,16))
     b = (5 * H + 32) >> 6
     c = (5 * V + 32) >> 6
-    pred = Block[int](smb)
+    pred = Block[int](mb)
     for y in range(16):
       for x in range(16):
         clip_val = (a + b * (x - 7) + c * (y - 7) + 16) >> 5
@@ -95,6 +89,176 @@ def intra_16x16_luma_m3(smb, rblk) -> Optional[Block[int]]:
     return pred    
   else:
     return None
+
+# FOR 4:2:0
+# DC is tricky because we break the chroma MB into 4x4 blocks, in this csae
+# giving a 2x2 grid since the input is 8x8. All the blocks except the upper
+# left can use reconstructions within the block itself, meaning we 
+# need to reconstruct each 4x4 block after we predict it
+def intra_chroma_DC_part0(row,col,pred4x4):
+  pass
+def intra_chroma_DC_part1(col,pred4x4):
+  pass
+def intra_chroma_DC_part2(col,pred4x4):
+  pass
+
+#def intra_chroma_DC(mb):
+#  # origin within the frame
+#  f,w,h = mb.origin()
+#  # our full CHOSEN prediction
+#  pred = Block(mb)
+#  # local reconstruction
+#  recons = Block(mb)
+#  smb,spred,srecons = split_4x4(mb,8),split_4x4(pred,8),split_4x4(recons,8)
+#  for pix4x4,pred_pix4x4,rec_pix4x4 in zip(smb,spred,srecons):
+#    # figure out where we are in the macroblock
+#    _,yO,xO = pix4x4.rel_origin(mb) 
+#    if xO == 0 and yO == 0:
+#      # we are the upper left 4x4 submacroblock, so we only
+#      # use external reconstructions
+#      if w == 0 and h == 0:
+#        # we are at the edge of the frame, so there aren't ref pixels
+#        p = 1 << (bit_depth_c - 1)          
+#        
+#      
+#    
+#  # break into 4x4 blocks. The chroma mbs are going to be 8x8 for 4:2:0
+#  smb = split_4x4(umb,8)
+#  psmb = split_4x4(upred,8)
+#  for u,v,up,uv in zip(usmb,vsmb,upsmb,vpsmb): # u,v == 4x4
+#    _,r,c = u.rel_origin(umb)
+#    if (r == 0 and c == 0) or (r > 0 and c > 0):
+#      if w > 0 and h > 0:
+#        urow = u[0,-1,:]
+#        vrow = v[0,-1,:]
+#        ucol = u[0,:,-1]
+#        vcol = v[0,:,-1]
+#        us = 0
+#        vs = 0
+#        for ur,vr,uc,vc in zip(urow,vrow,ucol,vcol):
+#          us += ur()+uc()
+#          vs += vr()+vc()
+#        us >>= 3
+#        vs >>= 3
+#        up[:,:,:] = us
+#        vp[:,:,:] = vs
+#      elif w > 0:
+#        ucol = u[0,:,-1]
+#        vcol = v[0,:,-1]
+#        us = 0
+#        vs = 0
+#        for uc,vc in zip(ucol,vcol):
+#          us += uc()
+#          vs += vc()
+#        us >>= 2
+#        vs >>= 2
+#        up[:,:,:] = us
+#        vp[:,:,:] = vs
+#      elif h > 0:
+#        urow = u[0,-1,:]
+#        vrow = v[0,-1,:]
+#        us = 0
+#        vs = 0
+#        for ur,vr in zip(urow,vrow):
+#          us += ur()
+#          vs += vr()
+#        us >>= 2
+#        vs >>= 2
+#        up[:,:,:] = us
+#        vp[:,:,:] = vp
+#      else:
+#        up[:,:,:] = 1 << (bit_depth_c - 1)        
+#        vp[:,:,:] = 1 << (bit_depth_c - 1)           
+#    elif c > 0 and r == 0:
+#      if h > 0:
+#        urow = u[0,-1,:]
+#        vrow = v[0,-1,:]
+#        us = 0
+#        vs = 0
+#        for ur,vr in zip(urow,vrow):
+#          us += ur()
+#          vs += vr()
+#        us >>= 2
+#        vs >>= 2
+#        up[:,:,:] = us
+#        vp[:,:,:] = vp
+#      elif w > 0:
+#        ucol = u[0,:,-1]
+#        vcol = v[0,:,-1]
+#        us = 0
+#        vs = 0
+#        for uc,vc in zip(ucol,vcol):
+#          us += uc()
+#          vs += vc()
+#        us >>= 2
+#        vs >>= 2
+#        up[:,:,:] = us
+#        vp[:,:,:] = vs
+#      else:
+#        up[:,:,:] = 1 << (bit_depth_c - 1)        
+#        vp[:,:,:] = 1 << (bit_depth_c - 1)
+#    else: # c == 0 and r > 0
+#      if w > 0:
+#        ucol = u[0,:,-1]
+#        vcol = v[0,:,-1]
+#        us = 0
+#        vs = 0
+#        for uc,vc in zip(ucol,vcol):
+#          us += uc()
+#          vs += vc()
+#        us >>= 2
+#        vs >>= 2
+#        up[:,:,:] = us
+#        vp[:,:,:] = vs      
+#      elif h > 0:
+#        urow = u[0,-1,:]
+#        vrow = v[0,-1,:]
+#        us = 0
+#        vs = 0
+#        for ur,vr in zip(urow,vrow):
+#          us += ur()
+#          vs += vr()
+#        us >>= 2
+#        vs >>= 2
+#        up[:,:,:] = us
+#        vp[:,:,:] = vp
+#      else:
+#        up[:,:,:] = 1 << (bit_depth_c - 1)        
+#        vp[:,:,:] = 1 << (bit_depth_c - 1)      
+#  return upred,vpred
+
+def intra_chroma_horiz(umb,vmb):
+  assert False
+  f,h,w = umb.origin()
+  if w > 0:
+    upred = Block(umb)
+    vpred = Block(vmb)
+    ucol = umb[0,:,-1]
+    vcol = vmb[0,:,-1]
+    for i,uc,vc in enumerate(zip(ucol,vcol)):
+      upred[0,i,:] = uc()
+      vpred[0,i,:] = vc()
+    return upred,vpred
+  else:
+    return None,None
+
+def intra_chroma_vert(umb,vmb):
+  assert False
+  f,h,w = umb.origin()
+  if w > 0:
+    upred = Block(umb)
+    vpred = Block(vmb)
+    urow = umb[0,-1,:]
+    vrow = vmb[0,-1,:]
+    for i,ur,vr in enumerate(zip(urow,vrow)):
+      upred[0,:,i] = ur()
+      vpred[0,:,i] = vr()
+    return upred,vpred
+  else:
+    return None,None
+    
+def intra_chroma_plane(umb,vmb):
+  assert False
 
 # TODO filtering for 8x8
 def intra_8x8_luma_vert(smb, frblk) -> Optional[Block[int]]:

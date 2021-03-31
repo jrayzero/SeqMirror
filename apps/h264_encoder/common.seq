@@ -1,4 +1,4 @@
-from config import *
+from params import *
 
 def clip3(x,y,z):
   if z < x:

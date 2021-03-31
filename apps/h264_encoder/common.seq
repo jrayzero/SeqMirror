@@ -10,4 +10,3 @@ def clip3(x,y,z):
 
 def clip1y(x):
   return clip3(0, (1<<bit_depth_y)-1,x)
-

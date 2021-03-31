@@ -11,7 +11,7 @@ def pad_right(view, width, padded_width):
     view[0, :, col] = view[0, :, width-1]
 
 # reads whole yuv file at once
-def ingest_yuv_420_interleaved_all():
+def ingest_yuv_420_interleaved_all(pad_chroma: bool):
   fd = open(input_file, 'rb')
   padded_source_height = source_height
   padded_source_width = source_width
@@ -21,10 +21,11 @@ def ingest_yuv_420_interleaved_all():
     padded_source_width += 16 - source_width & 15
   padded_source_height_d2 = source_height // 2
   padded_source_width_d2 = source_width // 2
-  if (source_height//2) & 15 != 0:
-    padded_source_height_d2 += 16 - (source_height//2) & 15
-  if (source_width//2) & 15 != 0:
-    padded_source_width_d2 += 16 - (source_width//2) & 15
+  if pad_chroma:
+    if (source_height//2) & 15 != 0:
+      padded_source_height_d2 += 16 - (source_height//2) & 15
+    if (source_width//2) & 15 != 0:
+      padded_source_width_d2 += 16 - (source_width//2) & 15
   y_cgrid = CoordGrid(nframes, padded_source_height, padded_source_width)
   u_cgrid = CoordGrid(nframes, padded_source_height_d2, padded_source_width_d2)
   v_cgrid = CoordGrid(nframes, padded_source_height_d2, padded_source_width_d2)

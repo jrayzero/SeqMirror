@@ -90,5 +90,17 @@ def perimeter(N: int):
   if N > 2:
     astep (-1,0) by N-2, (0,1)
     link perimeter(N-2)
+
+
+blk = Block[int](8,8)
+for coord in diagonal(8):
+  # returns each coordinate
+  pass
+
+for elem in diagonal(8)(blk):
+  # returns each element in blk
+  pass
+
+
   
   

@@ -75,3 +75,8 @@ gtest_parallel.py
 scratch.seq
 apps/libjpeg-turbo-impl/libjpeg-turbo
 sandbox
+apps/h264
+apps/hevc
+apps/speed
+apps/libjpeg*
+apps/jpeg2

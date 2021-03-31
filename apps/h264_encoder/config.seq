@@ -12,5 +12,6 @@ constraint_set1_flag  = 1 # constrained baseline
 level_idc = 1
 bit_depth_y = 8
 bit_depth_c = 8
+QP = 28
 # 1 slice per picture
 # 1 frame = 1 picture

@@ -1,0 +1,10 @@
+from cola.ptree import *
+
+@ptree
+def split_4x4(root,M):
+  pparams root
+  pt_and:
+    pt_leaf root[0,:M//2,:M//2]
+    pt_leaf root[0,:M//2,M//2:]
+    pt_leaf root[0,M//2:,:M//2]
+    pt_leaf root[0,M//2:,M//2:]        

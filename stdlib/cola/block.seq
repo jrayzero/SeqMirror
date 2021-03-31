@@ -42,6 +42,13 @@ class CoordGrid:
   def ndims(self):
     return len(self.dims)
 
+# used for doing blk[ALL] = ... with a 1x1...x1 dim block.
+# it's like blk(), but I can't have empty square brackets
+class _ALL:
+  def __init__(self):
+    pass
+ALL = _ALL()
+
 # You always maintain a direct pointer to your closest Block parent
 # If you want to go further up, need to do some extra computation
 class Multidim[T]:
@@ -227,6 +234,12 @@ class Multidim[T]:
     end = idx.compute_range()
     return end,idx  
   
+  def __getitem__(self, idx: _ALL) -> Multidim[T]:
+    if self.nunits() != 1:
+      raise ColaError()
+    coord = [0] * len(self.dims)
+    return self.__getitem__(coord)
+
   def __getitem__(self, idx: int) -> Multidim[T]:
     if len(self.dims) != 1:
       raise ColaError("Must be 1D Multidim")

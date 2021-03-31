@@ -1,0 +1,5 @@
+I = 0
+P = 1
+GOP_structure = [I,P,P,P]
+INT_MAX = _C.get_int_max()
+lambda_accurary_bits = 5

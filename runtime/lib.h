@@ -29,6 +29,7 @@ template <typename T = void> struct seq_arr_t {
 
 extern int debug;
 
+SEQ_FUNC int get_int_max();
 SEQ_FUNC int seek_end();
 SEQ_FUNC int seek_set();
 SEQ_FUNC void seq_init(int debug);

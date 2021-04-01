@@ -54,6 +54,16 @@ class AndPTree[T]:
   def __iter__(self):
     return self._iterate_leaves()
 
+  def __getitem__(self, idx: int):
+    it = iter(self)
+    i = 0
+    while i < idx:
+      next(it)
+      i += 1
+    item = next(it)
+    it.destroy()
+    return item
+
   def _inner_str(self, indent) -> str:
     s = ''
     if self.leaf:
@@ -361,24 +371,3 @@ class PTree[T]:
       for i in new_order:
         new_tree.add_child(self.children[i])
       return new_tree      
-
-# a little helper for calling a custom generator on a node during ptree creation
-#class splitter[T]:
-
-#  node: Optional[View[T]]
-#  split_func: Function[Generator[View[T]], View[T]]
-
-#  def __init__(self, node: Block[T], split_func):
-#    self.node = View(node)
-#    self.split_func = split_func
-
-#  def __init__(self, node: View[T], split_func):
-#    self.node = node
-#    self.split_func = split_func
-    
-#  def _do_split(self):
-#    gen = self.split_func(self.node)
-#    yield from gen
-
-#  def __iter__(self):
-#    return self._do_split()

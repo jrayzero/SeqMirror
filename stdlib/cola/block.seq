@@ -44,6 +44,7 @@ class CoordGrid:
 
 # used for doing blk[ALL] = ... with a 1x1...x1 dim block.
 # it's like blk(), but I can't have empty square brackets
+# TODO change ALL to UNIT
 class _ALL:
   def __init__(self):
     pass
@@ -51,10 +52,11 @@ ALL = _ALL()
 
 # You always maintain a direct pointer to your closest Block parent
 # If you want to go further up, need to do some extra computation
+@dataclass(init=False)
 class Multidim[T]:
   dims: list[int]
   # Points to the buffer that you map to
-  buffer: Array[T]
+  buffer: list[T]
   # the mapping to your buffer 
   buffer_mapping: list[Slice]
   # your parent with the buffer
@@ -64,11 +66,12 @@ class Multidim[T]:
   # your mapping to the coordinate system
   coord_mapping: list[Slice]  
   unique_id: str
-  invalid: bool
 
+@dataclass(init=False)
 class View[T]:
   base: Multidim[T]
 
+@dataclass(init=False)
 class Block[T]:
   base: Multidim[T]
 
@@ -77,64 +80,90 @@ class Multidim[T]:
 
   ### INIT FUNCTIONS
 
-  def __init__(self):
-    self.unique_id = ''.join(random.choices(string.printable, k=5))
-    self.invalid = False
+#  def __init__(self):
 
-  def __init__(self, _: bool):
-    self.invalid = True
+#    self.invalid = True
+
+#  def __init__(self, _: bool):
+#    self.invalid = True
+
+  def __init__(self, other: Multidim[T]):
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+    if len(other.coord_mapping) == 0:
+      raise ColaError()
+    self.dims = [d for d in other.dims]
+    self.buffer = other.buffer
+    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = other
+    self.cgrid = other.cgrid
+    self.coord_mapping = [cm for cm in other.coord_mapping]
     
   def __init__(self, other: Block[T], make_buffer: bool):
-    self.__init__()
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+#    if other.base.invalid:
+#      raise ColaError()
+    if len(other.base.coord_mapping) == 0:
+      raise ColaError()
     self.dims = [d for d in other.dims()]
     if make_buffer: 
-      self.buffer = Array[T](self.nunits())      
+      self.buffer = [T(0)] * self.nunits() #Array[T](self.nunits())      
+      self.buffer_parent = self
     else:
       self.buffer = other.base.buffer
+      self.buffer_parent = other.base
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_parent = self
     self.cgrid = other.base.cgrid
     self.coord_mapping = [cm for cm in other.base.coord_mapping]
 
   def __init__(self, other: Multidim[T], make_buffer: bool):
-    self.__init__()
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+    if len(other.coord_mapping) == 0:
+      raise ColaError()
+#    self.__init__()
     self.dims = [d for d in other.dims]
     if make_buffer: 
-      self.buffer = Array[T](self.nunits())      
+      self.buffer = [T(0)] * self.nunits() #Array[T](self.nunits())      
+      self.buffer_parent = self
     else:
       self.buffer = other.buffer
+      self.buffer_parent = other
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_parent = self
     self.cgrid = other.cgrid
     self.coord_mapping = [cm for cm in other.coord_mapping]
 
   def __init__(self, other: View[T], make_buffer: bool):
-    self.__init__()
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+    if len(other.base.coord_mapping) == 0:
+      raise ColaError()
+#    self.__init__()
     self.dims = [d for d in other.dims()]
     if make_buffer: 
-      self.buffer = Array[T](self.nunits())
+      self.buffer = [T(0)] * self.nunits() #rray[T](self.nunits())
+      self.buffer_parent = self
     else:
       self.buffer = other.base.buffer
+      self.buffer_parent = other.base
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_parent = self
     self.cgrid = other.base.cgrid
     self.coord_mapping = [cm for cm in other.base.coord_mapping]
 
   def __init__(self, other: int, cgrid: CoordGrid):
-    self.__init__()
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+#    self.__init__()
     self.dims = [other]
-    self.buffer = Array[T](other)
+    self.buffer = [T(0)] * other#Array[T](other)
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_parent = self    
+    self.buffer_parent = self 
     self.cgrid = cgrid
     self.coord_mapping = [Slice(0,d,1) for d in self.dims]
     if cgrid.ndims() != 1:
       raise ColaError()
 
   def __init__(self, dims: list[int], cgrid: CoordGrid):
-    self.__init__()
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+#    self.__init__()
     self.dims = [d for d in dims]
-    self.buffer = Array[T](self.nunits())
+    self.buffer = [T(0)] * self.nunits()#Array[T](self.nunits())
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     self.buffer_parent = self
     self.cgrid = cgrid
@@ -143,9 +172,10 @@ class Multidim[T]:
       raise ColaError()
 
   def __init__(self, dims: list[int]):
-    self.__init__()
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+ #   self.__init__()
     self.dims = [d for d in dims]
-    self.buffer = Array[T](self.nunits())
+    self.buffer = [T(0)] * self.nunits()#Array[T](self.nunits())
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     self.buffer_parent = self
     self.cgrid = CoordGrid(self.dims)
@@ -153,11 +183,12 @@ class Multidim[T]:
 
   # 2D and above
   def __init__(self, cgrid: CoordGrid, dim0: int, dim1: int, *dims):
-    self.__init__()
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+#    self.__init__()
     self.dims = [dim0, dim1]
     if staticlen(dims) > 0:
       self.dims += [d for d in dims]
-    self.buffer = Array[T](self.nunits())
+    self.buffer = [T(0)] * self.nunits()#Array[T](self.nunits())
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     self.buffer_parent = self
     self.cgrid = cgrid
@@ -166,11 +197,12 @@ class Multidim[T]:
       raise ColaError()
 
   def __init__(self, dim0: int, dim1: int, *dims):
-    self.__init__()
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+#    self.__init__()
     self.dims = [dim0, dim1]
     if staticlen(dims) > 0:
       self.dims += [d for d in dims]
-    self.buffer = Array[T](self.nunits())
+    self.buffer = [T(0)] * self.nunits()#Array[T](self.nunits())
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     self.buffer_parent = self
     self.cgrid = CoordGrid(self.dims)
@@ -178,10 +210,21 @@ class Multidim[T]:
     if self.cgrid.ndims() != self.ndims():
       raise ColaError()
 
-
   # init dims and fill immediately (MAKES A SHALLOW COPY)
-  def __init__(self, dims, data: Array[T], cgrid: CoordGrid):
-    self.__init__()
+#  def __init__(self, dims, data: Array[T], cgrid: CoordGrid):
+#    self.__init__()
+#    self.dims = [d for d in dims]
+#    self.buffer = data
+#    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+#    self.buffer_parent = self
+#    self.cgrid = cgrid
+#    self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+#    if cgrid.ndims() != self.ndims():
+#      raise ColaError()
+
+  def __init__(self, dims, data: list[T], cgrid: CoordGrid):
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+#    self.__init__()
     self.dims = [d for d in dims]
     self.buffer = data
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
@@ -191,25 +234,25 @@ class Multidim[T]:
     if cgrid.ndims() != self.ndims():
       raise ColaError()
 
-  def __init__(self, dims, data: list[T], cgrid: CoordGrid):
-    self.__init__()
-    self.dims = [d for d in dims]
-    self.buffer = data.arr
-    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_parent = self
-    self.cgrid = cgrid
-    self.coord_mapping = [Slice(0,d,1) for d in self.dims]
-    if cgrid.ndims() != self.ndims():
-      raise ColaError()
-
   def __init__(self, dims, data: list[T]):
-    self.__init__()
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+#    self.__init__()
     self.dims = [d for d in dims]
-    self.buffer = data.arr
+    self.buffer = data
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     self.buffer_parent = self
     self.cgrid = CoordGrid(self.dims)
     self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+
+  # for some internal creation
+  def __init__(self, buffer: list[T], dims: list[int], buffer_mapping: list[Slice], coord_mapping: list[Slice], buffer_parent: Multidim[T], cgrid: CoordGrid):
+    self.unique_id = ''.join(random.choices(string.printable, k=5))
+    self.dims = [d for d in dims]
+    self.buffer = buffer
+    self.buffer_mapping = [s for s in buffer_mapping]
+    self.coord_mapping = [c for c in coord_mapping]
+    self.buffer_parent = buffer_parent
+    self.cgrid = cgrid
 
   def linearize(dims: list[int], coord: list[int]) -> int:
     if len(dims) != len(coord):
@@ -279,19 +322,21 @@ class Multidim[T]:
       raise ColaError("Must be 1D Multidim")
     if idx >= self.dims[0]:
       raise ColaError("Invalid index")
-    md = Multidim[T]()
-    md.dims = [1]
     orig = self.buffer_mapping[0]
-    md.buffer_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
+    md_buffer_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
+    orig = self.coord_mapping[0]
+    md_coord_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
+    md = Multidim[T](self.buffer, [1], md_buffer_mapping, md_coord_mapping, self.buffer_parent, self.cgrid)
+    #    md.dims = [1]
     # verify that the buffer mapping doesn't go negative (which can happen with neg idx)
     for b in md.buffer_mapping:
       if ~b.start < 0:
         raise ColaError("Bad idx")
-    md.buffer_parent = self.buffer_parent
-    md.buffer = self.buffer
-    md.cgrid = self.cgrid
-    orig = self.coord_mapping[0]
-    md.coord_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
+#    md.buffer_parent = self.buffer_parent
+    #    md.buffer = self.buffer
+#    md.cgrid = self.cgrid
+
+    assert len(md.coord_mapping) > 0
     return md
   
   def __getitem__(self, idx: Slice) -> Multidim[T]:
@@ -313,12 +358,14 @@ class Multidim[T]:
     return self[new_slices]    
   
   # TODO need to check for out-of-bounds index here
-  def __getitem__(self, idxs) -> Multidim[T]:    
+  def __getitem__(self, idxs) -> Multidim[T]:
     if len(idxs) != len(self.dims):
       raise ColaError(str(len(idxs)) + ' ' + str(len(self.dims)))
     dims = [d for d in self.dims]
     mapping = [sl for sl in self.buffer_mapping]
     cmapping = [sl for sl in self.coord_mapping]
+    assert len(cmapping) > 0
+    assert len(mapping) > 0
     i = 0
     for idx in idxs:
       d,sl = self._convert(idx,i)
@@ -336,13 +383,13 @@ class Multidim[T]:
       cmapping[i] = slice(start, stop, step)         
       i += 1      
 
-    md = Multidim[T]()
-    md.buffer = self.buffer
-    md.dims = dims
-    md.buffer_mapping = mapping
-    md.buffer_parent = self.buffer_parent
-    md.coord_mapping = cmapping
-    md.cgrid = self.cgrid
+    md = Multidim[T](self.buffer, dims, mapping, cmapping, self.buffer_parent, self.cgrid)
+#    md.buffer = self.buffer
+#    md.dims = dims
+#    md.buffer_mapping = mapping
+#    md.buffer_parent = self.buffer_parent
+#    md.coord_mapping = cmapping
+#    md.cgrid = self.cgrid
     for b in md.buffer_mapping:
       if ~b.start < 0:
         raise ColaError("Bad idx")
@@ -353,7 +400,7 @@ class Multidim[T]:
   # all the calls realized a SINGLE element
   def __call__(self) -> T:
     if self.nunits() != 1:
-      raise ColaError()
+      raise ColaError('nunits != 1 (= ' + str(self.nunits()))
     coord = self.origin()
     return self.buffer[Multidim.linearize(self.buffer_parent.dims, coord)]      
 
@@ -696,7 +743,7 @@ class Multidim[T]:
 class Block[T]:
 
   def __init__(self):
-    self.base = Multidim[T]()
+    self.base = Multidim[T](False)
 
   # need separate init for block and view so it typechecks
   def __init__(self, other: Block[T]):
@@ -895,7 +942,7 @@ class Block[T]:
 class View[T]:
 
   def __init__(self):
-    self.base = Multidim[T]()
+    self.base = Multidim[T](False)
 
   # need separate init for block and view so it typechecks
   def __init__(self, parent: Block[T]):
@@ -962,10 +1009,11 @@ class View[T]:
     return Block(other + self.base)
 
   def __sub__(self, other: T):
-    return Block(self.base - other)
+    return Block[T](self.base - other)
 
   def __sub__(self, other: Block[T]):
-    return Block(self.base - other.base)
+    md: Multidim[T] = self.base - other.base
+    return Block[T](md)
 
   def __sub__(self, other: View[T]):
     return Block(self.base - other.base)

@@ -242,11 +242,11 @@ class AppliedTraversal[T]:
 class Traversal:
 
   def __call__[T](self, root: Block[T]) -> AppliedTraversal[T]:
-    assert len(root.dims()) == self.ndims
+    assert root.nfree_dims() == self.ndims
     return AppliedTraversal(self, root)
 
   def __call__[T](self, root: View[T]) -> AppliedTraversal[T]:
-    assert len(root.dims()) == self.ndims
+    assert root.nfree_dims() == self.ndims
     return AppliedTraversal(self, root)
 
   def __call__[T](self, root: Block[T], origin) -> AppliedTraversal[T]:

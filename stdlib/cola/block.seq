@@ -66,6 +66,9 @@ class Multidim[T]:
   # your mapping to the coordinate system
   coord_mapping: list[Slice]  
   unique_id: str
+  # you can fix dimensions of size 1
+  nfixed_front: int
+  nfixed_back: int
 
 @dataclass(init=False)
 class View[T]:
@@ -78,25 +81,18 @@ class Block[T]:
 @extend
 class Multidim[T]:
 
-  ### INIT FUNCTIONS
-
-#  def __init__(self):
-
-#    self.invalid = True
-
-#  def __init__(self, _: bool):
-#    self.invalid = True
-
   def __init__(self, other: Multidim[T]):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
     if len(other.coord_mapping) == 0:
       raise ColaError()
     self.dims = [d for d in other.dims]
     self.buffer = other.buffer
-    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
-    self.buffer_parent = other
+    self.buffer_mapping = [s for s in other.buffer_mapping] #Slice(0,d,1) for d in self.dims]
+    self.buffer_parent = other.buffer_parent
     self.cgrid = other.cgrid
     self.coord_mapping = [cm for cm in other.coord_mapping]
+    self.nfixed_front = 0
+    self.nfixed_back = 0
     
   def __init__(self, other: Block[T], make_buffer: bool):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
@@ -108,12 +104,15 @@ class Multidim[T]:
     if make_buffer: 
       self.buffer = [T(0)] * self.nunits() #Array[T](self.nunits())      
       self.buffer_parent = self
+      self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     else:
       self.buffer = other.base.buffer
-      self.buffer_parent = other.base
-    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+      self.buffer_parent = other.base.buffer_parent
+      self.buffer_mapping = [s for s in other.base.buffer_mapping]
     self.cgrid = other.base.cgrid
     self.coord_mapping = [cm for cm in other.base.coord_mapping]
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   def __init__(self, other: Multidim[T], make_buffer: bool):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
@@ -124,12 +123,15 @@ class Multidim[T]:
     if make_buffer: 
       self.buffer = [T(0)] * self.nunits() #Array[T](self.nunits())      
       self.buffer_parent = self
+      self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     else:
       self.buffer = other.buffer
-      self.buffer_parent = other
-    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+      self.buffer_parent = other.buffer_parent
+      self.buffer_mapping = [s for s in other.buffer_mapping]
     self.cgrid = other.cgrid
     self.coord_mapping = [cm for cm in other.coord_mapping]
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   def __init__(self, other: View[T], make_buffer: bool):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
@@ -140,12 +142,15 @@ class Multidim[T]:
     if make_buffer: 
       self.buffer = [T(0)] * self.nunits() #rray[T](self.nunits())
       self.buffer_parent = self
+      self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     else:
       self.buffer = other.base.buffer
-      self.buffer_parent = other.base
-    self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
+      self.buffer_parent = other.base.buffer_parent
+      self.buffer_mapping = [s for s in other.base.buffer_mapping]
     self.cgrid = other.base.cgrid
     self.coord_mapping = [cm for cm in other.base.coord_mapping]
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   def __init__(self, other: int, cgrid: CoordGrid):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
@@ -158,6 +163,8 @@ class Multidim[T]:
     self.coord_mapping = [Slice(0,d,1) for d in self.dims]
     if cgrid.ndims() != 1:
       raise ColaError()
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   def __init__(self, dims: list[int], cgrid: CoordGrid):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
@@ -170,6 +177,8 @@ class Multidim[T]:
     self.coord_mapping = [Slice(0,d,1) for d in self.dims]
     if cgrid.ndims() != self.ndims():
       raise ColaError()
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   def __init__(self, dims: list[int]):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
@@ -180,6 +189,8 @@ class Multidim[T]:
     self.buffer_parent = self
     self.cgrid = CoordGrid(self.dims)
     self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   # 2D and above
   def __init__(self, cgrid: CoordGrid, dim0: int, dim1: int, *dims):
@@ -195,6 +206,8 @@ class Multidim[T]:
     self.coord_mapping = [Slice(0,d,1) for d in self.dims]
     if cgrid.ndims() != self.ndims():
       raise ColaError()
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   def __init__(self, dim0: int, dim1: int, *dims):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
@@ -209,6 +222,8 @@ class Multidim[T]:
     self.coord_mapping = [Slice(0,d,1) for d in self.dims]
     if self.cgrid.ndims() != self.ndims():
       raise ColaError()
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   # init dims and fill immediately (MAKES A SHALLOW COPY)
 #  def __init__(self, dims, data: Array[T], cgrid: CoordGrid):
@@ -233,6 +248,8 @@ class Multidim[T]:
     self.coord_mapping = [Slice(0,d,1) for d in self.dims]
     if cgrid.ndims() != self.ndims():
       raise ColaError()
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   def __init__(self, dims, data: list[T]):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
@@ -243,6 +260,8 @@ class Multidim[T]:
     self.buffer_parent = self
     self.cgrid = CoordGrid(self.dims)
     self.coord_mapping = [Slice(0,d,1) for d in self.dims]
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   # for some internal creation
   def __init__(self, buffer: list[T], dims: list[int], buffer_mapping: list[Slice], coord_mapping: list[Slice], buffer_parent: Multidim[T], cgrid: CoordGrid):
@@ -253,6 +272,8 @@ class Multidim[T]:
     self.coord_mapping = [c for c in coord_mapping]
     self.buffer_parent = buffer_parent
     self.cgrid = cgrid
+    self.nfixed_front = 0
+    self.nfixed_back = 0
 
   def linearize(dims: list[int], coord: list[int]) -> int:
     if len(dims) != len(coord):
@@ -268,11 +289,24 @@ class Multidim[T]:
   def ndims(self):
     return len(self.dims)
 
-  ### INTERNAL NON-STATIC UTILITY FUNCTIONS
+  def fix_front(self, amt:int):
+    cur_fixed = self.nfixed_front + self.nfixed_back
+    if cur_fixed + amt >= len(self.dims):
+      raise ColaError("Too many fixed dims")    
+    copy = Multidim(self)
+    copy.nfixed_front = self.nfixed_front + amt
+    copy.nfixed_back = self.nfixed_back
+    return copy
 
-
-  ### PUBLIC UTILITY FUNCTIONS
-
+  def fix_back(self, amt:int):
+    cur_fixed = self.nfixed_front + self.nfixed_back
+    if cur_fixed + amt >= len(self.dims):
+      raise ColaError("Too many fixed dims")
+    copy = Multidim(self)
+    copy.nfixed_front = self.nfixed_front
+    copy.nfixed_back = self.nfixed_back + amt
+    return copy
+  
   def nunits(self):
     n = 1
     for d in self.dims:
@@ -289,7 +323,6 @@ class Multidim[T]:
       raise ColaError("different ancestors")
     r_origin = [(~s.start-~s2.start) for s,s2 in zip(self.coord_mapping,tree_relative.base.coord_mapping)]
     return r_origin
-
 
   def origin_within(self, tree_relative) -> list[int]:    
     if self.cgrid != tree_relative.base.cgrid:
@@ -318,26 +351,22 @@ class Multidim[T]:
     return self.__getitem__(coord)
 
   def __getitem__(self, idx: int) -> Multidim[T]:
-    if len(self.dims) != 1:
-      raise ColaError("Must be 1D Multidim")
-    if idx >= self.dims[0]:
-      raise ColaError("Invalid index")
-    orig = self.buffer_mapping[0]
-    md_buffer_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
-    orig = self.coord_mapping[0]
-    md_coord_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
-    md = Multidim[T](self.buffer, [1], md_buffer_mapping, md_coord_mapping, self.buffer_parent, self.cgrid)
-    #    md.dims = [1]
-    # verify that the buffer mapping doesn't go negative (which can happen with neg idx)
-    for b in md.buffer_mapping:
-      if ~b.start < 0:
-        raise ColaError("Bad idx")
-#    md.buffer_parent = self.buffer_parent
-    #    md.buffer = self.buffer
-#    md.cgrid = self.cgrid
-
-    assert len(md.coord_mapping) > 0
-    return md
+    if len(self.dims) == 1:
+      if idx >= self.dims[0]:
+        raise ColaError("Invalid index")
+      orig = self.buffer_mapping[0]
+      md_buffer_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
+      orig = self.coord_mapping[0]
+      md_coord_mapping = [Slice(~orig.start+idx, ~orig.start+idx+1, 1)]
+      md = Multidim[T](self.buffer, [1], md_buffer_mapping, md_coord_mapping, self.buffer_parent, self.cgrid)
+      # verify that the buffer mapping doesn't go negative (which can happen with neg idx)
+      for b in md.buffer_mapping:
+        if ~b.start < 0:
+          raise ColaError("Bad idx")
+      return md
+    else:
+      # defer to main getitem
+      return self.__getitem__([idx])
   
   def __getitem__(self, idx: Slice) -> Multidim[T]:
     return self[[idx]]
@@ -357,16 +386,38 @@ class Multidim[T]:
     new_slices = [Slice(r, r + s.compute_range(), 1) for r,s in zip(rel_origin,idx.coord_mapping)]
     return self[new_slices]    
   
+  # MUST INDEX WITH EITHER ALL DIMS OR LESS FRONT AND BACK FIXED
   # TODO need to check for out-of-bounds index here
-  def __getitem__(self, idxs) -> Multidim[T]:
-    if len(idxs) != len(self.dims):
-      raise ColaError(str(len(idxs)) + ' ' + str(len(self.dims)))
+  def __getitem__(self, idxs) -> Multidim[T]:    
+    use_fixed = False # if false, either have no fixed dims, or you indexed with all dims
+    if len(idxs) != len(self.dims):      
+      if len(idxs) + self.nfixed_front + self.nfixed_back != len(self.dims):
+        raise ColaError("bad number of dims to access")
+      use_fixed = True
     dims = [d for d in self.dims]
     mapping = [sl for sl in self.buffer_mapping]
     cmapping = [sl for sl in self.coord_mapping]
     assert len(cmapping) > 0
     assert len(mapping) > 0
     i = 0
+    # refactor this common stuff
+    if use_fixed: 
+      for _ in range(self.nfixed_front):
+        idx = 0
+        d,sl = self._convert(idx,i)
+        dims[i] = d
+        # combine with the original mapping
+        replace = mapping[i]
+        start = ~replace.start + ~sl.start * ~replace.step
+        stop = min(~replace.start + ~sl.stop * ~replace.step, ~replace.stop)
+        step = ~replace.step * ~sl.step
+        mapping[i] = slice(start, stop, step)         
+        replace = cmapping[i]
+        start = ~replace.start + ~sl.start * ~replace.step
+        stop = min(~replace.start + ~sl.stop * ~replace.step, ~replace.stop)
+        step = ~replace.step * ~sl.step
+        cmapping[i] = slice(start, stop, step)         
+        i += 1      
     for idx in idxs:
       d,sl = self._convert(idx,i)
       dims[i] = d
@@ -382,14 +433,26 @@ class Multidim[T]:
       step = ~replace.step * ~sl.step
       cmapping[i] = slice(start, stop, step)         
       i += 1      
+    # refactor this common stuff
+    if use_fixed:
+      for _ in range(self.nfixed_back):
+        idx = 0
+        d,sl = self._convert(idx,i)
+        dims[i] = d
+        # combine with the original mapping
+        replace = mapping[i]
+        start = ~replace.start + ~sl.start * ~replace.step
+        stop = min(~replace.start + ~sl.stop * ~replace.step, ~replace.stop)
+        step = ~replace.step * ~sl.step
+        mapping[i] = slice(start, stop, step)         
+        replace = cmapping[i]
+        start = ~replace.start + ~sl.start * ~replace.step
+        stop = min(~replace.start + ~sl.stop * ~replace.step, ~replace.stop)
+        step = ~replace.step * ~sl.step
+        cmapping[i] = slice(start, stop, step)         
+        i += 1      
 
     md = Multidim[T](self.buffer, dims, mapping, cmapping, self.buffer_parent, self.cgrid)
-#    md.buffer = self.buffer
-#    md.dims = dims
-#    md.buffer_mapping = mapping
-#    md.buffer_parent = self.buffer_parent
-#    md.coord_mapping = cmapping
-#    md.cgrid = self.cgrid
     for b in md.buffer_mapping:
       if ~b.start < 0:
         raise ColaError("Bad idx")
@@ -411,48 +474,54 @@ class Multidim[T]:
     tup = (idx0,) + tuple(i for i in idx)
     return self.__getitem__(tup)()
 
-  ### __SETITEM__ AND ASSOCIATED FUNCTIONS
-
   def _iterate(self):
     return self._iterate([0]*len(self.dims), 0)
 
   def iterate(self):
     return self._iterate([0]*len(self.dims), 0)
-
+  
+  # compute mapping to your parent buffer and directly access. Return linear idx
   def _iterate(self, iterators: list[int], cur_depth: int):
     bmapping = [d for d in self.buffer_mapping]
     buffer_dims = self.buffer_parent.dims
     if cur_depth == len(self.dims) - 1:
-      cmap = bmapping[cur_depth]
-      for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
+      bmap = bmapping[cur_depth]
+      for i in range(~bmap.start, ~bmap.stop, ~bmap.step):
         iterators[cur_depth] = i
         linear = Multidim.linearize(buffer_dims, iterators)
         yield linear
     else:
-      cmap = bmapping[cur_depth]
-      for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
+      bmap = bmapping[cur_depth]
+      for i in range(~bmap.start, ~bmap.stop, ~bmap.step):
         iterators[cur_depth] = i
         yield from self._iterate(iterators, cur_depth+1)
 
   def slice_iterate(self):
-    return self._slice_iterate([0]*len(self.dims), 0)
+    return self._slice_iterate([0]*len(self.dims), [0]*len(self.dims), 0)
 
-  def _slice_iterate(self, iterators: list[int], cur_depth: int):
+  def _slice_iterate(self, iterators: list[int], citerators: list[int], cur_depth: int):
     bmapping = [d for d in self.buffer_mapping]
+    cmapping = [d for d in self.coord_mapping]
     if cur_depth == len(self.dims) - 1:
-      cmap = bmapping[cur_depth]
-      for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
+      bmap = bmapping[cur_depth]
+      cmap = cmapping[cur_depth]
+      for i,ic in zip(range(~bmap.start, ~bmap.stop, ~bmap.step),range(~cmap.start, ~cmap.stop, ~cmap.step)):
         iterators[cur_depth] = i        
+        citerators[cur_depth] = ic
+        yield Multidim(self.buffer, [1]*len(self.dims), [Slice(it,it+1,1) for it in iterators], [Slice(it,it+1,1) for it in citerators], self.buffer_parent, self.cgrid)
         # this is self.buffer_parent.__getitem__ 
         # and not self.__getitem__ bc we are computing everything based
         # on our mapping in buffer_parent
-        yield self.buffer_parent[iterators]
+        #yield self.buffer_parent[iterators]
     else:
-      cmap = bmapping[cur_depth]
-      for i in range(~cmap.start, ~cmap.stop, ~cmap.step):
+      bmap = bmapping[cur_depth]
+      cmap = cmapping[cur_depth]
+      for i,ic in zip(range(~bmap.start, ~bmap.stop, ~bmap.step),range(~cmap.start, ~cmap.stop, ~cmap.step)):
         iterators[cur_depth] = i
-        yield from self._slice_iterate(iterators, cur_depth+1)
+        citerators[cur_depth] = ic
+        yield from self._slice_iterate(iterators, citerators, cur_depth+1)
 
+  # give 1x1 things
   def __iter__(self) -> Generator[Multidim[T]]:
     return self.slice_iterate()
 
@@ -742,8 +811,8 @@ class Multidim[T]:
 @extend
 class Block[T]:
 
-  def __init__(self):
-    self.base = Multidim[T](False)
+#  def __init__(self):
+#    self.base = Multidim[T](False)
 
   # need separate init for block and view so it typechecks
   def __init__(self, other: Block[T]):
@@ -770,11 +839,20 @@ class Block[T]:
   def __init__(self, dim0: int, dim1: int, *dims):
     self.base = Multidim[T](dim0, dim1, *dims)    
 
+  def fix_front(self, amt: int = 1):
+    return View(self.base.fix_front(amt))
+
+  def fix_back(self, amt: int = 1):
+    return View(self.base.fix_back(amt))
+
   def dims(self) -> list[int]:
     return self.base.dims
 
   def dims(self, idx: int) -> int:
     return self.base.dims[idx]
+
+  def nfree_dims(self) -> int:
+    return len(self.base.dims) - self.base.nfixed_front - self.base.nfixed_back
 
   def nunits(self):
     return self.base.nunits()
@@ -941,8 +1019,8 @@ class Block[T]:
 @extend
 class View[T]:
 
-  def __init__(self):
-    self.base = Multidim[T](False)
+#  def __init__(self):
+#    self.base = Multidim[T](False)
 
   # need separate init for block and view so it typechecks
   def __init__(self, parent: Block[T]):
@@ -957,11 +1035,20 @@ class View[T]:
   def __init__(self, base: Multidim[T]):
     self.base = base
 
+  def fix_front(self, amt: int = 1):
+    return View(self.base.fix_front(amt))
+
+  def fix_back(self, amt: int = 1):
+    return View(self.base.fix_back(amt))
+
   def dims(self) -> list[int]:
     return self.base.dims
 
   def dims(self, idx: int) -> int:
     return self.base.dims[idx]
+
+  def nfree_dims(self) -> int:
+    return len(self.base.dims) - self.base.nfixed_front - self.base.nfixed_back
 
   def nunits(self):
     return self.base.nunits()

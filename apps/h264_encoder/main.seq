@@ -9,9 +9,6 @@ from cola.block import *
 from cola.parallel_support import *
 from ..lib.traversals import zigzag
 
-# TODO TODO TODO
-# shove in the zigzag traversal so that I can time that. I can just use it in quantization or something
-
 def xform_quant_luma_16x16(mb, intra_coded_mb):
   residual = mb - intra_coded_mb
   # result of transform and quantize (pre-entropy coding)
@@ -74,7 +71,7 @@ y_cgrid = y_frames.base.cgrid
 u_cgrid = u_frames.base.cgrid
 v_cgrid = v_frames.base.cgrid
 
-stats = open('stats.txt', 'w')
+cola_out = open('cola_out.txt', 'w')
 tick = _C.seq_time_monotonic()
 # no slices
 # Y
@@ -198,5 +195,10 @@ for frame_idx,f in enumerate(range(nframes)):
 
 tock = _C.seq_time_monotonic()
 print(str(tock-tick) + 'ns (' + str((tock-tick)/1e9) + 's)')
-stats.flush()
-stats.close()
+# write the reconstructions
+cola_out.write(str(y_frames) + '\n')
+cola_out.write(str(u_frames) + '\n')
+cola_out.write(str(v_frames) + '\n')
+cola_out.flush()
+cola_out.close()
+

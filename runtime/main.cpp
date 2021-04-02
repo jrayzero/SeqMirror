@@ -9,7 +9,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <compiler/sir/transform/cola/print_func_ir.h>
+#include "compiler/sir/transform/cola/print_func_ir.h"
+#include "compiler/sir/transform/cola/annotate.h"
 
 namespace {
 void versMsg(llvm::raw_ostream &out) {
@@ -24,6 +25,9 @@ void registerStandardPasses(seq::ir::transform::PassManager &pm, bool debug) {
   pm.registerPass(
     "bio-pipeline-opts",
     std::make_unique<seq::ir::transform::pipeline::PipelineOptimizations>());
+//  pm.registerPass(
+//    "cola-annotate-dims",
+//    std::make_unique<seq::ir::transform::cola::AnnotateDims>());
 //  pm.registerPass(
 //    "cola-print-funcs",
 //    std::make_unique<seq::ir::transform::cola::PrintFuncs>());

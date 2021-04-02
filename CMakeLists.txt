@@ -147,6 +147,7 @@ set(SEQ_HPPFILES
         compiler/sir/transform/manager.h
         compiler/sir/transform/pass.h
         compiler/sir/transform/pipeline.h
+        compiler/sir/transform/cola/annotate.h
         compiler/sir/transform/cola/print_func_ir.h
         compiler/sir/types/types.h
         compiler/sir/util/cloning.h
@@ -207,6 +208,7 @@ set(SEQ_CPPFILES
         compiler/sir/transform/cleanup/replacer.cpp
         compiler/sir/transform/manager.cpp
         compiler/sir/transform/pipeline.cpp
+        compiler/sir/transform/cola/annotate.cpp
         compiler/sir/transform/cola/print_func_ir.cpp
         compiler/sir/types/types.cpp
         compiler/sir/util/cloning.cpp

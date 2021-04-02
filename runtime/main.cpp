@@ -9,7 +9,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <compiler/sir/transform/cola/remove_gens.h>
+#include <compiler/sir/transform/cola/print_func_ir.h>
 
 namespace {
 void versMsg(llvm::raw_ostream &out) {
@@ -25,8 +25,8 @@ void registerStandardPasses(seq::ir::transform::PassManager &pm, bool debug) {
     "bio-pipeline-opts",
     std::make_unique<seq::ir::transform::pipeline::PipelineOptimizations>());
 //  pm.registerPass(
-//    "cola-remove-gens",
-//    std::make_unique<seq::ir::transform::cola::RemoveGenerators>());
+//    "cola-print-funcs",
+//    std::make_unique<seq::ir::transform::cola::PrintFuncs>());
 }
 
 bool hasExtension(const std::string &filename, const std::string &extension) {

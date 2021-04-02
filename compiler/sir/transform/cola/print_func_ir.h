@@ -12,9 +12,9 @@ namespace ir {
 namespace transform {
 namespace cola {
 
-class RemoveGenerators : public OperatorPass {
+class PrintFuncs : public OperatorPass {
 
-  void handle(ForFlow *) override;
+  void handle(CallInstr *) override;
 
 };
 

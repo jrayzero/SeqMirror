@@ -1,6 +1,7 @@
 from cola.block import *
+from partition import *
 from common import *
-from params import *
+from config import *
 
 # TODO for availability, you also hae to check if the recons blk was down with inter mode
 # and see if that isn't allowed
@@ -91,141 +92,89 @@ def intra_16x16_luma_m3(mb) -> Optional[Block[int]]:
     return None
 
 # FOR 4:2:0
-# DC is tricky because we break the chroma MB into 4x4 blocks, in this csae
-# giving a 2x2 grid since the input is 8x8. All the blocks except the upper
-# left can use reconstructions within the block itself, meaning we 
-# need to reconstruct each 4x4 block after we predict it
-def intra_chroma_DC_part0(row,col,pred4x4):
-  pass
-def intra_chroma_DC_part1(col,pred4x4):
-  pass
-def intra_chroma_DC_part2(col,pred4x4):
-  pass
+def chroma_col_and_row_avail(smb, mb, pred):
+  _,h,w = smb.origin_within(mb)
+  row = mb[0,-1,w:w+4]
+  col = mb[0,h:h+4,-1]
+  s = 4
+  for r,c in zip(row,col):
+    s += r() + c()
+  s >>= 3
+  pred[smb][:,:,:] = s
 
-#def intra_chroma_DC(mb):
-#  # origin within the frame
-#  f,w,h = mb.origin()
-#  # our full CHOSEN prediction
-#  pred = Block(mb)
-#  # local reconstruction
-#  recons = Block(mb)
-#  smb,spred,srecons = split_4x4(mb,8),split_4x4(pred,8),split_4x4(recons,8)
-#  for pix4x4,pred_pix4x4,rec_pix4x4 in zip(smb,spred,srecons):
-#    # figure out where we are in the macroblock
-#    _,yO,xO = pix4x4.rel_origin(mb) 
-#    if xO == 0 and yO == 0:
-#      # we are the upper left 4x4 submacroblock, so we only
-#      # use external reconstructions
-#      if w == 0 and h == 0:
-#        # we are at the edge of the frame, so there aren't ref pixels
-#        p = 1 << (bit_depth_c - 1)          
-#        
-#      
-#    
-#  # break into 4x4 blocks. The chroma mbs are going to be 8x8 for 4:2:0
-#  smb = split_4x4(umb,8)
-#  psmb = split_4x4(upred,8)
-#  for u,v,up,uv in zip(usmb,vsmb,upsmb,vpsmb): # u,v == 4x4
-#    _,r,c = u.rel_origin(umb)
-#    if (r == 0 and c == 0) or (r > 0 and c > 0):
-#      if w > 0 and h > 0:
-#        urow = u[0,-1,:]
-#        vrow = v[0,-1,:]
-#        ucol = u[0,:,-1]
-#        vcol = v[0,:,-1]
-#        us = 0
-#        vs = 0
-#        for ur,vr,uc,vc in zip(urow,vrow,ucol,vcol):
-#          us += ur()+uc()
-#          vs += vr()+vc()
-#        us >>= 3
-#        vs >>= 3
-#        up[:,:,:] = us
-#        vp[:,:,:] = vs
-#      elif w > 0:
-#        ucol = u[0,:,-1]
-#        vcol = v[0,:,-1]
-#        us = 0
-#        vs = 0
-#        for uc,vc in zip(ucol,vcol):
-#          us += uc()
-#          vs += vc()
-#        us >>= 2
-#        vs >>= 2
-#        up[:,:,:] = us
-#        vp[:,:,:] = vs
-#      elif h > 0:
-#        urow = u[0,-1,:]
-#        vrow = v[0,-1,:]
-#        us = 0
-#        vs = 0
-#        for ur,vr in zip(urow,vrow):
-#          us += ur()
-#          vs += vr()
-#        us >>= 2
-#        vs >>= 2
-#        up[:,:,:] = us
-#        vp[:,:,:] = vp
-#      else:
-#        up[:,:,:] = 1 << (bit_depth_c - 1)        
-#        vp[:,:,:] = 1 << (bit_depth_c - 1)           
-#    elif c > 0 and r == 0:
-#      if h > 0:
-#        urow = u[0,-1,:]
-#        vrow = v[0,-1,:]
-#        us = 0
-#        vs = 0
-#        for ur,vr in zip(urow,vrow):
-#          us += ur()
-#          vs += vr()
-#        us >>= 2
-#        vs >>= 2
-#        up[:,:,:] = us
-#        vp[:,:,:] = vp
-#      elif w > 0:
-#        ucol = u[0,:,-1]
-#        vcol = v[0,:,-1]
-#        us = 0
-#        vs = 0
-#        for uc,vc in zip(ucol,vcol):
-#          us += uc()
-#          vs += vc()
-#        us >>= 2
-#        vs >>= 2
-#        up[:,:,:] = us
-#        vp[:,:,:] = vs
-#      else:
-#        up[:,:,:] = 1 << (bit_depth_c - 1)        
-#        vp[:,:,:] = 1 << (bit_depth_c - 1)
-#    else: # c == 0 and r > 0
-#      if w > 0:
-#        ucol = u[0,:,-1]
-#        vcol = v[0,:,-1]
-#        us = 0
-#        vs = 0
-#        for uc,vc in zip(ucol,vcol):
-#          us += uc()
-#          vs += vc()
-#        us >>= 2
-#        vs >>= 2
-#        up[:,:,:] = us
-#        vp[:,:,:] = vs      
-#      elif h > 0:
-#        urow = u[0,-1,:]
-#        vrow = v[0,-1,:]
-#        us = 0
-#        vs = 0
-#        for ur,vr in zip(urow,vrow):
-#          us += ur()
-#          vs += vr()
-#        us >>= 2
-#        vs >>= 2
-#        up[:,:,:] = us
-#        vp[:,:,:] = vp
-#      else:
-#        up[:,:,:] = 1 << (bit_depth_c - 1)        
-#        vp[:,:,:] = 1 << (bit_depth_c - 1)      
-#  return upred,vpred
+def chroma_col_avail(smb, mb, pred):
+  _,h,w = smb.origin_within(mb)
+  col = mb[0,h:h+4,-1]
+  s = 2
+  for c in col:
+    s += c()
+  s >>= 2
+  pred[smb][:,:,:] = s
+
+def chroma_row_avail(smb, mb, pred):
+  _,h,w = smb.origin_within(mb)
+  row = mb[0,-1,w:w+4]
+  s = 2
+  for r in row:
+    s += r()
+  s >>= 2
+  pred[smb][:,:,:] = s
+
+def chroma_none_avail(smb, pred):
+  pred[smb][:,:,:] = 1 << (bit_depth_c - 1)  
+
+# for 8x8 blocks since 4:2:0
+# I believe that even though we do things on a 4x4 level, it still uses the 8x8 surrounding data
+def intra_chroma_420_DC_only(mb):
+  f,h,w = mb.origin()
+  pred = Block(mb)
+  # split into 4x4 subblocks
+  mb_split = split_4x4(mb,8)[0]
+
+  smb0 = mb_split[0] # xO == 0 and yO == 0
+  smb1 = mb_split[1] # xO > 0 and yO == 0
+  smb2 = mb_split[2] # xO == 0 and yO > 0
+  smb3 = mb_split[3]
+
+  # h and w are relative to the whole frame, so they 
+  # ultimately determine if their is data (ex: if
+  # we are at the top of the frame, h == 0 so there 
+  # is no row above)
+
+  # smb0/smb3
+  if h > 0 and w > 0:
+    chroma_col_and_row_avail(smb0, mb, pred)
+    chroma_col_and_row_avail(smb3, mb, pred)
+  elif w > 0:
+    chroma_col_avail(smb0, mb, pred)
+    chroma_col_avail(smb3, mb, pred)
+  elif h > 0:
+    chroma_row_avail(smb0, mb, pred)
+    chroma_row_avail(smb3, mb, pred)
+  else:
+    chroma_none_avail(smb0, pred)
+    chroma_none_avail(smb3, pred)
+
+  # NOTE: smb1 and smb2 are processed in different orders
+  # not sure how important that actually is, but
+  # I'm following the standard here
+  # smb1
+  if h > 0:
+    chroma_row_avail(smb1, mb, pred)
+  elif w > 0:
+    chroma_col_avail(smb1, mb, pred)
+  else:
+    chroma_none_avail(smb1, pred)
+
+  # smb2 
+  if w > 0:
+    chroma_col_avail(smb2, mb, pred)
+  elif h > 0:
+    chroma_row_avail(smb2, mb, pred)
+  else:
+    chroma_none_avail(smb2, pred)
+
+  return pred
 
 def intra_chroma_horiz(umb,vmb):
   assert False

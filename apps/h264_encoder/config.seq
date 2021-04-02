@@ -1,6 +1,8 @@
+from cola.block import *
+
 input_file             = "/Users/jray/ColaProjects/ref_code/JM/bin/foreman_part_qcif.yuv"       # Input sequence (raw, so need to explicitly specify sizes)
 subsample = '420'
-nframes     = 1      # Number of frames to be coded
+nframes     = 3      # Number of frames to be coded
 frame_rate             = 30.0   # Frame Rate per second (0.1-100.0)
 source_width           = 176    # Source frame width
 source_height          = 144    # Source frame height
@@ -16,6 +18,31 @@ SAD = 0
 SSE = 1
 SATD = 2
 cost = SAD
-
+CAVLC_LEVEL_LIMIT = 2063
+DQ_BITS = 6
 # 1 slice per picture
 # 1 frame = 1 picture
+
+
+# copied from the JM config I run
+I = 0
+P = 1
+GOP_structure = [I,P,P,P]
+INT_MAX = _C.get_int_max()
+lambda_accurary_bits = 5
+bit_depth_y = 8
+bit_depth_c = 8
+max_imgpel_value = 2 ** bit_depth_y - 1
+
+
+
+# FOR QP == 28
+iscale = 256
+qp_per_matrix = [0,0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,7,7,7,7,7,7,8,8,8]
+Q_BITS = 15
+offset_comp = 174592
+# DC
+scale_comp_DC = Block[int]([4,4],[8192]*16)
+# AC
+scale_comp_AC = Block[int]([4,4],[8192, 5243, 8192, 5243, 5243, 3355, 5243, 3355, 8192, 5243, 8192, 5243, 5243, 3355, 5243, 3355])
+inv_scale_comp_AC = Block[int]([4,4],[256, 320, 256, 320, 320, 400, 320, 400, 256, 320, 256, 320, 320, 400, 320, 400])

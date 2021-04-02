@@ -1,4 +1,4 @@
-from params import *
+from config import *
 from cola.block import *
 
 # min_cost allows for an early exit if you exceed it
@@ -7,11 +7,11 @@ def sad(real, pred, min_cost: int = INT_MAX) -> int:
   if min_cost == INT_MAX:
     # no early exit
     for r,p in zip(real, pred):
-      cost += r() - p()
+      cost += abs(r() - p())
     return cost
   else:
     for r,p in zip(real, pred):
-      cost += r() - p()
+      cost += abs(r() - p())
       if cost > min_cost:
         return min_cost
     return cost
@@ -95,6 +95,6 @@ def hadamard_SAD_4x4(diff: Block[int]) -> int:
 def satd_4x4[T](real: View[T], pred: View[T]) -> int:
   diffs = Block[T](real.dims())
   for r,p,d in zip(real, pred, diffs):
-    d[ALL] = r() - p()
+    d[ALL] = abs(r() - p())
   return hadamard_SAD_4x4(diffs)
 

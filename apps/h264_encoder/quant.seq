@@ -1,26 +1,18 @@
-from params import *
+from config import *
 
-def quant_dc4x4_normal(blk, qp) -> bool:
+def quant_dc_normal(blk, qp) -> bool:
   is_nonzero = False
   qp_per = qp_per_matrix[qp]
   q_bits = Q_BITS + qp_per + 1
   for _coeff in blk:
     coeff = _coeff()
-    cola_debug(coeff)
     if coeff != 0:
-      foo0 = _coeff.origin_within(blk)[1:]
-      cola_debug(foo0)
-      foo1 = scale_comp_DC[foo0]
-      cola_debug(foo1)
-      foo2 = foo1()  
-      cola_debug(foo2)    
       scaled = abs(coeff) * scale_comp_DC[_coeff.origin_within(blk)[1:]]()
-      cola_debug(scaled)
       level = (scaled + (offset_comp << 1)) >> q_bits
       # for simple case, this seems to always be true
       if level != 0:
-        level = min(level, CAVLC_LEVEL_LIMIT)
-        level = abs(level) * -1 if coeff < 0 else 1
+        level = min(level, CAVLC_LEVEL_LIMIT)        
+        level = abs(level) * -1 if coeff < 0 else abs(level)
         _coeff[ALL] = level
         is_nonzero = True
       else:
@@ -44,12 +36,9 @@ def quant_ac4x4_normal(blk, qp) -> bool:
     if level != 0:
       level = min(level, CAVLC_LEVEL_LIMIT)
       # coeff cost in JM?
-      level = abs(level) * -1 if coeff < 0 else 1
+      level = abs(level) * -1 if coeff < 0 else abs(level)
       _coeff[ALL] = rshift_rnd_sf((level * inv_scale_comp_AC[_coeff.origin_within(blk)[1:]]()) << qp_per, 4)
       is_nonzero = True
     else:
       _coeff[ALL] = 0
-  return is_nonzero
-      
-def iquant_dc4x4_normal():
-  pass
+  return is_nonzero      

@@ -92,14 +92,14 @@ def perimeter(N: int):
     link perimeter(N-2)
 
 
-blk = Block[int](8,8)
-for coord in diagonal(8):
+#blk = Block[int](8,8)
+#for coord in diagonal(8):
   # returns each coordinate
-  pass
+#  pass
 
-for elem in diagonal(8)(blk):
-  # returns each element in blk
-  pass
+#for elem in diagonal(8)(blk):
+#  # returns each element in blk
+#  pass
 
 
   

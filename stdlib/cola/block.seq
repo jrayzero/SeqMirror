@@ -55,8 +55,7 @@ ALL = _ALL()
 @dataclass(init=False)
 class Multidim[T]:
   dims: list[int]
-  # Points to the buffer that you map to
-  buffer: list[T]
+  buffer: Array[T]
   # the mapping to your buffer 
   buffer_mapping: list[Slice]
   # your parent with the buffer
@@ -96,13 +95,11 @@ class Multidim[T]:
     
   def __init__(self, other: Block[T], make_buffer: bool):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
-#    if other.base.invalid:
-#      raise ColaError()
     if len(other.base.coord_mapping) == 0:
       raise ColaError()
     self.dims = [d for d in other.dims()]
     if make_buffer: 
-      self.buffer = [T(0)] * self.nunits() #Array[T](self.nunits())      
+      self.buffer = Array[T](self.nunits())      
       self.buffer_parent = self
       self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     else:
@@ -118,10 +115,9 @@ class Multidim[T]:
     self.unique_id = ''.join(random.choices(string.printable, k=5))
     if len(other.coord_mapping) == 0:
       raise ColaError()
-#    self.__init__()
     self.dims = [d for d in other.dims]
     if make_buffer: 
-      self.buffer = [T(0)] * self.nunits() #Array[T](self.nunits())      
+      self.buffer = Array[T](self.nunits())      
       self.buffer_parent = self
       self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     else:
@@ -137,10 +133,9 @@ class Multidim[T]:
     self.unique_id = ''.join(random.choices(string.printable, k=5))
     if len(other.base.coord_mapping) == 0:
       raise ColaError()
-#    self.__init__()
     self.dims = [d for d in other.dims()]
     if make_buffer: 
-      self.buffer = [T(0)] * self.nunits() #rray[T](self.nunits())
+      self.buffer = Array[T](self.nunits())
       self.buffer_parent = self
       self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     else:
@@ -154,9 +149,8 @@ class Multidim[T]:
 
   def __init__(self, other: int, cgrid: CoordGrid):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
-#    self.__init__()
     self.dims = [other]
-    self.buffer = [T(0)] * other#Array[T](other)
+    self.buffer = Array[T](other)
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     self.buffer_parent = self 
     self.cgrid = cgrid
@@ -168,9 +162,8 @@ class Multidim[T]:
 
   def __init__(self, dims: list[int], cgrid: CoordGrid):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
-#    self.__init__()
     self.dims = [d for d in dims]
-    self.buffer = [T(0)] * self.nunits()#Array[T](self.nunits())
+    self.buffer = Array[T](self.nunits())
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     self.buffer_parent = self
     self.cgrid = cgrid
@@ -182,9 +175,8 @@ class Multidim[T]:
 
   def __init__(self, dims: list[int]):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
- #   self.__init__()
     self.dims = [d for d in dims]
-    self.buffer = [T(0)] * self.nunits()#Array[T](self.nunits())
+    self.buffer = Array[T](self.nunits())
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     self.buffer_parent = self
     self.cgrid = CoordGrid(self.dims)
@@ -195,11 +187,10 @@ class Multidim[T]:
   # 2D and above
   def __init__(self, cgrid: CoordGrid, dim0: int, dim1: int, *dims):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
-#    self.__init__()
     self.dims = [dim0, dim1]
     if staticlen(dims) > 0:
       self.dims += [d for d in dims]
-    self.buffer = [T(0)] * self.nunits()#Array[T](self.nunits())
+    self.buffer = Array[T](self.nunits())
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     self.buffer_parent = self
     self.cgrid = cgrid
@@ -211,11 +202,10 @@ class Multidim[T]:
 
   def __init__(self, dim0: int, dim1: int, *dims):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
-#    self.__init__()
     self.dims = [dim0, dim1]
     if staticlen(dims) > 0:
       self.dims += [d for d in dims]
-    self.buffer = [T(0)] * self.nunits()#Array[T](self.nunits())
+    self.buffer = Array[T](self.nunits())
     self.buffer_mapping = [Slice(0,d,1) for d in self.dims]
     self.buffer_parent = self
     self.cgrid = CoordGrid(self.dims)
@@ -237,7 +227,7 @@ class Multidim[T]:
 #    if cgrid.ndims() != self.ndims():
 #      raise ColaError()
 
-  def __init__(self, dims, data: list[T], cgrid: CoordGrid):
+  def __init__(self, dims, data: Array[T], cgrid: CoordGrid):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
 #    self.__init__()
     self.dims = [d for d in dims]
@@ -251,7 +241,7 @@ class Multidim[T]:
     self.nfixed_front = 0
     self.nfixed_back = 0
 
-  def __init__(self, dims, data: list[T]):
+  def __init__(self, dims, data: Array[T]):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
 #    self.__init__()
     self.dims = [d for d in dims]
@@ -264,7 +254,7 @@ class Multidim[T]:
     self.nfixed_back = 0
 
   # for some internal creation
-  def __init__(self, buffer: list[T], dims: list[int], buffer_mapping: list[Slice], coord_mapping: list[Slice], buffer_parent: Multidim[T], cgrid: CoordGrid):
+  def __init__(self, buffer: Array[T], dims: list[int], buffer_mapping: list[Slice], coord_mapping: list[Slice], buffer_parent: Multidim[T], cgrid: CoordGrid):
     self.unique_id = ''.join(random.choices(string.printable, k=5))
     self.dims = [d for d in dims]
     self.buffer = buffer
@@ -397,8 +387,6 @@ class Multidim[T]:
     dims = [d for d in self.dims]
     mapping = [sl for sl in self.buffer_mapping]
     cmapping = [sl for sl in self.coord_mapping]
-    assert len(cmapping) > 0
-    assert len(mapping) > 0
     i = 0
     # refactor this common stuff
     if use_fixed: 

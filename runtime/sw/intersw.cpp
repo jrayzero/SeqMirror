@@ -3,6 +3,7 @@
 #include "lib.h"
 #include <cstdint>
 #include <cstdlib>
+#include <string>
 
 // adapted from minimap2's KSW2 dispatch
 // https://github.com/lh3/minimap2/blob/master/ksw2_dispatch.c
@@ -34,7 +35,20 @@ void __cpuidex(int cpuid[4], int func_id, int subfunc_id) {
 
 static int intersw_simd = -1;
 
+static int SEQ_MAXSIMD = (SIMD_AVX512F << 1) - 1;
+
 static int x86_simd() {
+  // char *env = getenv("SEQ_SWSIMD");
+  // int SEQ_MAXSIMD = (SIMD_AVX512F << 1) - 1;
+  // if (env && std::string(env) == "AVX2")
+  //   SEQ_MAXSIMD = (SIMD_AVX2 << 1) - 1;
+  // if (env && std::string(env) == "AVX")
+  //   SEQ_MAXSIMD = (SIMD_AVX << 1) - 1;
+  // if (env && std::string(env) == "AVX512")
+  //   SEQ_MAXSIMD = (SIMD_AVX512F << 1) - 1;
+  // if (env && std::string(env) == "SSE4_2")
+  //   SEQ_MAXSIMD = (SIMD_SSE4_2 << 1) - 1;
+
   int flag = 0, cpuid[4], max_id;
   __cpuidex(cpuid, 0, 0);
   max_id = cpuid[0];
@@ -42,27 +56,46 @@ static int x86_simd() {
     return 0;
   __cpuidex(cpuid, 1, 0);
   if (cpuid[3] >> 25 & 1)
-    flag |= SIMD_SSE;
+    flag |= SIMD_SSE & SEQ_MAXSIMD;
   if (cpuid[3] >> 26 & 1)
-    flag |= SIMD_SSE2;
+    flag |= SIMD_SSE2 & SEQ_MAXSIMD;
   if (cpuid[2] >> 0 & 1)
-    flag |= SIMD_SSE3;
+    flag |= SIMD_SSE3 & SEQ_MAXSIMD;
   if (cpuid[2] >> 9 & 1)
-    flag |= SIMD_SSSE3;
+    flag |= SIMD_SSSE3 & SEQ_MAXSIMD;
   if (cpuid[2] >> 19 & 1)
-    flag |= SIMD_SSE4_1;
+    flag |= SIMD_SSE4_1 & SEQ_MAXSIMD;
   if (cpuid[2] >> 20 & 1)
-    flag |= SIMD_SSE4_2;
+    flag |= SIMD_SSE4_2 & SEQ_MAXSIMD;
   if (cpuid[2] >> 28 & 1)
-    flag |= SIMD_AVX;
+    flag |= SIMD_AVX & SEQ_MAXSIMD;
   if (max_id >= 7) {
     __cpuidex(cpuid, 7, 0);
     if (cpuid[1] >> 5 & 1)
-      flag |= SIMD_AVX2;
+      flag |= SIMD_AVX2 & SEQ_MAXSIMD;
     if (cpuid[1] >> 16 & 1)
-      flag |= SIMD_AVX512F;
+      flag |= SIMD_AVX512F & SEQ_MAXSIMD;
   }
   return flag;
+}
+
+SEQ_FUNC seq_str_t seq_get_interaln_simd() {
+  if (intersw_simd < 0)
+    intersw_simd = x86_simd();
+  if (intersw_simd & SIMD_AVX512F) {
+    return string_conv("%s", 10, "AVX512");
+  } else if (intersw_simd & SIMD_AVX2) {
+    return string_conv("%s", 10, "AVX2");
+  } else if (intersw_simd & SIMD_SSE4_1) {
+    return string_conv("%s", 10, "SSE4_1");
+  } else {
+    return string_conv("%s", 10, "NONE");
+  }
+}
+
+SEQ_FUNC void seq_set_sw_maxsimd(int max) {
+  SEQ_MAXSIMD = (max << 1) - 1;
+  intersw_simd = x86_simd();
 }
 
 struct InterAlignParams { // must be consistent with bio/align.seq

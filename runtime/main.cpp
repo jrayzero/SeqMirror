@@ -10,7 +10,9 @@
 #include <unordered_map>
 #include <vector>
 #include "compiler/sir/transform/cola/print_func_ir.h"
-#include "compiler/sir/transform/cola/annotate.h"
+#include "compiler/sir/transform/cola/lower_scans.h"
+#include "compiler/sir/analyze/dataflow/cfg.h"
+#include "compiler/sir/analyze/dataflow/reaching.h"
 
 namespace {
 void versMsg(llvm::raw_ostream &out) {
@@ -22,12 +24,11 @@ void registerStandardPasses(seq::ir::transform::PassManager &pm, bool debug) {
   if (debug) {
     return;
   }
+  pm.registerAnalysis("cola-cfg", std::make_unique<seq::ir::analyze::dataflow::CFAnalysis>());
+  pm.registerAnalysis("cola-reaching", std::make_unique<seq::ir::analyze::dataflow::RDAnalysis>("cola-cfg"), {"cola-cfg"});
   pm.registerPass(
-    "bio-pipeline-opts",
-    std::make_unique<seq::ir::transform::pipeline::PipelineOptimizations>());
-//  pm.registerPass(
-//    "cola-annotate-dims",
-//    std::make_unique<seq::ir::transform::cola::AnnotateDims>());
+    "cola-lower-scans",
+    std::make_unique<seq::ir::transform::cola::LowerScans>("cola-reaching"), {"cola-reaching"});
 //  pm.registerPass(
 //    "cola-print-funcs",
 //    std::make_unique<seq::ir::transform::cola::PrintFuncs>());
@@ -109,6 +110,11 @@ int runMode(const std::vector<const char *> &args) {
 
   auto *module = seq::parse(args[0], input.c_str(), /*code=*/"", /*isCode=*/false,
                             /*isTest=*/false, /*startLine=*/0, defmap);
+
+//  std::cerr << *module << std::endl;
+//  std::cerr << "DONE PRINTING MODULE" << std::endl;
+//  exit(48);
+
   if (!module)
     return EXIT_FAILURE;
 

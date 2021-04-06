@@ -1,0 +1,16 @@
+from read_yuv import *
+
+input_file = "foreman_part_qcif.yuv"
+nframes = 3
+height = 144
+width = 176
+Y,U,V = ingest(input_file, height, width, nframes)
+
+fd = open('yuv.seq.out','w')
+fd.write('Y\n')
+fd.write(str(Y))
+fd.write('U\n')
+fd.write(str(U))
+fd.write('V\n')
+fd.write(str(V))
+

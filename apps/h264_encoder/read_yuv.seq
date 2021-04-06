@@ -26,17 +26,15 @@ def ingest_yuv_420_interleaved_all(pad_chroma: bool):
       padded_source_height_d2 += 16 - (source_height//2) & 15
     if (source_width//2) & 15 != 0:
       padded_source_width_d2 += 16 - (source_width//2) & 15
-  y_cgrid = CoordGrid(nframes, padded_source_height, padded_source_width)
-  u_cgrid = CoordGrid(nframes, padded_source_height_d2, padded_source_width_d2)
-  v_cgrid = CoordGrid(nframes, padded_source_height_d2, padded_source_width_d2)
-  y_block = Block[int](y_cgrid, nframes, padded_source_height, padded_source_width)
-  u_block = Block[int](u_cgrid, nframes, padded_source_height_d2, padded_source_width_d2)
-  v_block = Block[int](v_cgrid, nframes, padded_source_height_d2, padded_source_width_d2)
+  y_block = Block[int,3](nframes, padded_source_height, padded_source_width)
+  u_block = Block[int,3](nframes, padded_source_height_d2, padded_source_width_d2)
+  v_block = Block[int,3](nframes, padded_source_height_d2, padded_source_width_d2)
   for i in range(nframes):
     # y
     for j in range(source_height):
       for k in range(source_width):
-        y_block[i,j,k] = int(fd.read_u[1]())
+        f = int(fd.read_u[1]())
+        y_block[i,j,k] = f
     if padded_source_height != source_height:
       pad_below(y_block[0,:,:], source_height, padded_source_height)
     if padded_source_width != source_width:

@@ -4,19 +4,20 @@ def quant_dc_normal(blk, qp) -> bool:
   is_nonzero = False
   qp_per = qp_per_matrix[qp]
   q_bits = Q_BITS + qp_per + 1
-  for _coeff in blk:
+  for _coeff in scan(blk):
     coeff = _coeff()
     if coeff != 0:
-      scaled = abs(coeff) * scale_comp_DC[_coeff.origin_within(blk)[1:]]()
+      ow = _coeff.origin_within(blk)
+      scaled = abs(coeff) * scale_comp_DC[ow[1],ow[2]]()
       level = (scaled + (offset_comp << 1)) >> q_bits
       # for simple case, this seems to always be true
       if level != 0:
         level = min(level, CAVLC_LEVEL_LIMIT)        
         level = abs(level) * -1 if coeff < 0 else abs(level)
-        _coeff[ALL] = level
+        _coeff[UNIT] = level
         is_nonzero = True
       else:
-        _coeff[ALL] = 0
+        _coeff[UNIT] = 0
   return is_nonzero
 
 def rshift_rnd_sf(x,a):
@@ -27,9 +28,11 @@ def quant_ac4x4_normal(blk, qp) -> bool:
   qp_per = qp_per_matrix[qp]
   q_bits = Q_BITS + qp_per
   # skip DC
-  it = iter(blk)
-  next(it)
-  for _coeff in it:
+  first = True
+  for _coeff in blk:
+    if first:
+      first = False
+      continue
     coeff = _coeff()
     scaled = abs(coeff) * scale_comp_AC[_coeff.origin_within(blk)[1:]]()
     level = (scaled + offset_comp) >> q_bits
@@ -37,8 +40,8 @@ def quant_ac4x4_normal(blk, qp) -> bool:
       level = min(level, CAVLC_LEVEL_LIMIT)
       # coeff cost in JM?
       level = abs(level) * -1 if coeff < 0 else abs(level)
-      _coeff[ALL] = rshift_rnd_sf((level * inv_scale_comp_AC[_coeff.origin_within(blk)[1:]]()) << qp_per, 4)
+      _coeff[UNIT] = rshift_rnd_sf((level * inv_scale_comp_AC[_coeff.origin_within(blk)[1:]]()) << qp_per, 4)
       is_nonzero = True
     else:
-      _coeff[ALL] = 0
+      _coeff[UNIT] = 0
   return is_nonzero      

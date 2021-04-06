@@ -7,62 +7,66 @@ from config import *
 # and see if that isn't allowed
 
 # here, the reconstructed pixels are completely in other mbs
-def intra_16x16_luma_m0(mb) -> Optional[Block[int]]:
+def intra_16x16_luma_m0[T,N:int](mb: View[T,N]) -> Optional[Block[T,N]]:
   f,h,w = mb.origin()
   if h > 0:
     row = mb[0,-1,:]
     pred = Block(mb)
-    for i,r in enumerate(row):
+    i = 0
+    for r in scan(row):
       pred[0,:,i] = r()
+      i += 1
     return pred
   return None
   
-def intra_16x16_luma_m1(mb) -> Optional[Block[int]]:
+def intra_16x16_luma_m1[T,N:int](mb: View[T,N]) -> Optional[Block[T,N]]:
   f,h,w = mb.origin()
   if w > 0:
     col = mb[0,:,-1]
     pred = Block(mb)
-    for i,c in enumerate(col):
+    i = 0
+    for c in scan(col):
       pred[0,i,:] = c()
+      i += 1
     return pred
   return None
 
-def intra_16x16_luma_m2(mb) -> Optional[Block[int]]:
+def intra_16x16_luma_m2[T,N:int](mb: View[T,N]) -> Block[T,N]:
   f,h,w = mb.origin()
   if h > 0 and w > 0:
     row = mb[0,-1,:]
     col = mb[0,:,-1]
     # reductions
     s = 0
-    for r,c in zip(row,col):
+    for r,c in scan(row,col):
       s += r() + c()
-    pred = Block[int](mb)
+    pred = Block(mb)
     pred[:,:,:] = (s + 16) >> 5
     return pred
   elif w > 0:
     col = mb[0,:,-1]
     # reductions
     sum_y = 0
-    for c in col:
+    for c in scan(col):
       sum_y += c()
-    pred = Block[int](mb)
+    pred = Block(mb)
     pred[:,:,:] = (sum_y + 8) >> 4
     return pred
   elif h > 0:
     row = mb[0,-1,:]
     # reductions
     sum_x = 0
-    for r in row:
+    for r in scan(row):
       sum_x += r()
-    pred = Block[int](mb)
+    pred = Block(mb)
     pred[:,:,:] = (sum_x + 8) >> 4
     return pred    
   else:
-    pred = Block[int](mb)
+    pred = Block(mb)
     pred[:,:,:] = 1 << (bit_depth_y - 1)
     return pred
 
-def intra_16x16_luma_m3(mb) -> Optional[Block[int]]:
+def intra_16x16_luma_m3[T,N:int](mb: View[T,N]) -> Optional[Block[T,N]]:
   f,h,w = mb.origin()
   if h > 0 and w > 0:
     row = mb[0,-1,:]
@@ -70,19 +74,23 @@ def intra_16x16_luma_m3(mb) -> Optional[Block[int]]:
     # pull out the pieces to compute H    
     H = 0
     pH1 = row[0,:,8:]
-    pH2 = row[0,:,:7]    
-    for r,h1,h2 in zip(range(8),pH1, pH2):
+    pH2 = row[0,:,:7]   
+    r = 0
+    for h1,h2 in scan(pH1, pH2):
       H += (r+1)*(h1()-h2())      
+      r += 1
     # and the pieces for V
     V = 0
     pV1 = col[0,8:,:]
     pV2 = col[0,:7,:]
-    for r,v1,v2 in zip(range(8),pV1, pV2):
+    r = 0
+    for v1,v2 in scan(pV1, pV2):
       V += (r+1)*(v1()-v2())          
-    a = 16 * (col(0,15,0)+row(0,0,16))
+      r += 1
+    a = 16 * (col(0,15,0)+row(0,0,15))
     b = (5 * H + 32) >> 6
     c = (5 * V + 32) >> 6
-    pred = Block[int](mb)
+    pred = Block(mb)
     for y in range(16):
       for x in range(16):
         clip_val = (a + b * (x - 7) + c * (y - 7) + 16) >> 5
@@ -97,7 +105,7 @@ def chroma_col_and_row_avail(smb, mb, pred):
   row = mb[0,-1,w:w+4]
   col = mb[0,h:h+4,-1]
   s = 4
-  for r,c in zip(row,col):
+  for r,c in scan(row,col):
     s += r() + c()
   s >>= 3
   pred[smb][:,:,:] = s
@@ -106,7 +114,7 @@ def chroma_col_avail(smb, mb, pred):
   _,h,w = smb.origin_within(mb)
   col = mb[0,h:h+4,-1]
   s = 2
-  for c in col:
+  for c in scan(col):
     s += c()
   s >>= 2
   pred[smb][:,:,:] = s
@@ -115,7 +123,7 @@ def chroma_row_avail(smb, mb, pred):
   _,h,w = smb.origin_within(mb)
   row = mb[0,-1,w:w+4]
   s = 2
-  for r in row:
+  for r in scan(row):
     s += r()
   s >>= 2
   pred[smb][:,:,:] = s
@@ -125,7 +133,7 @@ def chroma_none_avail(smb, pred):
 
 # for 8x8 blocks since 4:2:0
 # I believe that even though we do things on a 4x4 level, it still uses the 8x8 surrounding data
-def intra_chroma_420_DC_only(mb):
+def intra_chroma_420_DC_only[T,N:int](mb: View[T,N]) -> Block[T,N]:
   f,h,w = mb.origin()
   pred = Block(mb)
   # split into 4x4 subblocks
@@ -184,9 +192,11 @@ def intra_chroma_horiz(umb,vmb):
     vpred = Block(vmb)
     ucol = umb[0,:,-1]
     vcol = vmb[0,:,-1]
-    for i,uc,vc in enumerate(zip(ucol,vcol)):
+    i = 0
+    for uc,vc in scan(ucol,vcol):
       upred[0,i,:] = uc()
       vpred[0,i,:] = vc()
+      i += 1
     return upred,vpred
   else:
     return None,None
@@ -199,9 +209,11 @@ def intra_chroma_vert(umb,vmb):
     vpred = Block(vmb)
     urow = umb[0,-1,:]
     vrow = vmb[0,-1,:]
-    for i,ur,vr in enumerate(zip(urow,vrow)):
+    i = 0
+    for ur,vr in scan(urow,vrow):
       upred[0,:,i] = ur()
       vpred[0,:,i] = vr()
+      i += 1
     return upred,vpred
   else:
     return None,None
@@ -210,31 +222,35 @@ def intra_chroma_plane(umb,vmb):
   assert False
 
 # TODO filtering for 8x8
-def intra_8x8_luma_vert(smb, frblk) -> Optional[Block[int]]:
+def intra_8x8_luma_vert(smb, frblk):
   ref = frblk[smb]
   f,h,w = ref.origin()
   if h > 0:
     pred = Block(smb)
     row = ref[0,-1,:]
-    for prow,r in enumerate(row):
+    prow = 0
+    for r in scan(row):
       pred[0,prow,:] = r()
+      prow += 1
     return pred
   else:
     return None
 
-def intra_8x8_luma_horiz(smb, frblk) -> Optional[Block[int]]:
+def intra_8x8_luma_horiz(smb, frblk):
   ref = frblk[smb]
   f,h,w = ref.origin()
   if w > 0:
     pred = Block(smb)
     col = ref[0,:,-1]
-    for pcol,c in enumerate(col):
+    pcol = 0
+    for c in scan(col):
       pred[0,:,pcol] = c()
+      pcol += 1
     return pred
   else:
     return None
 
-def intra_8x8_luma_DC(smb, rblk) -> Optional[Block[int]]:  
+def intra_8x8_luma_DC(smb, rblk):
   ref = rblk[smb]
   f,h,w = ref.origin()
   if h > 0 and w > 0:
@@ -267,7 +283,7 @@ def intra_8x8_luma_DC(smb, rblk) -> Optional[Block[int]]:
     pred[:,:,:] = 1 << (bit_depth_y - 1)    
     return pred
 
-def intra_8x8_luma_ddl(smb, frblk) -> Optional[Block[int]]:
+def intra_8x8_luma_ddl(smb, frblk):
   ref = frblk[smb]
   f,h,w = ref.origin()
   if h > 0:
@@ -281,7 +297,7 @@ def intra_8x8_luma_ddl(smb, frblk) -> Optional[Block[int]]:
   else:
     return None
 
-def intra_8x8_luma_ddr(smb, frblk) -> Optional[Block[int]]:
+def intra_8x8_luma_ddr(smb, frblk):
   ref = frblk[smb]
   f,h,w = ref.origin()
   if h > 1 and w > 1:
@@ -299,7 +315,7 @@ def intra_8x8_luma_ddr(smb, frblk) -> Optional[Block[int]]:
     return None
 
 # HMM OPT THOUGHT...can we automatically vectorize some of these things to be element-wise like?
-def intra_8x8_luma_vertr(smb, frblk) -> Optional[Block[int]]:
+def intra_8x8_luma_vertr(smb, frblk):
   ref = frblk[smb]
   f,h,w = ref.origin()
   if h > 1 and w > 1:
@@ -322,7 +338,7 @@ def intra_8x8_luma_vertr(smb, frblk) -> Optional[Block[int]]:
   else:
     return None
 
-def intra_8x8_luma_horizd(smb, frblk) -> Optional[Block[int]]:
+def intra_8x8_luma_horizd(smb, frblk):
   ref = frblk[smb]
   f,h,w = ref.origin()
   if h > 1 and w > 1:
@@ -345,7 +361,7 @@ def intra_8x8_luma_horizd(smb, frblk) -> Optional[Block[int]]:
   else:
     return None
 
-def intra_8x8_luma_vertl(smb, frblk) -> Optional[Block[int]]:
+def intra_8x8_luma_vertl(smb, frblk):
   ref = frblk[smb]
   f,h,w = ref.origin()
   if h > 0:
@@ -359,7 +375,7 @@ def intra_8x8_luma_vertl(smb, frblk) -> Optional[Block[int]]:
     return pred
   return None
 
-def intra_8x8_luma_horizu(smb, frblk) -> Optional[Block[int]]:
+def intra_8x8_luma_horizu(smb, frblk):
   ref = frblk[smb]
   f,h,w = ref.origin()
   if w > 0:

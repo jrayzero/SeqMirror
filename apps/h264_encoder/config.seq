@@ -45,17 +45,17 @@ offset_comp = 174592
 _scale_comp_DC = Array[int](16)
 for i in range(16):
   _scale_comp_DC[i] = 8192
-scale_comp_DC = Block[int]([4,4],_scale_comp_DC)
+scale_comp_DC = Block[int,2]((4,4),_scale_comp_DC)
 
 # AC
 _scale_comp_AC_list = [8192, 5243, 8192, 5243, 5243, 3355, 5243, 3355, 8192, 5243, 8192, 5243, 5243, 3355, 5243, 3355]
 _scale_comp_AC = Array[int](16)
 for i in range(16):
   _scale_comp_AC[i] = _scale_comp_AC_list[i]
-scale_comp_AC = Block[int]([4,4],_scale_comp_AC)
+scale_comp_AC = Block[int,2]((4,4),_scale_comp_AC)
 
 _inv_scale_comp_AC_list = [256, 320, 256, 320, 320, 400, 320, 400, 256, 320, 256, 320, 320, 400, 320, 400]
 _inv_scale_comp_AC = Array[int](16)
 for i in range(16):
   _inv_scale_comp_AC[i] = _inv_scale_comp_AC_list[i]
-inv_scale_comp_AC = Block[int]([4,4],_inv_scale_comp_AC)
+inv_scale_comp_AC = Block[int,2]((4,4),_inv_scale_comp_AC)

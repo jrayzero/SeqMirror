@@ -1,6 +1,6 @@
 from cola.block import *
 
-def forward4x4[T](inp_blk: View[T], out_blk: View[int]):
+def forward4x4[T](inp_blk: View[T,3], out_blk: View[int,3]):
   # horizontal
   for r in range(4):
     in_row = inp_blk[0,r,:]
@@ -33,7 +33,7 @@ def forward4x4[T](inp_blk: View[T], out_blk: View[int]):
     in_col[0,2,0] = t0 - t1
     in_col[0,3,0] = t3 - (t2 << T(1))
 
-def hadamard4x4[T](inp_blk: View[T], out_blk: Block[T]):
+def hadamard4x4[T](inp_blk: View[T,3], out_blk: Block[T,3]):
   # horizontal
   for r in range(4):
     in_row = inp_blk[0,r,:]

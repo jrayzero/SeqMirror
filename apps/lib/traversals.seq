@@ -14,7 +14,7 @@ def _zigzag(N: int, i: int = 1, upper: bool = True):
     link _zigzag(N, j, upper)    
 
 def zigzag(N: int):
-  return AStep([0,1]) + _zigzag(N) + AStep([1,-1]) + AStep([0,1])
+  return AStep((0,1)) + _zigzag(N) + AStep((1,-1)) + AStep((0,1))
 
 # 2 is number of dimensions
 @traversal
@@ -32,7 +32,7 @@ def _diagonal(N: int, i:int=1, upper:bool=True):
     link _diagonal(N,  i-1, upper)
 
 def diagonal(N: int):
-  return AStep([1,0]) + _diagonal(N)
+  return AStep((1,0)) + _diagonal(N)
 
 @traversal
 def hilbert(order: int, i: int = 0, which: bool = True):

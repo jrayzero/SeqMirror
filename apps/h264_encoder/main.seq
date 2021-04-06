@@ -6,7 +6,7 @@ from transform import *
 from partition import *
 from cost_functions import *
 from cola.block import *
-from cola.parallel_support import *
+#from cola.parallel_support import *
 from ..lib.traversals import zigzag
 
 def xform_quant_luma_16x16(mb, intra_coded_mb):
@@ -32,7 +32,7 @@ def xform_quant_luma_16x16(mb, intra_coded_mb):
     ihadamard4x4(coded_DCs, mb_reconstruction[0,::4,::4])
    # iquant DCs
     for i in mb_reconstruction[0,::4,::4]:
-      i[ALL] = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
+      i[UNIT] = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
   else:
     mb_reconstruction[0,::4,::4] = 0
   ### AC AND IXFORM ###
@@ -43,33 +43,26 @@ def xform_quant_luma_16x16(mb, intra_coded_mb):
   recons_split = split_16x16_to_4x4(mb_reconstruction)[0]
   for coded_4x4,recons_4x4 in zip(coded_split,recons_split):
     # quant 4x4 ac block
-    quant_ac4x4_normal(coded_4x4, QP)
+    quant_ac4x4_normal(coded_4x4, QP)    
     # inverse quantize
-    # JM doesn't do this inverse??
-    #citer = iter(recons_4x4)
-    #next(citer) # skip this DC
-    #for c in citer:
-    #  c[ALL] = rshift_rnd_sf((c() * iscale) << qp_per_matrix[QP], 6)
     # inverse transform    
     inverse4x4(coded_4x4, recons_4x4)
 
   # fix coded so that it has the correct DC values again
   # It now represents the 16x16 block you'd send off to the entropy coder
-  coded[0,::4,::4] = coded_DCs
   # okay now lets finish off the reconstruction by adding on the residual
+  coded[0,::4,::4] = coded_DCs
   for mbr_4x4,pred_4x4 in zip(split_16x16_to_4x4(mb_reconstruction)[0], split_16x16_to_4x4(intra_coded_mb)[0]):
-    for mbr,pred in zip(zigzag(4)(mbr_4x4.fix_front()),zigzag(4)(pred_4x4.fix_front())):
+    # TODO allow scan here
+    for mbr,pred in zip(zigzag(4)(mbr_4x4.fix_front[1]()),zigzag(4)(pred_4x4.fix_front[1]())):
       val = rshift_rnd_sf(mbr(), DQ_BITS) + pred()
       val = max(0, val)
       val = min(max_imgpel_value, val)
-      mbr[ALL] = val
+      mbr[UNIT] = val
   return mb_reconstruction,coded
 
+print('starting')
 y_frames,u_frames,v_frames = ingest_yuv_420_interleaved_all(False)
-
-y_cgrid = y_frames.base.cgrid
-u_cgrid = u_frames.base.cgrid
-v_cgrid = v_frames.base.cgrid
 
 cola_out = open('cola_out.txt', 'w')
 tick = _C.seq_time_monotonic()
@@ -81,19 +74,17 @@ for frame_idx,f in enumerate(range(nframes)):
   v_frame = v_frames[f,:,:]
   # luma
   y_mb_idx = 0
-  for r in range(0,y_frame.dims(1),16):
-    for c in range(0,y_frame.dims(2),16):
+  for r in range(0,y_frame.dims()[1],16):
+    for c in range(0,y_frame.dims()[2],16):
       mb = y_frame[0,r:r+16,c:c+16]            
       ### 16x16 Intra-Prediction 
       intra_16x16_pred_m0 = intra_16x16_luma_m0(mb)
       intra_16x16_pred_m1 = intra_16x16_luma_m1(mb)
       intra_16x16_pred_m2 = intra_16x16_luma_m2(mb)
       intra_16x16_pred_m3 = intra_16x16_luma_m3(mb)
-
       costs_16x16 = [INT_MAX] * 4
-
-      recons_16x16: list[Optional[Block[int]]] = [None,None,None,None]
-      quant_16x16: list[Optional[Block[int]]] = [None,None,None,None]
+      recons_16x16: list[Optional[Block[int,3]]] = [None,None,None,None]
+      quant_16x16: list[Optional[Block[int,3]]] = [None,None,None,None]
       if intra_16x16_pred_m0:
         recons,quant = xform_quant_luma_16x16(mb, ~intra_16x16_pred_m0)
         cost = sad(mb,recons)
@@ -106,12 +97,12 @@ for frame_idx,f in enumerate(range(nframes)):
         recons_16x16[1] = recons
         quant_16x16[1] = quant
         costs_16x16[1] = cost
-      if intra_16x16_pred_m2:
-        recons,quant = xform_quant_luma_16x16(mb, ~intra_16x16_pred_m2)
-        cost = sad(mb,recons)
-        recons_16x16[2] = recons
-        quant_16x16[2] = quant
-        costs_16x16[2] = cost
+      # dc mode is always available
+      recons,quant = xform_quant_luma_16x16(mb, intra_16x16_pred_m2)
+      cost = sad(mb,recons)
+      recons_16x16[2] = recons
+      quant_16x16[2] = quant
+      costs_16x16[2] = cost
       if intra_16x16_pred_m3:
         recons,quant = xform_quant_luma_16x16(mb, ~intra_16x16_pred_m3)
         cost = sad(mb,recons)
@@ -125,15 +116,15 @@ for frame_idx,f in enumerate(range(nframes)):
         if costs_16x16[i] < min_cost_16x16:
           min_cost_16x16 = costs_16x16[i]
           min_idx = i
-
 #      stats.write('frame: ' + str(frame_idx) + ', mb: ' + str(y_mb_idx) + ' = mode ' + str(min_idx) + '\n')
       y_mb_idx += 1
+
       # wrote back the reconstruction to the input mb since we don't need the raw values anymore
       mb[:,:,:] = recons_16x16[min_idx]
 
   # chroma
-  for r in range(0,u_frame.dims(1),8):
-    for c in range(0,u_frame.dims(2),8):
+  for r in range(0,u_frame.dims()[1],8):
+    for c in range(0,u_frame.dims()[2],8):
       umb = u_frame[0,r:r+8,c:c+8]
       vmb = v_frame[0,r:r+8,c:c+8]
       # in our case, just have the DC form, so don't need separate reconstruction
@@ -162,19 +153,19 @@ for frame_idx,f in enumerate(range(nframes)):
       if unonzero:
         ihadamard2x2(coded_uDCs, umb[0,::4,::4])
         for i in umb[0,::4,::4]:
-          i[ALL] = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
+          i[UNIT] = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
       else:
         umb[0,::4,::4] = 0
       if vnonzero:
         ihadamard2x2(coded_vDCs, vmb[0,::4,::4])
         for i in vmb[0,::4,::4]:
-          i[ALL] = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
+          i[UNIT] = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
       else:
         vmb[0,::4,::4] = 0
       # ACs
       ucoded[0,::4,::4] = umb[0,::4,::4]
       vcoded[0,::4,::4] = vmb[0,::4,::4]
-      for ucoded_4x4,vcoded_4x4,u_4x4,v_4x4 in zip(ucoded,vcoded, split_4x4(umb,8)[0], split_4x4(vmb,8)[0]):
+      for ucoded_4x4,vcoded_4x4,u_4x4,v_4x4 in zip(ucoded_split, vcoded_split, split_4x4(umb,8)[0], split_4x4(vmb,8)[0]):
         # should be a separate AC quant for cr, but w/e
         quant_ac4x4_normal(ucoded_4x4, QP)
         quant_ac4x4_normal(vcoded_4x4, QP)
@@ -183,15 +174,15 @@ for frame_idx,f in enumerate(range(nframes)):
       # okay these have the data to shove off to the entropy coder
       ucoded[0,::4,::4] = coded_uDCs
       vcoded[0,::4,::4] = coded_vDCs
-      # do the final reconstruction step
+     # do the final reconstruction step
       for urec_4x4,upred_4x4,vrec_4x4,vpred_4x4 in zip(split_4x4(umb,8)[0],split_4x4(upred,8)[0],split_4x4(vmb,8)[0],split_4x4(vpred,8)[0]):
-        for urec,upred,vrec,vpred in zip(zigzag(4)(urec_4x4.fix_front()),zigzag(4)(upred_4x4.fix_front()),zigzag(4)(vrec_4x4.fix_front()),zigzag(4)(vpred_4x4.fix_front())):
+        for urec,upred,vrec,vpred in zip(zigzag(4)(urec_4x4.fix_front[1]()),zigzag(4)(upred_4x4.fix_front[1]()),zigzag(4)(vrec_4x4.fix_front[1]()),zigzag(4)(vpred_4x4.fix_front[1]())):
           uval = rshift_rnd_sf(urec(), DQ_BITS) + upred()
           vval = rshift_rnd_sf(vrec(), DQ_BITS) + vpred()
           uval = max(0,uval)
           vval = max(0,vval)
-          urec[ALL] = uval
-          vrec[ALL] = vval 
+          urec[UNIT] = uval
+          vrec[UNIT] = vval 
 
 tock = _C.seq_time_monotonic()
 print(str(tock-tick) + 'ns (' + str((tock-tick)/1e9) + 's)')

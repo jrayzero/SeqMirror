@@ -175,6 +175,26 @@ class Multidim[T,N:int]:
     self.buffer_parent = parent
     self.cgrid = cgrid
 
+  # resets fix
+  def fix_front[F:int](self):
+    if F <= 0:
+      raise ColaError()
+    if F >= N:
+      raise ColaError()
+    # can only fix constants
+    if F == 1:
+      if self.dims[0] != 1:
+        raise ColaError()
+    elif F == 2:
+      if self.dims[0] != 1 or self.dims[1] != 1:
+        raise ColaError()
+    md = Multidim(self, False)
+    md.front_fixed = F
+    return md
+
+  def nfree_dims(self):
+    return N - self.front_fixed
+
   # GET_OFFSETTED_BUFFER_MAP
 
   def get_offsetted_buffer_map(self, offset: Tuple[int]) -> Tuple[int]:
@@ -224,6 +244,8 @@ class Multidim[T,N:int]:
   def origin(self):
     return tuple(~s.start for s in self.buffer_mapping)
 
+  # gets your origin relative to the tree_relative
+
   def origin_relative_to(self, tree_relative: Block[T,N]):
     return self.origin_relative_to(tree_relative.base)
 
@@ -260,12 +282,13 @@ class Multidim[T,N:int]:
     if self.cgrid != tree_relative.cgrid:
       raise ColaError("different ancestors")
     if N == 1:
-      return (self._do_origin_within((tree_relative.coord_mapping[0], Slice(0,0,1), Slice(0,0,1)))[0],)
+      return (self._do_origin_within(tree_relative),)
     elif N == 2:
-      res = self._do_origin_within((tree_relative.coord_mapping[0], tree_relative.coord_mapping[1], Slice(0,0,1)))
+      res = self._do_origin_within(tree_relative)
       return (res[0],res[1])
-    else:
-      return self._do_origin_within(tree_relative.coord_mapping)
+    else:      
+      res = self._do_origin_within(tree_relative)
+      return res
 
     # TODO check that self is valid within tree_relative, meaning has a multiple location of tree_relative's stride
     # (other wise it doesn't make sense b/c you wouldn't be WITHIN tree_relative. it would just be relative to)
@@ -304,11 +327,11 @@ class Multidim[T,N:int]:
         raise ColaError("don't know what to do here")
     b0,b1,b2,c0,c1,c2 = self._do_getitem(self._do_getitem_coverage(region))
     if N == 1:
-      return Multidim[T,N](self.buffer, (1,0,0), (b0,b1,b2), (c0,c1,c2), self.buffer_parent, self.cgrid)
+      return Multidim[T,N](self.buffer, (b0.compute_range(),0,0), (b0,b1,b2), (c0,c1,c2), self.buffer_parent, self.cgrid)
     elif N == 2:
-      return Multidim[T,N](self.buffer, (1,1,0), (b0,b1,b2), (c0,c1,c2), self.buffer_parent, self.cgrid)
+      return Multidim[T,N](self.buffer, (b0.compute_range(),b1.compute_range(),0), (b0,b1,b2), (c0,c1,c2), self.buffer_parent, self.cgrid)
     else:
-      return Multidim[T,N](self.buffer, (1,1,1), (b0,b1,b2), (c0,c1,c2), self.buffer_parent, self.cgrid)
+      return Multidim[T,N](self.buffer, (b0.compute_range(),b1.compute_range(),b2.compute_range()), (b0,b1,b2), (c0,c1,c2), self.buffer_parent, self.cgrid)
 
   def __getitem__(self, idx):
     if N != 1:
@@ -335,7 +358,7 @@ class Multidim[T,N:int]:
         raise ColaError("1 dim specified but need " + str(N))
     if N == 2:
       b0,b1,b2,c0,c1,c2 = self._do_getitem((idx[0],idx[1],0))
-      return Multidim[T,N](self.buffer, (b0.compute_range(),b1.compute_range(),0), (b0,b1,b2), (c0,c1,c2), self.buffer_parent, self.cgrid)     
+      return Multidim[T,N](self.buffer, (b0.compute_range(),b1.compute_range(),0), (b0,b1,b2), (c0,c1,c2), self.buffer_parent, self.cgrid)  
     elif N == 3:
       # frontfixed should be 1
       b0,b1,b2,c0,c1,c2 = self._do_getitem((0,idx[0],idx[1]))
@@ -354,9 +377,9 @@ class Multidim[T,N:int]:
     rcm1 = region.coord_mapping[1]
     rcm2 = region.coord_mapping[2]
     rel_origin = (~rcm0.start-~scm0.start, ~rcm1.start-~scm1.start, ~rcm2.start-~scm2.start)
-    new_slices = (Slice(rel_origin[0], rel_origin[0]+rcm0.compute_range(),1),
-                  Slice(rel_origin[1], rel_origin[1]+rcm1.compute_range(),1),
-                  Slice(rel_origin[2], rel_origin[2]+rcm2.compute_range(),1))
+    new_slices = (Slice(rel_origin[0], rel_origin[0]+rcm0.compute_range(), 1),
+                  Slice(rel_origin[1], rel_origin[1]+rcm1.compute_range(), 1),
+                  Slice(rel_origin[2], rel_origin[2]+rcm2.compute_range(), 1))
     return new_slices
 
   # TODO bug: If I try to pass the dim index as a generic, I get a not evaluatd error in the typechecker
@@ -395,6 +418,10 @@ class Multidim[T,N:int]:
     start = ~bmap.start + ~newmap.start * ~bmap.step
     stop = min(~bmap.start + ~newmap.stop * ~bmap.step, ~bmap.stop)    
     step = ~bmap.step * ~newmap.step
+    if start > stop:
+      cola_debug(bmap)
+      cola_debug(newmap)
+      raise ColaError()
     return start,stop,step
 
   # This computes just the new set of slices
@@ -457,18 +484,20 @@ class Multidim[T,N:int]:
             yield i * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + j * self.buffer_parent.dims[2] + k
     
   # similar to _do_linear_iteration, but doesn't actually linearize and returns a Multidim
+  # We iterate over straight ranges (instead of using the buffer mapping) because getitem does the mapping for us, 
+  # so we don't want to map twice
   def _do_slice_iteration(self):
     if N == 1:
-      for i in range(~self.buffer_mapping[0].start, ~self.buffer_mapping[0].stop, ~self.buffer_mapping[0].step):
+      for i in range(self.dims[0]):#~self.buffer_mapping[0].start, ~self.buffer_mapping[0].stop, ~self.buffer_mapping[0].step):
         yield self.__getitem__((i,))
     elif N == 2:
-      for i in range(~self.buffer_mapping[0].start, ~self.buffer_mapping[0].stop, ~self.buffer_mapping[0].step):
-        for j in range(~self.buffer_mapping[1].start, ~self.buffer_mapping[1].stop, ~self.buffer_mapping[1].step):
+      for i in range(self.dims[0]):#~self.buffer_mapping[0].start, ~self.buffer_mapping[0].stop, ~self.buffer_mapping[0].step):
+        for j in range(self.dims[1]):#~self.buffer_mapping[1].start, ~self.buffer_mapping[1].stop, ~self.buffer_mapping[1].step):
           yield self.__getitem__((i,j))
     else:
-      for i in range(~self.buffer_mapping[0].start, ~self.buffer_mapping[0].stop, ~self.buffer_mapping[0].step):
-        for j in range(~self.buffer_mapping[1].start, ~self.buffer_mapping[1].stop, ~self.buffer_mapping[1].step):          
-          for k in range(~self.buffer_mapping[2].start, ~self.buffer_mapping[2].stop, ~self.buffer_mapping[2].step):
+      for i in range(self.dims[0]):#~self.buffer_mapping[0].start, ~self.buffer_mapping[0].stop, ~self.buffer_mapping[0].step):
+        for j in range(self.dims[1]):#~self.buffer_mapping[1].start, ~self.buffer_mapping[1].stop, ~self.buffer_mapping[1].step):          
+          for k in range(self.dims[2]):#~self.buffer_mapping[2].start, ~self.buffer_mapping[2].stop, ~self.buffer_mapping[2].step):
             yield self.__getitem__((i,j,k))
       
   def __iter__(self):
@@ -517,17 +546,60 @@ class Multidim[T,N:int]:
     for l1,l2 in zip(sliced.linear_iter(),item.linear_iter()):
       sliced.buffer[l1] = item_buffer[l2]
 
+  # MATH
+  def __sub__(self, other: Multidim[T,N]):
+    if self.nunits() != other.nunits():
+      raise ColaError()
+    md = Multidim(self, True)
+    idx = 0 
+    for i,j in zip(self.linear_iter(),other.linear_iter()):
+      md.buffer[idx] = self.buffer[i] - other.buffer[j]
+      idx += 1
+    return md
+
+  def __sub__(self, other: T):
+    md = Multidim(self, True)
+    idx = 0
+    for i in self.linear_iter():
+      md.buffer[idx] = self.buffer[i] - other
+      idx +=1 
+    return md
+
+  def __rsub__(self, other: T):
+    md = Multidim(self, True)
+    idx = 0
+    for i in self.linear_iter():
+      md.buffer[idx] = other - self.buffer[i]
+      idx += 1
+    return md
+
 @extend
 class Block[T,N:int]:
+
+  def __init__(self, blk: Block[T,N]):
+    self.base = Multidim[T,N](blk.base, True)
+
+  def __init__(self, blk: View[T,N]):
+    self.base = Multidim[T,N](blk.base, True)
 
   def __init__(self, *dims):
     self.base = Multidim[T,N](tuple(d for d in dims))
 
   def __init__(self, dims, data: Array[T]):
-    self.base = Multidim[T,N](dims, data)
+    self.base = Multidim[T,N](dims, data)    
+
+  # special constructor for arithmetic
+  def __init__(self, md: Multidim[T,N]):
+    self.base = md
 
   def __getitem__(self, idx):
     return View(self.base.__getitem__(idx))
+
+  def __getitem__(self, other: View[T,N]):
+    return View(self.base.__getitem__(other.base))
+
+  def __getitem__(self, other: Block[T,N]):
+    return View(self.base.__getitem__(other.base))
 
   def __setitem__(self, idx, val):
     self.base.__setitem__(idx, val)
@@ -536,14 +608,47 @@ class Block[T,N:int]:
     for it in iter(self.base):
       yield View(it)
 
+  def __call__(self, *idxs):
+    return self.base.__call__(*idxs)
+
+  def fix_front[F:int](self):
+    return View(self.base.fix_front[F]())
+
+  def nfree_dims(self):
+    return self.base.nfree_dims()
+
   def __str__(self):
     return 'block\n' + str(self.base)
 
+  def __sub__(self, other: Block[T,N]):
+    return Block(self.base - other.base)
+
+  def __sub__(self, other: View[T,N]):
+    return Block(self.base - other.base)
+
+  def __sub__(self, other: T):
+    return Block(self.base - other)
+
+  def __rsub__(self, other: T):
+    return Block(self.base.__rsub__(other))
+
 @extend
 class View[T,N:int]:
+
+  def __init__(self, other: Block[T,N]):
+    self.base = other.base
+
+  def __init__(self, other: View[T,N]):
+    self.base = other.base
   
   def __init__(self, other: Multidim[T,N]):
     self.base = other
+
+  def __getitem__(self, other: View[T,N]):
+    return View(self.base.__getitem__(other.base))
+
+  def __getitem__(self, other: Block[T,N]):
+    return View(self.base.__getitem__(other.base))
 
   def __getitem__(self, idx):
     return View(self.base.__getitem__(idx))
@@ -554,8 +659,55 @@ class View[T,N:int]:
   def __call__(self, *idxs):
     return self.base.__call__(*idxs)
 
+  def __iter__(self):
+    for it in iter(self.base):
+      yield View(it)
+
   def __str__(self):
     return 'view\n' + str(self.base)
+
+  def dims(self):
+    if N == 1:
+      return (self.base.dims[0],)
+    elif N == 2:
+      return (self.base.dims[0],self.base.dims[1])
+    else:
+      return self.base.dims
+
+  def origin(self):
+    if N == 1:
+      return (self.base.origin()[0],)
+    elif N == 2:
+      return (self.base.origin()[0],self.base.origin()[1])
+    else:
+      return self.base.origin()
+
+  def origin_within(self, container):
+    if N == 1:
+      return (self.base.origin_within(container)[0],)
+    elif N == 2:
+      ow = self.base.origin_within(container)
+      return (ow[0], ow[1])
+    else:
+      return self.base.origin_within(container)
+
+  def fix_front[F:int](self):
+    return View(self.base.fix_front[F]())
+
+  def nfree_dims(self):
+    return self.base.nfree_dims()
+
+  def __sub__(self, other: Block[T,N]) -> Block[T,N]:
+    return Block(self.base - other.base)
+
+  def __sub__(self, other: View[T,N]) -> Block[T,N]:
+    return Block(self.base - other.base)
+
+  def __sub__(self, other: T) -> Block[T,N]:
+    return Block(self.base - other)
+
+  def __rsub__(self, other: T) -> Block[T,N]:
+    return Block(self.base.__rsub__(other))
 
 def scan(*args):
   if staticlen(args) == 0:

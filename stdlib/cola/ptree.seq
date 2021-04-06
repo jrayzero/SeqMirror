@@ -1,35 +1,35 @@
 from cola.block import *
 
 # this is basically just a collection of leaf nodes
-class AndPTree[T]:
+class AndPTree[T,N:int]:
 
   # if filled in, it's a leaf
-  leaf: Optional[View[T]]
+  leaf: Optional[View[T,N]]
 
   # if filled in, it's a root
-  root: Optional[View[T]]
+  root: Optional[View[T,N]]
 
   # filled in if !leaf and !root
-  children: list[AndPTree[T]]
+  children: list[AndPTree[T,N]]
 
-  def __init__(self, root: Block[T]):
+  def __init__(self, root: Block[T,N]):
     self.children = []
     self.root = View(root)
 
-  def __init__(self, root: View[T]):
+  def __init__(self, root: View[T,N]):
     self.children = []
     self.root = root
 
   def __init__(self):
     self.children = []
 
-  def set_leaf(self, leaf: Block[T]):
+  def set_leaf(self, leaf: Block[T,N]):
     self.leaf = View(leaf)
 
-  def set_leaf(self, leaf: View[T]):
+  def set_leaf(self, leaf: View[T,N]):
     self.leaf = leaf
 
-  def add_child(self, child: AndPTree[T]):
+  def add_child(self, child: AndPTree[T,N]):
     assert not self.leaf
     if self.root:
       assert len(self.children) == 0
@@ -40,7 +40,7 @@ class AndPTree[T]:
       # don't merge and nodes here b/c it just makes it completely flat (maybe that's fine though?)
       self.children.append(child)
 
-  def reset_child(self, idx: int, child: AndPTree[T]):
+  def reset_child(self, idx: int, child: AndPTree[T,N]):
     assert idx < len(self.children)
     self.children[idx] = child
 
@@ -83,16 +83,16 @@ class AndPTree[T]:
 
   def clone(self):
     if self.leaf:
-      cloned = AndPTree()
+      cloned = AndPTree[T,N]()
       cloned.set_leaf(self.leaf)
       return cloned
     elif self.root:
-      cloned = AndPTree(self.root)
+      cloned = AndPTree[T,N](self.root)
       for child in self.children:
         cloned.add_child(child.clone())
       return cloned
     else:
-      cloned = AndPTree()
+      cloned = AndPTree[T,N]()
       for child in self.children:
         cloned.add_child(child.clone())
       return cloned
@@ -119,7 +119,7 @@ class AndPTree[T]:
           return False
     return True
 
-class PTree[T]:
+class PTree[T,N:int]:
 
   is_and_node: bool
 
@@ -128,22 +128,22 @@ class PTree[T]:
   nandtrees: int
 
   # if filled in, it's a leaf
-  leaf: Optional[View[T]]
+  leaf: Optional[View[T,N]]
 
   # if filled in, it's a root
-  root: Optional[View[T]]
+  root: Optional[View[T,N]]
 
   # filled in if !leaf and !root
-  children: list[PTree[T]]
+  children: list[PTree[T,N]]
 
-def And[T](nodes):
-  pt = PTree[T](True)
+def And[T,N:int](nodes):
+  pt = PTree[T,N](True)
   for node in nodes:
     pt.add_child(node)
   return pt
 
-def Or[T](nodes):
-  pt = PTree[T](False)
+def Or[T,N:int](nodes):
+  pt = PTree[T,N](False)
   for node in nodes:
     pt.add_child(node)
   return pt
@@ -151,7 +151,7 @@ def Or[T](nodes):
 # each PTree is also a tree node
 # this tree is a little different than how I've done it before. 
 @extend
-class PTree[T]:
+class PTree[T,N:int]:
     
   # leaf nodes have no children
   # root nodes have only one child (and/or node)
@@ -162,14 +162,14 @@ class PTree[T]:
     self.is_and_node = False
     self.is_or_node = False
 
-  def __init__(self, root: Block[T]):
+  def __init__(self, root: Block[T,N]):
     self.children = []
     self.root = View(root)
     self.nandtrees = 0
     self.is_and_node = False
     self.is_or_node = False
 
-  def __init__(self, root: View[T]):
+  def __init__(self, root: View[T,N]):
     self.children = []
     self.root = root
     self.nandtrees = 0
@@ -184,24 +184,24 @@ class PTree[T]:
 
   # shorthand for creating and trees
   
-  def __init__(self, root, node: PTree[T]):
+  def __init__(self, root, node: PTree[T,N]):
     self.__init__(root)
     self.add_child(node)
 
   def make_andor_child(self, is_and_child: bool):
-    pt = PTree[T](is_and_child)
+    pt = PTree[T,N](is_and_child)
     self.add_child(pt)
     return pt
 
-  def set_leaf(self, leaf: Block[T]):
+  def set_leaf(self, leaf: Block[T,N]):
     self.leaf = View(leaf)
 
-  def set_leaf(self, leaf: View[T]):
+  def set_leaf(self, leaf: View[T,N]):
     self.leaf = leaf
 
   # this basically adds a subtree as a "leaf". You can do this with And/Or nodes
   # it's the same method so that we can use pt_leaf still (lets you merge ptrees together)
-  def set_leaf(self, leafish: PTree[T]):
+  def set_leaf(self, leafish: PTree[T,N]):
     assert self.is_and_node or self.is_or_node
     self.add_child(leafish)
 
@@ -210,14 +210,14 @@ class PTree[T]:
     assert pt.root
     self.add_child(pt)    
 
-  def add_child(self, child: PTree[T]):
+  def add_child(self, child: PTree[T,N]):
     assert not self.leaf
     if self.root:
       assert len(self.children) == 0
     if child.root:
       # if this has no children, it becomes a leaf node
       if len(child.children) == 0:
-        pt = PTree[T]()
+        pt = PTree[T,N]()
         pt.set_leaf(~child.root)
         self.children.append(pt)
       else:
@@ -258,7 +258,7 @@ class PTree[T]:
     return self._generate_andtrees()
 
   # get a particular andtree
-  def __getitem__(self, idx: int) -> AndPTree[T]:
+  def __getitem__(self, idx: int) -> AndPTree[T,N]:
     it = iter(self)
     i = 0
     while i < idx:
@@ -297,11 +297,11 @@ class PTree[T]:
         apt = AndPTree(~self.root)
         yield apt
     elif self.leaf:
-      apt = AndPTree()
+      apt = AndPTree[T,N]()
       apt.set_leaf(~self.leaf)
       yield apt
     elif self.is_and_node:
-      andn = AndPTree[T]() # this tree gets continually modified every time gen is called
+      andn = AndPTree[T,N]() # this tree gets continually modified every time gen is called
       gen = self._generate_and_subtree(0, andn)
       idx = 0
       for i in range(self.nandtrees):
@@ -316,7 +316,7 @@ class PTree[T]:
         idx = 0
         for i in range(child.nandtrees):
           idx += 1
-          andn = AndPTree()          
+          andn = AndPTree[T,N]()          
           n = next(gen)
           andn.add_child(n)
           yield andn
@@ -352,22 +352,22 @@ class PTree[T]:
         return False
     return True
 
-  def permute(self, *new_order) -> PTree[T]:
+  def permute(self, *new_order) -> PTree[T,N]:
     if self.leaf:
       return self # can't permute this
     # if this is a root, go down one level and permute those children, otherwise, directly permute
     if self.root:
       child = self.children[0]
       assert len(child.children) == len(new_order)
-      new_child = PTree[T](child.is_and_node)
+      new_child = PTree[T,N](child.is_and_node)
       for i in new_order:
         new_child.add_child(child.children[i])
-      new_root = PTree[T](self.root)
+      new_root = PTree[T,N](self.root)
       new_root.add_child(new_child)
       return new_root
     else:
       assert len(self.children) == len(new_order)
-      new_tree = PTree[T](self.is_and_node)
+      new_tree = PTree[T,N](self.is_and_node)
       for i in new_order:
         new_tree.add_child(self.children[i])
       return new_tree      

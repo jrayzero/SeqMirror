@@ -492,7 +492,7 @@ class Multidim[T,N:int]:
         s += 'dim ' + str(i) + '\n'
         for j in range(~self.buffer_mapping[1].start, ~self.buffer_mapping[1].stop, ~self.buffer_mapping[1].step):          
           for k in range(~self.buffer_mapping[2].start, ~self.buffer_mapping[2].stop, ~self.buffer_mapping[2].step):
-            s += str(i * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + j * self.buffer_parent.dims[2] + k) + ' '
+            s += str(self.buffer[i * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + j * self.buffer_parent.dims[2] + k]) + ' '
           s += '\n'
     return s
 
@@ -500,15 +500,22 @@ class Multidim[T,N:int]:
   def __setitem__(self, idx, val: T):
     sliced = self.__getitem__(idx)
     # broadcast this idx
-    for i in self.linear_iter():
-      self.buffer[i] = val
+    for i in sliced.linear_iter():
+      sliced.buffer[i] = val
 
+  def __setitem__[P:int](self, idx, item: View[T,P]):
+    self.__setitem__(idx, item.base)
+
+  def __setitem__[P:int](self, idx, item: Block[T,P]):
+    self.__setitem__(idx, item.base)
+      
   def __setitem__[P:int](self, idx, item: Multidim[T,P]):
-    if self.nunits() != item.nunits():
+    sliced = self.__getitem__(idx)
+    if sliced.nunits() != item.nunits():
       raise ColaError("different size writing regions")
     item_buffer = item.buffer
-    for l1,l2 in zip(self.linear_iter(),item.linear_iter()):
-      self.buffer[l1] = item_buffer[l2]
+    for l1,l2 in zip(sliced.linear_iter(),item.linear_iter()):
+      sliced.buffer[l1] = item_buffer[l2]
 
 @extend
 class Block[T,N:int]:
@@ -516,21 +523,39 @@ class Block[T,N:int]:
   def __init__(self, *dims):
     self.base = Multidim[T,N](tuple(d for d in dims))
 
-#  def __getitem__(self):
-#    return self.base.
+  def __init__(self, dims, data: Array[T]):
+    self.base = Multidim[T,N](dims, data)
+
+  def __getitem__(self, idx):
+    return View(self.base.__getitem__(idx))
+
+  def __setitem__(self, idx, val):
+    self.base.__setitem__(idx, val)
 
   def __iter__(self):
     for it in iter(self.base):
       yield View(it)
+
+  def __str__(self):
+    return 'block\n' + str(self.base)
 
 @extend
 class View[T,N:int]:
   
   def __init__(self, other: Multidim[T,N]):
     self.base = other
+
+  def __getitem__(self, idx):
+    return View(self.base.__getitem__(idx))
+
+  def __setitem__(self, idx, val):
+    self.base.__setitem__(idx, val)
   
   def __call__(self, *idxs):
     return self.base.__call__(*idxs)
+
+  def __str__(self):
+    return 'view\n' + str(self.base)
 
 def scan(*args):
   if staticlen(args) == 0:

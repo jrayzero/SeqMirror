@@ -3,6 +3,7 @@
 #include "intra.h"
 #include "transform.h"
 #include <limits.h>
+#include "quant.h"
 
 // do prediction, call the transform loop, get the costs
 void pred_luma_16x16(struct macroblock *mb, FILE *fd) {
@@ -87,8 +88,8 @@ void xform_quant_luma_16x16(struct macroblock *mb, int *pred, FILE *fd) {
   // gather the DCs and transform them
   int *transformed_DCs = (int*)malloc(sizeof(int) * 16);
   hadamard4x4_DCs(transformed, transformed_DCs);
-  
-  
+  // quantize the DCs
+  bool nonzero = quant_dc4x4_normal(transformed_DCs, QP);
   for (int i = 0; i < 4; i+=1) {
     for (int j = 0; j < 4; j+=1) {
       fprintf(fd, "%d ", transformed_DCs[i*4+j]);

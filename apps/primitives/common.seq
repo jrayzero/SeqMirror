@@ -1,5 +1,8 @@
 bit_depth_y = 8
 bit_depth_c = 8
+QP = 28
+Q_BITS = 15
+offset_comp = 174592
 
 def make_cost_array(l):
   arr = Array[int](l)

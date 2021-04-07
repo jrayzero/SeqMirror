@@ -2,6 +2,7 @@ from transform import *
 from cola.block import *
 from common import *
 from intra import *
+from quant import *
 
 def xform_quant_luma_16x16(mb, pred, fd):
   residual = mb - pred
@@ -14,6 +15,8 @@ def xform_quant_luma_16x16(mb, pred, fd):
   DCs = transformed[0,::4,::4]
   transformed_DCs = Block(DCs)
   hadamard4x4(DCs, transformed_DCs)
+  # quantize the DCs
+  quant_dc4x4_normal(transformed_DCs, QP)
   fd.write(str(transformed_DCs))
   
 

@@ -1,0 +1,19 @@
+bit_depth_y = 8
+bit_depth_c = 8
+
+def make_cost_array(l):
+  arr = Array[int](l)
+  for i in range(l):
+    arr[i] = _C.get_int_max()
+  return arr
+
+def clip3(x,y,z):
+  if z < x:
+    return x
+  elif z > y:
+    return y
+  else:
+    return z
+
+def clip1y(x):
+  return clip3(0, (1<<bit_depth_y)-1,x)

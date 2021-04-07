@@ -405,7 +405,6 @@ class Multidim[T,N:int]:
 
   @inline
   def _convert0(self, idx: Slice) -> ColaSlice:
-    cola_debug(idx)
     d = self.dims[0]
     return idx.cola_adjust(d)
 
@@ -415,7 +414,6 @@ class Multidim[T,N:int]:
 
   @inline
   def _convert1(self, idx: Slice) -> ColaSlice:
-    cola_debug(idx)
     d = self.dims[1]
     return idx.cola_adjust(d)
 
@@ -625,6 +623,14 @@ class Block[T,N:int]:
 
   def __call__(self, *idxs):
     return self.base.__call__(*idxs)
+
+  def dims(self):
+    if N == 1:
+      return (self.base.dims[0],)
+    elif N == 2:
+      return (self.base.dims[0],self.base.dims[1])
+    else:
+      return self.base.dims  
 
   def fix_front[F:int](self):
     return View(self.base.fix_front[F]())

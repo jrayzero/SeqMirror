@@ -3,7 +3,7 @@ def ctick():
   return _C.seq_ctime_monotonic()
 
 @inline
-def ctock(ticky, niters: int = 1):
+def ctock(ticky, niters: int = 1, msg=""):
   tocky = _C.seq_ctime_monotonic()
-  print("Elapsed: " + str((tocky-ticky)//niters) + "ns\n")
+  print(msg + " Elapsed: " + str((tocky-ticky)//niters) + "ns\n")
   return tocky

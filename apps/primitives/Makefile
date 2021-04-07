@@ -4,17 +4,22 @@ CC=clang
 CFLAGS_TEST=-I. -g -O0
 CFLAGS_TIME=-I. -O3
 
-test: read_yuv.c main.c
-	$(CC) $(CFLAGS_TEST) -DDEBUG -o test main.c read_yuv.c
+CFILES=read_yuv.c main.c intra.c common.c
 
-time: read_yuv.c main.c
-	$(CC) $(CFLAGS_TIME) -DTIME -o time_c main.c read_yuv.c
+test: $(CFILES)
+	$(CC) $(CFLAGS_TEST) -DDEBUG -o test $(CFILES)
 
-timetest: read_yuv.c main.c
-	$(CC) $(CFLAGS_TIME) -DTIME -DDEBUG -o timetest_c main.c read_yuv.c
+time: $(CFILES)
+	$(CC) $(CFLAGS_TIME) -DTIME -o time_c $(CFILES)
+
+fastll: $(CFILES)
+	$(CC) $(CFLAGS_TIME)  -emit-llvm -S  $(CFILES)
+
+timetest: $(CFILES)
+	$(CC) $(CFLAGS_TIME) -DTIME -DDEBUG -o timetest_c $(CFILES)
 
 clean:
-	rm -rf *.o yuv.out test test.dSYM time_c timetest_c
+	rm -rf *.o yuv.out test test.dSYM time_c timetest_c main
 
 # SEQ
 

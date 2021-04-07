@@ -1,16 +1,73 @@
-from read_yuv import *
 from ticky import *
+from read_yuv import *
+from common import *
+from intra import *
 
-input_file = "foreman_part_qcif_x10.yuv"
-nframes = 10
+print('starting')
+input_file = "foreman_part_qcif_x100.yuv"
+nframes = 100
 height = 144
 width = 176
 niters = 10
+#fd = open('pred16x16.seq.out', 'w')
 tick = ctick()
 for n in range(niters):
   Y,U,V = ingest(input_file, height, width, nframes)
+  #mbidx = 0
+ # for f in range(nframes):
+ #   Y_frame = Y[f,:,:]
+ #   for r in range(0,Y.dims()[1],16):
+ #     for c in range(0,Y.dims()[2],16):
+ #       mb = Y_frame[0,r:r+16,c:c+16]
+ #       pred_16x16_vertical = Block(mb)
+ #       pred_16x16_horizontal = Block(mb)
+ #       pred_16x16_DC = Block(mb)
+ #       pred_16x16_planar = Block(mb)
+ #       costs = make_cost_array(4)
+ #       did_vertical = intra_16x16_luma_vertical(mb, pred_16x16_vertical)
+ #       did_horizontal = intra_16x16_luma_horizontal(mb, pred_16x16_horizontal)
+ #       intra_16x16_luma_DC(mb, pred_16x16_DC)
+ #       did_planar = intra_16x16_luma_planar(mb, pred_16x16_planar)
+        # compute fake costs
+#        if did_vertical:
+#          s = 0
+#          for p in pred_16x16_vertical:
+#            s += p()
+#          costs[0] = s
+#        if did_horizontal:
+#          s = 0
+#          for p in pred_16x16_horizontal:
+#            s += p()
+#          costs[1] = s
+#        s = 0
+#        for p in pred_16x16_DC:
+#          s += p()
+#        costs[2] = s
+#        if did_planar:
+#          s = 0
+#          for p in pred_16x16_planar:
+#            s += p()
+#          costs[3] = s
+#        print('mb: ' + str(mbidx) + ' => vert ' + str(did_vertical) + ', horiz ' + \
+#              str(did_horizontal) + ', dc 1, planar ' + str(did_planar))
+#        fd.write("macroblock " + str(mbidx) + " =>\n")
+#        if did_vertical:
+#          fd.write("vertical\n")
+#          fd.write(str(pred_16x16_vertical))
+#        if did_horizontal:
+#          fd.write("horizontal\n")
+#          fd.write(str(pred_16x16_horizontal))
+#        fd.write("DC\n")
+#        fd.write(str(pred_16x16_DC))
+#        if did_planar:
+#          fd.write("planar\n")
+#          fd.write(str(pred_16x16_planar))
+#        mbidx += 1
+                        
+        
 ctock(tick, niters)
-
+#fd.flush()
+#fd.close()
 #fd = open('yuv.seq.out','w')
 #fd.write('Y\n')
 #fd.write(str(Y))

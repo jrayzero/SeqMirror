@@ -3,36 +3,32 @@
 #include "common.h"
 
 struct video {
-    int height;
-    int width;
-    int planes;
-    int nframes;
-    int chroma_height;
-    int chroma_width;;
-    int *y_data;
-    int *u_data;
-    int *v_data;
+  int height;
+  int width;
+  int planes;
+  int nframes;
+  int chroma_height;
+  int chroma_width;;
+  int *y_data;
+  int *u_data;
+  int *v_data;
 };
 
-struct macroblock {
-    int mbAddrX;                    //!< current MB address
-    int mb_x;                       //!< current MB horizontal
-    int mb_y;                       //!< current MB vertical
-    int block_x;                    //!< current block horizontal
-    int block_y;                    //!< current block vertical
-    int pix_x;                      //!< current pixel horizontal
-    int pix_y;                      //!< current pixel vertical
-    int pix_c_x;                    //!< current pixel chroma horizontal
-    int pix_c_y;                    //!< current pixel chroma vertical
-    int subblock_x;                 //!< current subblock horizontal
-    int subblock_y;                 //!< current subblock vertical
-    int mbAddrA, mbAddrB, mbAddrC, mbAddrD;
-    unsigned char mbAvailA, mbAvailB, mbAvailC, mbAvailD;
+enum PLANE_TYPE {YPLANE, UPLANE, VPLANE};
 
-    int **intra16x16_pred;
-    int **intra16x16_pred_buf[2];    
-    // ptr to the video data
-    struct video *vid;
+struct macroblock {
+  enum PLANE_TYPE plane_type;
+  // location info
+  int frame_idx;
+  int origin_row;
+  int origin_col;
+  // holds prediction + eventually data to-be-entropy-coded
+  int *pred_16x16_vertical;
+  int *pred_16x16_horizontal;
+  int *pred_16x16_DC;
+  int *pred_16x16_planar;
+  // ptr to the video data  
+  struct video *vid;  
 };
 
 #endif

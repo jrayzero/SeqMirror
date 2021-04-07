@@ -51,6 +51,7 @@ def xform_quant_luma_16x16(mb, intra_coded_mb):
   # fix coded so that it has the correct DC values again
   # It now represents the 16x16 block you'd send off to the entropy coder
   # okay now lets finish off the reconstruction by adding on the residual
+
   coded[0,::4,::4] = coded_DCs
   for mbr_4x4,pred_4x4 in zip(split_16x16_to_4x4(mb_reconstruction)[0], split_16x16_to_4x4(intra_coded_mb)[0]):
     # TODO allow scan here
@@ -193,3 +194,4 @@ cola_out.write(str(v_frames) + '\n')
 cola_out.flush()
 cola_out.close()
 
+print((setitem_timer)/1e9)

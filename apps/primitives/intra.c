@@ -55,7 +55,8 @@ void intra16x16_luma_DC(struct macroblock *mb) {
     int *ref_row = &mb->vid->y_data[(mb->frame_idx * mb->vid->width * mb->vid->height) +
 				    (mb->origin_row-1)*mb->vid->width + mb->origin_col];
     for (int j = 0; j < MB_BLOCK_SIZE; j++) {
-      sum += *ref_row++;
+      sum += *ref_row;
+      ref_row++;
     }
     sum >>= 4;
   } else {
@@ -78,7 +79,9 @@ bool intra16x16_luma_planar(struct macroblock *mb) {
     int H = 0;
     int r = 0;
     for (int j = 0; j < 8; j++) {
-      H += (r+1)*(*pH1++-*pH2++);
+      H += (r+1)*(*pH1-*pH2);
+      pH1++;
+      pH2++;
       r++;
     }
     int V = 0;

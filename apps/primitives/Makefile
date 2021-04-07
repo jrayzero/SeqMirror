@@ -4,7 +4,7 @@ CC=clang
 CFLAGS_TEST=-I. -g -O0
 CFLAGS_TIME=-I. -O3
 
-CFILES=read_yuv.c main.c intra.c common.c
+CFILES=read_yuv.c main.c intra.c common.c control.c transform.c
 
 test: $(CFILES)
 	$(CC) $(CFLAGS_TEST) -DDEBUG -o test $(CFILES)

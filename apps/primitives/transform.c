@@ -31,12 +31,51 @@ void forward4x4(int *block, int *out_block,  int block_row, int block_col) {
     int t1 = p1 + p2;
     int t2 = p1 - p2;
     int t3 = p0 - p3;
-    *(&out_block[block_row * MB_BLOCK_SIZE + i]) = t0 + t1;
-    *(&out_block[(block_row+1) * MB_BLOCK_SIZE + i]) = t2 + (t3 << 1);
-    *(&out_block[(block_row+2) * MB_BLOCK_SIZE + i]) = t0 - t1;
-    *(&out_block[(block_row+3) * MB_BLOCK_SIZE + i]) = t3 - (t2 << 1);    
+    out_block[block_row * MB_BLOCK_SIZE + i] = t0 + t1;
+    out_block[(block_row+1) * MB_BLOCK_SIZE + i] = t2 + (t3 << 1);
+    out_block[(block_row+2) * MB_BLOCK_SIZE + i] = t0 - t1;
+    out_block[(block_row+3) * MB_BLOCK_SIZE + i] = t3 - (t2 << 1);    
   }
 }
+
+// block is 16x16
+void forward4x4_DCs(int *block, int *out_block) {
+  for (int i = 0; i < 4; i++) {
+    int *row = &block[(i*4) * MB_BLOCK_SIZE];
+    int *row_out = &out_block[i * 4];
+    int p0 = row[0];
+    int p1 = row[4];
+    int p2 = row[8];
+    int p3 = row[12];
+    int t0 = p0 + p3;
+    int t1 = p1 + p2;
+    int t2 = p1 - p2;
+    int t3 = p0 - p3;
+    *row_out = t0 + t1;
+    row_out++;
+    *row_out = (t3 << 1) + t2;
+    row_out++;
+    *row_out = t0 - t1;
+    row_out++;
+    *row_out = t3 - (t2 << 1);
+    
+  }
+  for (int i = 0; i < 4; i++) {
+    int p0 = out_block[i];
+    int p1 = out_block[4 + i];
+    int p2 = out_block[8 + i];
+    int p3 = out_block[12 + i];
+    int t0 = p0 + p3;
+    int t1 = p1 + p2;
+    int t2 = p1 - p2;
+    int t3 = p0 - p3;
+    out_block[i] = t0 + t1;
+    out_block[4 + i] = t2 + (t3 << 1);
+    out_block[8 + i] = t0 - t1;
+    out_block[12 + i] = t3 - (t2 << 1);
+  }
+}
+
 
 /*void _forward4x4(int **block, int **tblock, int pos_y, int pos_x)
 {

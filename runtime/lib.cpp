@@ -18,6 +18,7 @@
 #include <unwind.h>
 #include <vector>
 #include <sstream>
+#include <time.h>
 
 #define GC_THREADS
 #include "lib.h"
@@ -85,6 +86,12 @@ SEQ_FUNC seq_int_t seq_time_monotonic() {
   auto duration = chrono::steady_clock::now().time_since_epoch();
   seq_int_t nanos = chrono::duration_cast<chrono::nanoseconds>(duration).count();
   return nanos;
+}
+
+SEQ_FUNC seq_int_t seq_ctime_monotonic() {
+  struct timespec ticky;
+  clock_gettime(CLOCK_MONOTONIC, &ticky);
+  return ticky.tv_sec * 1e9 + ticky.tv_nsec;
 }
 
 extern char **environ;

@@ -1,16 +1,25 @@
 from read_yuv import *
+from ticky import *
 
-input_file = "foreman_part_qcif.yuv"
-nframes = 3
+input_file = "foreman_part_qcif_x10.yuv"
+nframes = 10
 height = 144
 width = 176
-Y,U,V = ingest(input_file, height, width, nframes)
+niters = 10
+tick = ctick()
+for n in range(niters):
+  Y,U,V = ingest(input_file, height, width, nframes)
+ctock(tick, niters)
 
-fd = open('yuv.seq.out','w')
-fd.write('Y\n')
-fd.write(str(Y))
-fd.write('U\n')
-fd.write(str(U))
-fd.write('V\n')
-fd.write(str(V))
-
+#fd = open('yuv.seq.out','w')
+#fd.write('Y\n')
+#fd.write(str(Y))
+#fd.flush()
+#fd.write('U\n')
+#fd.write(str(U))
+#fd.flush()
+#fd.write('V\n')
+#fd.write(str(V))
+#fd.flush()
+#fd.flush()
+#fd.close()

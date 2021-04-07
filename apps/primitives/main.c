@@ -1,15 +1,25 @@
 #include "macroblock.h"
+#include "ticky.h"
 #include "read_yuv.h"
-#include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
 
 int main() {
-    const char *input_file = "foreman_part_qcif.yuv";
+    const char *input_file = "foreman_part_qcif_x10.yuv";
     int nframes = 3;
     int height = 144;
     int width = 176;
-    struct video *vid = ingest(input_file, height, width, nframes);
+    struct video *vid = (struct video*)malloc(sizeof(struct video));
+#ifdef TIME
+    int niters = 10;
+    struct timespec tick = ctick();
+    for (int n = 0; n < niters; n++) {
+#endif
+    ingest(input_file, height, width, nframes, vid);
+#ifdef TIME
+    }
+    ctock(tick, niters);
+#endif
 #ifdef DEBUG
     FILE *fd = fopen("yuv.c.out", "w");
     fprintf(fd, "Y %d %d\n", vid->height, vid->width);
@@ -51,4 +61,7 @@ int main() {
     fflush(fd);
     fclose(fd);
 #endif
+    free(vid->y_data);
+    free(vid->u_data);
+    free(vid->v_data);
 }

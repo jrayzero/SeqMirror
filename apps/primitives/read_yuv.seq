@@ -1,14 +1,6 @@
 from cola.block import *
 from cola.bitseq import *
 
-def pad_below(view, height, padded_height):
-  for row in range(height, padded_height):
-    view[0, row, :] = view[0, height-1,:]
-
-def pad_right(view, width, padded_width):
-  for col in range(width, padded_width):
-    view[0, :, col] = view[0, :, width-1]
-
 # reads whole yuv file at once
 def ingest(fn, height, width, nframes):
   fd = open(fn, 'rb')
@@ -19,9 +11,11 @@ def ingest(fn, height, width, nframes):
   V = Block[int,3](nframes, height // 2, width // 2)
   for i in range(nframes):
     # y
+    # you 
     for j in range(height):
       for k in range(width):
-        Y[i,j,k] = int(fd.read_u[1]())
+        y = int(fd.read_u[1]())
+        Y[i,j,k] = y
       # pad right
       Y[0,j,width:] = Y(i,j,width-1)
     # pad below
@@ -30,10 +24,12 @@ def ingest(fn, height, width, nframes):
     # u
     for j in range(height//2):
       for k in range(width//2):
-        U[i,j,k] = int(fd.read_u[1]())
+        u = int(fd.read_u[1]())
+        U[i,j,k] = u
     # v
     for j in range(height//2):
       for k in range(width//2):
-        V[i,j,k] = int(fd.read_u[1]())
+        v = int(fd.read_u[1]())
+        V[i,j,k] = v
   fd.close()
   return Y,U,V

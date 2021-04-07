@@ -8,6 +8,7 @@ from C import seq_stderr() -> cobj
 from C import seq_env() -> Ptr[cobj]
 from C import seq_time() -> int
 from C import seq_time_monotonic() -> int
+from C import seq_ctime_monotonic() -> int
 from C import seq_pid() -> int
 from C import seq_lock_new() -> cobj
 from C import seq_lock_acquire(cobj, bool, float) -> bool

@@ -4,10 +4,9 @@
 #include <string.h>
 #include <assert.h>
 
-struct video *ingest(const char *fn, int height, int width, int nframes) {
+struct video *ingest(const char *fn, int height, int width, int nframes, struct video *vid) {
     FILE *fd = fopen(fn, "r");
     assert(fd);
-    struct video *vid = (struct video*)malloc(sizeof(struct video));
     int padded_height = ((height & 15) == 0) ? height : height + 16 - (height & 15);
     int padded_width = ((width & 15) == 0) ? width : width + 16 - (width & 15);
     DO(fprintf(stderr, "padded_height %d, padded_width %d\n", padded_height, padded_width);)	
@@ -21,6 +20,7 @@ struct video *ingest(const char *fn, int height, int width, int nframes) {
     vid->u_data = (int*)malloc(sizeof(int) * height/2 * width/2 * nframes);
     vid->v_data = (int*)malloc(sizeof(int) * height/2 * width/2 * nframes);
 
+    // can only read one value at a time here because I'm upcasting to int
     for (int i = 0; i < nframes; i++) {
 	// Y
 	// fill each row

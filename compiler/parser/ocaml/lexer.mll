@@ -176,6 +176,7 @@ and read state = parse
       | "else"     -> [P.ELSE]
       | "def"      -> (if !is_extern > 0 then is_extern := !is_extern + 10); [P.DEF]
       | "for"      -> [P.FOR]
+      | "pfor"      -> [P.PFOR]
       | "break"    -> [P.BREAK]
       | "continue" -> [P.CONTINUE]
       | "return"   -> [P.RETURN]

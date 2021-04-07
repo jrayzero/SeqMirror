@@ -280,7 +280,11 @@ void TranslateVisitor::visit(ForStmt *stmt) {
   auto var = make<ir::Var>(stmt, getType(stmt->var->getType()), false, varName);
   ctx->getBase()->push_back(var);
   auto bodySeries = make<ir::SeriesFlow>(stmt, "body");
+  std::map<string,string> kv;  
+  kv["is_parallel"] = stmt->is_parallel ? "true" : "false";
+  auto attr = std::make_unique<ir::KeyValueAttribute>(kv);
   auto loop = make<ir::ForFlow>(stmt, transform(stmt->iter), bodySeries, var);
+  loop->setAttribute(move(attr));
   ctx->add(TranslateItem::Var, varName, var);
   ctx->addSeries(cast<ir::SeriesFlow>(loop->getBody()));
   transform(stmt->suite);

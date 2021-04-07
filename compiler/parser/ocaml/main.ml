@@ -120,6 +120,7 @@ let print_token t =
   | SEEK -> "SEEK"
   | LINK -> "LINK"
   | BY -> "BY"
+| PFOR -> "PFOR"
 
 module I = Seqgrammar.MenhirInterpreter
 

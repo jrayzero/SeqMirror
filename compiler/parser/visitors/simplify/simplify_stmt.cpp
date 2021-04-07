@@ -193,7 +193,7 @@ void SimplifyVisitor::visit(ForStmt *stmt) {
   ctx->addBlock();
   if (auto i = stmt->var->getId()) {
     ctx->add(SimplifyItem::Var, i->value, ctx->generateCanonicalName(i->value));
-    forStmt = N<ForStmt>(transform(stmt->var), clone(iter), transform(stmt->suite));
+    forStmt = N<ForStmt>(stmt->is_parallel, transform(stmt->var), clone(iter), transform(stmt->suite));
   } else {
     string varName = ctx->cache->getTemporaryVar("for");
     ctx->add(SimplifyItem::Var, varName, varName);
@@ -201,7 +201,7 @@ void SimplifyVisitor::visit(ForStmt *stmt) {
     vector<StmtPtr> stmts;
     stmts.push_back(N<AssignStmt>(clone(stmt->var), clone(var), nullptr, true));
     stmts.push_back(clone(stmt->suite));
-    forStmt = N<ForStmt>(clone(var), clone(iter), transform(N<SuiteStmt>(move(stmts))));
+    forStmt = N<ForStmt>(stmt->is_parallel, clone(var), clone(iter), transform(N<SuiteStmt>(move(stmts))));
   }
   ctx->popBlock();
   ctx->loops.pop_back();

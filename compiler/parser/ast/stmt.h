@@ -274,11 +274,13 @@ struct ForStmt : public Stmt {
   ExprPtr iter;
   StmtPtr suite;
   StmtPtr elseSuite;
+  bool is_parallel;
 
   /// Indicates if iter was wrapped with __iter__() call.
   bool wrapped;
 
   ForStmt(ExprPtr var, ExprPtr iter, StmtPtr suite, StmtPtr elseSuite = nullptr);
+  ForStmt(bool is_parallel, ExprPtr var, ExprPtr iter, StmtPtr suite, StmtPtr elseSuite = nullptr);
   ForStmt(const ForStmt &stmt);
 
   string toString() const override;

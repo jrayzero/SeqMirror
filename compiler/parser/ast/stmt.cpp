@@ -142,11 +142,14 @@ ACCEPT_IMPL(WhileStmt, ASTVisitor);
 
 ForStmt::ForStmt(ExprPtr var, ExprPtr iter, StmtPtr suite, StmtPtr elseSuite)
     : Stmt(), var(move(var)), iter(move(iter)), suite(move(suite)),
-      elseSuite(move(elseSuite)), wrapped(false) {}
+      elseSuite(move(elseSuite)), wrapped(false), is_parallel(false) {}
+  ForStmt::ForStmt(bool is_parallel, ExprPtr var, ExprPtr iter, StmtPtr suite, StmtPtr elseSuite)
+    : Stmt(), var(move(var)), iter(move(iter)), suite(move(suite)),
+      elseSuite(move(elseSuite)), wrapped(false), is_parallel(is_parallel) {}
 ForStmt::ForStmt(const ForStmt &stmt)
     : Stmt(stmt), var(ast::clone(stmt.var)), iter(ast::clone(stmt.iter)),
       suite(ast::clone(stmt.suite)), elseSuite(ast::clone(stmt.elseSuite)),
-      wrapped(stmt.wrapped) {}
+      wrapped(stmt.wrapped), is_parallel(stmt.is_parallel) {}
 string ForStmt::toString() const {
   if (elseSuite && elseSuite->firstInBlock())
     return format("(for-else {} {} {} {})", var->toString(), iter->toString(),

@@ -17,7 +17,7 @@
 %token INDENT DEDENT EOF NL DOT COLON SEMICOLON COMMA OF
 %token LP RP /* () */ LS RS /* [] */ LB RB /* {} */
 /* keywords */
-%token IF ELSE ELIF MATCH CASE FOR WHILE CONTINUE BREAK TRY EXCEPT FINALLY THROW WITH
+%token IF ELSE ELIF MATCH CASE FOR PFOR WHILE CONTINUE BREAK TRY EXCEPT FINALLY THROW WITH
 %token DEF RETURN YIELD LAMBDA CLASS TYPEOF AS
 %token IMPORT FROM GLOBAL PRINT PASS ASSERT DEL TRUE FALSE NONE
 /* operators */
@@ -212,6 +212,9 @@ single_statement:
   | FOR lassign IN expr COLON suite { $loc, For ($2, $4, $6, []) }
   | FOR lassign IN expr COLON suite ELSE COLON suite { $loc, For ($2, $4, $6, $9) }
   | FOR lassign IN expr COLON suite ELSE NOT BREAK COLON suite { $loc, For ($2, $4, $6, $11) }
+  | PFOR lassign IN expr COLON suite { $loc, PFor ($2, $4, $6, []) }
+  | PFOR lassign IN expr COLON suite ELSE COLON suite { $loc, PFor ($2, $4, $6, $9) }
+  | PFOR lassign IN expr COLON suite ELSE NOT BREAK COLON suite { $loc, PFor ($2, $4, $6, $11) }  
   | IF expr COLON suite { $loc, If [Some $2, $4] }
   | IF expr COLON suite elif_suite { $loc, If ((Some $2, $4) :: $5) }
   | MATCH expr COLON NL INDENT case+ DEDENT { $loc, Match ($2, $6) }

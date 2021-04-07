@@ -339,6 +339,9 @@ StmtPtr parse_stmt(value val) {
     case 33: {
       Return(Custom, std::make_unique<IdExpr>("pparams"), parse_expr(t));
     }
+    case 34:
+      Return(For, true, parse_expr(Field(t, 0)), parse_expr(Field(t, 1)),
+             parse_stmt_list(Field(t, 2)), parse_stmt_list(Field(t, 3)));      
     default:
       seq::compilationError("[internal] tag variant mismatch ...");
       return nullptr;

@@ -93,6 +93,7 @@ type tstmt =
   | Link of texpr ann list
   | TParams of texpr ann list
   | PParams of texpr ann
+  | PFor of (texpr ann * texpr ann * tstmt ann list * tstmt ann list)
 
 and import =
   { imp_from: texpr ann

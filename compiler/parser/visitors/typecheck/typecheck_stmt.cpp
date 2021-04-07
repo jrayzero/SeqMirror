@@ -269,10 +269,11 @@ void TypecheckVisitor::visit(ForStmt *stmt) {
                     N<SuiteStmt>(move(stmts), true)));
     }
     block->stmts.push_back(
-        N<ForStmt>(N<IdExpr>(cntVar),
+			   N<ForStmt>(stmt->is_parallel, N<IdExpr>(cntVar),
                    N<CallExpr>(N<IdExpr>("std.internal.types.range.range"),
                                N<IntExpr>(tuple->args.size())),
                    N<SuiteStmt>(move(forBlock))));
+    
     resultStmt = transform(move(block));
   } else {
     // Case 2: iterating a generator. Standard for loop logic.

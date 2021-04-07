@@ -1627,6 +1627,14 @@ void LLVMVisitor::visit(const ForFlow *x) {
   llvm::Type *loopVarType = getLLVMType(x->getVar()->getType());
   llvm::Value *loopVar = vars[x->getVar()];
   seqassert(loopVar, "{} loop variable not found", *x);
+  if (x->hasAttribute<KeyValueAttribute>()) {
+    string attr = x->getAttribute<KeyValueAttribute>()->get("is_parallel");
+    if (attr == "true") {
+      std::cerr << "Found parallel" << std::endl;
+      /* do stuff here*/
+      return;
+    }
+  }
 
   auto *condBlock = llvm::BasicBlock::Create(context, "for.cond", func);
   auto *bodyBlock = llvm::BasicBlock::Create(context, "for.body", func);

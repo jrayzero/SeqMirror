@@ -30,3 +30,36 @@ def forward4x4(inp_blk, out_blk):
     in_col[0,1,0] = t2 + (t3 << 1)
     in_col[0,2,0] = t0 - t1
     in_col[0,3,0] = t3 - (t2 << 1)
+
+def hadamard4x4(inp_blk, out_blk):
+  # horizontal
+  for r in range(4):
+    in_row = inp_blk[0,r,:]
+    out_row = out_blk[0,r,:]
+    p0 = in_row(0,0,0)
+    p1 = in_row(0,0,1)
+    p2 = in_row(0,0,2)
+    p3 = in_row(0,0,3)
+    t0 = p0 + p3
+    t1 = p1 + p2
+    t2 = p1 - p2
+    t3 = p0 - p3
+    out_row[0,0,0] = t0 + t1
+    out_row[0,0,1] = t3 + t2
+    out_row[0,0,2] = t0 - t1
+    out_row[0,0,3] = t3 - t2
+  # vertical
+  for c in range(4):
+    in_col = out_blk[0,:,c]
+    p0 = in_col(0,0,0)
+    p1 = in_col(0,1,0)
+    p2 = in_col(0,2,0)
+    p3 = in_col(0,3,0)
+    t0 = p0 + p3
+    t1 = p1 + p2
+    t2 = p1 - p2
+    t3 = p0 - p3
+    in_col[0,0,0] = (t0 + t1) >> 1
+    in_col[0,1,0] = (t2 + t3) >> 1
+    in_col[0,2,0] = (t0 - t1) >> 1
+    in_col[0,3,0] = (t3 - t2) >> 1

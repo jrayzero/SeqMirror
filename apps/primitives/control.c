@@ -86,7 +86,8 @@ void xform_quant_luma_16x16(struct macroblock *mb, int *pred, FILE *fd) {
   }
   // gather the DCs and transform them
   int *transformed_DCs = (int*)malloc(sizeof(int) * 16);
-  forward4x4_DCs(transformed, transformed_DCs);
+  hadamard4x4_DCs(transformed, transformed_DCs);
+  
   
   for (int i = 0; i < 4; i+=1) {
     for (int j = 0; j < 4; j+=1) {

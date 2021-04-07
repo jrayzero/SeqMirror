@@ -13,7 +13,7 @@ def xform_quant_luma_16x16(mb, pred, fd):
   # gather the DCs and transform them
   DCs = transformed[0,::4,::4]
   transformed_DCs = Block(DCs)
-  forward4x4(DCs, transformed_DCs)
+  hadamard4x4(DCs, transformed_DCs)
   fd.write(str(transformed_DCs))
   
 

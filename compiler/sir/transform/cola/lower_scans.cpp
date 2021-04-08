@@ -12,7 +12,19 @@ namespace seq {
 namespace ir {
 namespace transform {
 namespace cola {
+  // TODO change name. No longer for ingests
+  void ModifySlicedIngests::handle(CallInstr *instr) {
+    auto M = instr->getModule();
+    auto *f = util::getFunc(instr->getCallee());
+    string fname = f->getUnmangledName();
+    if (fname == "__setitem__") {
+      auto *self = instr->front();
+      // LEFT off: trying to replace unit writes 
+    }
+  }
 
+
+  
 // attribute storing possible dimensionalities
 
 struct DimensionAttribute : public Attribute {

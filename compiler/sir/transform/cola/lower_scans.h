@@ -11,6 +11,12 @@ namespace ir {
 namespace transform {
 namespace cola {
 
+  // look for calls of the form:
+  // ingest[B](__getitem__(block, Tuple[int*]), fd)
+  struct ModifySlicedIngests : public OperatorPass {
+    void handle(CallInstr*) override;
+  };
+  
 struct LowerScans : public OperatorPass {
 
   std::map<int, Var*> lhs;

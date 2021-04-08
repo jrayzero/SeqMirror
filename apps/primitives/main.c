@@ -10,24 +10,19 @@
 
 int main() {
   struct timespec tick = ctick();
-  const char *input_file = "foreman_part_qcif_x100.yuv";
-  int niters = 1;
-  int nframes = 3;
+  const char *input_file = "foreman_part_qcif_x1000.yuv";
+  int niters = 10;
+  int nframes = 1000;
   int height = 144;
   int width = 176;
   struct video *vid = (struct video*)malloc(sizeof(struct video));
-#ifdef DEBUG
-    int mbidx = 0;
-    FILE *debug = fopen("debug.c.out", "w");
-#else
-    FILE *debug = NULL;
-#endif
   
   for (int n = 0; n < niters; n++) {
+    fprintf(stderr, "Iter %d\n", n);
     // get the data
     ingest(input_file, height, width, nframes, vid);
     // go through macroblocks
-    for (int f = 0; f < vid->nframes; f++) {
+    /*    for (int f = 0; f < vid->nframes; f++) {
       // Y plane
       for (int i = 0; i < vid->height; i+=16) {
 	for (int j = 0; j < vid->width; j+=16) {
@@ -37,18 +32,13 @@ int main() {
 	  mb.frame_idx = f;
 	  mb.origin_row = i;
 	  mb.origin_col = j;
-	  pred_luma_16x16(&mb, debug);
+	  pred_luma_16x16(&mb);
 	}
       }
-    }
+      }*/
     free(vid->y_data);
     free(vid->u_data);
     free(vid->v_data);
   }
-  ctock(tick, niters);
-#ifdef DEBUG
-  fflush(debug);
-  fclose(debug);
-#endif
-    
+  ctock(tick, niters);    
 }

@@ -5,7 +5,7 @@ from common import *
 from intra import *
 from quant import *
 
-def xform_quant_luma_16x16(mb, pred, fd):
+def xform_quant_luma_16x16(mb, pred):
   residual = mb - pred
   transformed = Block(residual)
   # first transform
@@ -45,7 +45,7 @@ def xform_quant_luma_16x16(mb, pred, fd):
   
 
 # do prediction, call the transform loop, get the costs
-def pred_luma_16x16(mb, fd):
+def pred_luma_16x16(mb):
   pred_16x16_vertical = Block(mb)
   pred_16x16_horizontal = Block(mb)
   pred_16x16_DC = Block(mb)
@@ -60,30 +60,29 @@ def pred_luma_16x16(mb, fd):
   midx = 0
   
   if did_vertical:
-    recons,coded = xform_quant_luma_16x16(mb, pred_16x16_vertical, fd)
+    recons,coded = xform_quant_luma_16x16(mb, pred_16x16_vertical)
     cost = sad(mb, recons)
     min_cost = cost
     best = recons
   if did_horizontal:
-    recons,coded = xform_quant_luma_16x16(mb, pred_16x16_horizontal, fd)
+    recons,coded = xform_quant_luma_16x16(mb, pred_16x16_horizontal)
     cost = sad(mb, recons)
     if cost < min_cost:
       min_cost = cost
       best = recons
       midx = 1
-  recons,coded = xform_quant_luma_16x16(mb, pred_16x16_DC, fd)
+  recons,coded = xform_quant_luma_16x16(mb, pred_16x16_DC)
   cost = sad(mb, recons)
   if cost < min_cost:
     min_cost = cost
     best = recons
     midx = 2
   if did_planar:
-    recons,coded = xform_quant_luma_16x16(mb, pred_16x16_planar, fd)
+    recons,coded = xform_quant_luma_16x16(mb, pred_16x16_planar)
     cost = sad(mb, recons)
     if cost < min_cost:
       min_cost = cost
       best = recons      
       midx = 3
   mb[~best] = ~best
-#  fd.write(str(midx) + ' ')
 

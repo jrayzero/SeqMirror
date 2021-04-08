@@ -21,6 +21,7 @@ struct video *ingest(const char *fn, int height, int width, int nframes, struct 
     vid->v_data = (int*)malloc(sizeof(int) * height/2 * width/2 * nframes);
 
     // can only read one value at a time here because I'm upcasting to int
+    // DO NOT USE MULTIPLE BYTES. YOU WILL READ THE WRONG VALUES
     for (int i = 0; i < nframes; i++) {
 	// Y
 	// fill each row

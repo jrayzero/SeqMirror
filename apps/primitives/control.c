@@ -8,7 +8,7 @@
 
 #define rshift_rnd_sf(x,a) (((x) + (1 << ((a)-1) )) >> (a))
 // do prediction, call the transform loop, get the costs
-void pred_luma_16x16(struct macroblock *mb, FILE *fd) {
+void pred_luma_16x16(struct macroblock *mb) {
   mb->pred_16x16_vertical = (int*)malloc(sizeof(int)*16*16);
   mb->pred_16x16_horizontal = (int*)malloc(sizeof(int)*16*16);
   mb->pred_16x16_DC = (int*)malloc(sizeof(int)*16*16);
@@ -25,47 +25,43 @@ void pred_luma_16x16(struct macroblock *mb, FILE *fd) {
   if (did_vertical) {
     int *transformed = (int*)malloc(sizeof(int) * 16 * 16);
     int *reconstruction = (int*)malloc(sizeof(int) * 16 * 16);
-    xform_quant_luma_16x16(mb, mb->pred_16x16_vertical, transformed, reconstruction, fd);
+    xform_quant_luma_16x16(mb, mb->pred_16x16_vertical, transformed, reconstruction);
     int cost = sad(mb, reconstruction);
     if (cost < min_cost) {
       min_cost = cost;
       best = reconstruction;
     }
-    //    fprintf(fd, "0 %d\n", cost);
   }
   if (did_horizontal) {
     int *transformed = (int*)malloc(sizeof(int) * 16 * 16);
     int *reconstruction = (int*)malloc(sizeof(int) * 16 * 16);
-    xform_quant_luma_16x16(mb, mb->pred_16x16_horizontal, transformed, reconstruction, fd);
+    xform_quant_luma_16x16(mb, mb->pred_16x16_horizontal, transformed, reconstruction);
     int cost = sad(mb, reconstruction);
     if (cost < min_cost) {
       min_cost = cost;
       best = reconstruction;
       midx = 1;
     }
-    //       fprintf(fd, "0 %d\n", cost);
   }
   int *transformed = (int*)malloc(sizeof(int) * 16 * 16);
   int *reconstruction = (int*)malloc(sizeof(int) * 16 * 16);  
-  xform_quant_luma_16x16(mb, mb->pred_16x16_DC, transformed, reconstruction, fd);
+  xform_quant_luma_16x16(mb, mb->pred_16x16_DC, transformed, reconstruction);
   int cost = sad(mb, reconstruction);
   if (cost < min_cost) {
     min_cost = cost;
     best = reconstruction;
     midx = 2;
   }
-//      fprintf(fd, "0 %d\n", cost);
   if (did_planar) {
     int *transformed = (int*)malloc(sizeof(int) * 16 * 16);
     int *reconstruction = (int*)malloc(sizeof(int) * 16 * 16);    
-    xform_quant_luma_16x16(mb, mb->pred_16x16_planar, transformed, reconstruction, fd);
+    xform_quant_luma_16x16(mb, mb->pred_16x16_planar, transformed, reconstruction);
     int cost = sad(mb, reconstruction);
     if (cost < min_cost) {
       min_cost = cost;
       best = reconstruction;
       midx = 3;
     }
-    //        fprintf(fd, "0 %d\n", cost);
   }
   
   for (int j = 0; j < MB_BLOCK_SIZE; j++) {
@@ -74,8 +70,6 @@ void pred_luma_16x16(struct macroblock *mb, FILE *fd) {
       mb->vid->y_data[(mb->frame_idx * mb->vid->width * mb->vid->height) + (mb->origin_row + j) * mb->vid->width + mb->origin_col + i] = best[idx];
     }
   }
-
-  // fprintf(fd, "%d ", midx);
   
   free(mb->pred_16x16_vertical);
   free(mb->pred_16x16_horizontal);
@@ -83,7 +77,7 @@ void pred_luma_16x16(struct macroblock *mb, FILE *fd) {
   free(mb->pred_16x16_planar);
 }
 
-void xform_quant_luma_16x16(struct macroblock *mb, int *pred, int *transformed, int *reconstruction, FILE *fd) {
+void xform_quant_luma_16x16(struct macroblock *mb, int *pred, int *transformed, int *reconstruction) {
   // compute the residual
   int *residual = (int*)malloc(sizeof(int) * 16 * 16);
   for (int j = 0; j < MB_BLOCK_SIZE; j++) {

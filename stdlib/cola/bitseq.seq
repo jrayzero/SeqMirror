@@ -381,6 +381,12 @@ class File:
     self._errcheck("error in read")    
     return buf[0]
 
+  def read_into[T](self, buf: Ptr[T], sz: int=1, nelems:int=1, offset:int = 0):
+    self._ensure_open()
+    assert _C.fread((buf+offset).as_byte(), sz, nelems, self.fp) == 1
+    self._errcheck("error in read")        
+  
+
 @extend
 class Ptr[T]:
   def resize(self, new_cap: int) -> Ptr[T]:

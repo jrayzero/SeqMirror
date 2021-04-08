@@ -14,22 +14,28 @@ def ingest(fn, height, width, nframes):
     # you 
     for j in range(height):
       for k in range(width):
-        y = int(fd.read_u[1]())
-        Y[i,j,k] = y
-      # pad right
-      Y[0,j,width:] = Y(i,j,width-1)
-    # pad below
-    for r in range(height, padded_height):
-      Y[0,r,:] = Y[0,height,:]
-    # u
-    for j in range(height//2):
-      for k in range(width//2):
-        u = int(fd.read_u[1]())
-        U[i,j,k] = u
-    # v
-    for j in range(height//2):
-      for k in range(width//2):
-        v = int(fd.read_u[1]())
-        V[i,j,k] = v
+        Y[i,j,k] = fd.read_u[1]()
+        # Y[i,j,k], where i,j,k are constants        
+#        bm = Y.base.buffer_mapping
+#        i0 = i + bm[0].start
+#        j0 = j + bm[1].start
+#        k0 = k + bm[2].start
+#        d1 = Y.base.buffer_parent.dims[1]
+#        d2 = Y.base.buffer_parent.dims[2]
+#        idx = i0*d1*d2 + j0*d2 + k0
+#        _Y.base.ingest[1](fd, idx)
+#      # pad right
+#      Y[0,j,width:] = Y(i,j,width-1)
+#    # pad below
+#    for r in range(height, padded_height):
+#      Y[0,r,:] = Y[0,height,:]
+#    # u
+#    for j in range(height//2):
+#      for k in range(width//2):
+#        U[i,j,k].ingest[1](fd)
+#    # v
+#    for j in range(height//2):
+#      for k in range(width//2):
+#        V[i,j,k].ingest[1](fd)
   fd.close()
   return Y,U,V

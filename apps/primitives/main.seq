@@ -5,34 +5,20 @@ from common import *
 from intra import *
 
 print('starting')
-input_file = "foreman_part_qcif_x100.yuv"
-niters = 1
-nframes = 3
+input_file = "foreman_part_qcif_x1000.yuv"
+niters = 10
+nframes = 1000
 height = 144
 width = 176
-fd = open('debug.seq.out', 'w')
 tick = ctick()
 for n in range(niters):
+  print("Iter " + str(n))
   Y,U,V = ingest(input_file, height, width, nframes)
-  for f in range(nframes):
-    Y_frame = Y[f,:,:]
-    for r in range(0,Y.dims()[1],16):
-      for c in range(0,Y.dims()[2],16):
-        mb = Y_frame[0,r:r+16,c:c+16]
-        pred_luma_16x16(mb, fd)
+#  for f in range(nframes):
+#    Y_frame = Y[f,:,:]
+#    for r in range(0,Y.dims()[1],16):
+#      for c in range(0,Y.dims()[2],16):
+#        mb = Y_frame[0,r:r+16,c:c+16]
+#        pred_luma_16x16(mb)
         
 ctock(tick, niters)
-fd.flush()
-fd.close()
-#fd = open('yuv.seq.out','w')
-#fd.write('Y\n')
-#fd.write(str(Y))
-#fd.flush()
-#fd.write('U\n')
-#fd.write(str(U))
-#fd.flush()
-#fd.write('V\n')
-#fd.write(str(V))
-#fd.flush()
-#fd.flush()
-#fd.close()

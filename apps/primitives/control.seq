@@ -1,4 +1,5 @@
 from transform import *
+from cost import *
 from cola.block import *
 from common import *
 from intra import *
@@ -16,8 +17,31 @@ def xform_quant_luma_16x16(mb, pred, fd):
   transformed_DCs = Block(DCs)
   hadamard4x4(DCs, transformed_DCs)
   # quantize the DCs
-  quant_dc4x4_normal(transformed_DCs, QP)
-  fd.write(str(transformed_DCs))
+  nonzero = quant_dc4x4_normal(transformed_DCs, QP)
+  # create a temporary reconstruction
+  reconstruction = Block(residual)
+  # inverse the DCs and store in the reconstruction
+  if nonzero:
+    ihadamard4x4(transformed_DCs, reconstruction[0,::4,::4])
+    inverse_quant(reconstruction[0,::4,::4], QP)
+  else:
+    reconstruction[0,::4,::4] = 0
+  # AC stuff
+  transformed[0,::4,::4] = reconstruction[0,::4,::4]
+  for i in range(0,16,4):
+    for j in range(0,16,4):
+      coded_4x4 = transformed[0,i:i+4,j:j+4]
+      recons_4x4 = reconstruction[0,i:i+4,j:j+4]
+      quant_ac4x4_normal(coded_4x4, QP)
+      inverse4x4(coded_4x4, recons_4x4)
+  # now do the final reconstruction
+  transformed[0,::4,::4] = transformed_DCs
+  for r,p in zip(reconstruction, pred):
+    val = rshift_rnd_sf(r(), 6) + p()
+    val = max(0, val)
+    val = min(255, val)
+    r[UNIT] = val        
+  return reconstruction,transformed
   
 
 # do prediction, call the transform loop, get the costs
@@ -26,36 +50,40 @@ def pred_luma_16x16(mb, fd):
   pred_16x16_horizontal = Block(mb)
   pred_16x16_DC = Block(mb)
   pred_16x16_planar = Block(mb)
-  costs = make_cost_array(4)
   did_vertical = intra_16x16_luma_vertical(mb, pred_16x16_vertical)
   did_horizontal = intra_16x16_luma_horizontal(mb, pred_16x16_horizontal)
   intra_16x16_luma_DC(mb, pred_16x16_DC)
   did_planar = intra_16x16_luma_planar(mb, pred_16x16_planar)
+
+  min_cost = _C.get_int_max()
+  best = None
+  midx = 0
+  
   if did_vertical:
-    xform_quant_luma_16x16(mb, pred_16x16_vertical, fd)
+    recons,coded = xform_quant_luma_16x16(mb, pred_16x16_vertical, fd)
+    cost = sad(mb, recons)
+    min_cost = cost
+    best = recons
   if did_horizontal:
-    xform_quant_luma_16x16(mb, pred_16x16_horizontal, fd)
-  xform_quant_luma_16x16(mb, pred_16x16_DC, fd)
+    recons,coded = xform_quant_luma_16x16(mb, pred_16x16_horizontal, fd)
+    cost = sad(mb, recons)
+    if cost < min_cost:
+      min_cost = cost
+      best = recons
+      midx = 1
+  recons,coded = xform_quant_luma_16x16(mb, pred_16x16_DC, fd)
+  cost = sad(mb, recons)
+  if cost < min_cost:
+    min_cost = cost
+    best = recons
+    midx = 2
   if did_planar:
-    xform_quant_luma_16x16(mb, pred_16x16_planar, fd)  
-  # compute fake costs
-#  if did_vertical:
-#    s = 0
-#    for p in pred_16x16_vertical:
-#      s += p()
-#    costs[0] = s
-#  if did_horizontal:
-#    s = 0
-#    for p in pred_16x16_horizontal:
-#      s += p()
-#    costs[1] = s
-#  s = 0
-#  for p in pred_16x16_DC:
-#    s += p()
-#  costs[2] = s
-#  if did_planar:
-#    s = 0
-#    for p in pred_16x16_planar:
-#      s += p()
-#    costs[3] = s
+    recons,coded = xform_quant_luma_16x16(mb, pred_16x16_planar, fd)
+    cost = sad(mb, recons)
+    if cost < min_cost:
+      min_cost = cost
+      best = recons      
+      midx = 3
+  mb[~best] = ~best
+#  fd.write(str(midx) + ' ')
 

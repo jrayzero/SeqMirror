@@ -1,13 +1,6 @@
 from common import *
-from cola.block import *
 
-qp_per_matrix = [0,0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,7,7,7,7,7,7,8,8,8]
-scale_comp_DC = [8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192]
-inv_scale_comp_AC = [256, 320, 256, 320, 320, 400, 320, 400, 256, 320, 256, 320, 320, 400, 320, 400]
-scale_comp_AC = [8192, 5243, 8192, 5243, 5243, 3355, 5243, 3355, 8192, 5243, 8192, 5243, 5243, 3355, 5243, 3355]
-iscale = 256
-
-def quant_dc4x4_normal(blk, qp) -> bool:
+def quant_dc_normal(blk, qp) -> bool:
   is_nonzero = False
   qp_per = qp_per_matrix[qp]
   q_bits = Q_BITS + qp_per + 1
@@ -15,10 +8,11 @@ def quant_dc4x4_normal(blk, qp) -> bool:
     coeff = _coeff()
     if coeff != 0:
       ow = _coeff.origin_within(blk)
-      scaled = abs(coeff) * scale_comp_DC[ow[1] * 4 + ow[2]]
+      scaled = abs(coeff) * scale_comp_DC[ow[1],ow[2]]()
       level = (scaled + (offset_comp << 1)) >> q_bits
       # for simple case, this seems to always be true
       if level != 0:
+        level = min(level, CAVLC_LEVEL_LIMIT)        
         level = abs(level) * -1 if coeff < 0 else abs(level)
         _coeff[UNIT] = level
         is_nonzero = True
@@ -29,28 +23,24 @@ def quant_dc4x4_normal(blk, qp) -> bool:
 def rshift_rnd_sf(x,a):
   return (x + (1 << (a-1) )) >> a
 
-def inverse_quant(recons, qp):
-  for i in recons:
-    i[UNIT] = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
-
 def quant_ac4x4_normal(blk, qp) -> bool:
   is_nonzero = False
   qp_per = qp_per_matrix[qp]
   q_bits = Q_BITS + qp_per
   # skip DC
   first = True
-  # TODO scan(blk,1) to skip
-  for _coeff in scan(blk):
+  for _coeff in blk:
     if first:
       first = False
       continue
     coeff = _coeff()
-    ow = _coeff.origin_within(blk)
-    scaled = abs(coeff) * scale_comp_AC[ow[1] * 4 + ow[2]]
+    scaled = abs(coeff) * scale_comp_AC[_coeff.origin_within(blk)[1:]]()
     level = (scaled + offset_comp) >> q_bits
     if level != 0:
+      level = min(level, CAVLC_LEVEL_LIMIT)
+      # coeff cost in JM?
       level = abs(level) * -1 if coeff < 0 else abs(level)
-      _coeff[UNIT] = rshift_rnd_sf((level * inv_scale_comp_AC[ow[1] * 4 + ow[2]]) << qp_per, 4)
+      _coeff[UNIT] = rshift_rnd_sf((level * inv_scale_comp_AC[_coeff.origin_within(blk)[1:]]()) << qp_per, 4)
       is_nonzero = True
     else:
       _coeff[UNIT] = 0

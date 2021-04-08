@@ -3,6 +3,8 @@ bit_depth_c = 8
 QP = 28
 Q_BITS = 15
 offset_comp = 174592
+max_imgpel_value = 2 ** bit_depth_y - 1
+DQ_BITS = 6
 
 def make_cost_array(l):
   arr = Array[int](l)

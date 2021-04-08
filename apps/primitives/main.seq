@@ -6,10 +6,10 @@ from intra import *
 
 print('starting')
 input_file = "foreman_part_qcif_x100.yuv"
+niters = 1
 nframes = 3
 height = 144
 width = 176
-niters = 1
 fd = open('debug.seq.out', 'w')
 tick = ctick()
 for n in range(niters):

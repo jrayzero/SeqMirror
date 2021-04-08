@@ -11,11 +11,11 @@
 int main() {
   struct timespec tick = ctick();
   const char *input_file = "foreman_part_qcif_x100.yuv";
+  int niters = 1;
   int nframes = 3;
   int height = 144;
   int width = 176;
   struct video *vid = (struct video*)malloc(sizeof(struct video));
-  int niters = 1;
 #ifdef DEBUG
     int mbidx = 0;
     FILE *debug = fopen("debug.c.out", "w");

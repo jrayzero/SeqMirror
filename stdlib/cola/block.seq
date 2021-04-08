@@ -409,6 +409,10 @@ class Multidim[T,N:int]:
     return idx.cola_adjust(d)
 
   @inline
+  def _convert0(self, idx: ColaSlice) -> ColaSlice:
+    return idx
+
+  @inline
   def _convert1(self, idx: int) -> ColaSlice:
     return ColaSlice(idx,idx+1,1)
 
@@ -418,6 +422,10 @@ class Multidim[T,N:int]:
     return idx.cola_adjust(d)
 
   @inline
+  def _convert1(self, idx: ColaSlice) -> ColaSlice:
+    return idx  
+
+  @inline
   def _convert2(self, idx: int) -> ColaSlice:
     return ColaSlice(idx,idx+1,1)
 
@@ -425,6 +433,10 @@ class Multidim[T,N:int]:
   def _convert2(self, idx: Slice) -> ColaSlice:
     d = self.dims[2]
     return idx.cola_adjust(d)
+
+  @inline
+  def _convert2(self, idx: ColaSlice) -> ColaSlice:
+    return idx  
 
   @inline
   def _do_compute_new_ranges(self, bmap: ColaSlice, newmap: ColaSlice):
@@ -617,6 +629,12 @@ class Block[T,N:int]:
   def __setitem__(self, idx, val):
     self.base.__setitem__(idx, val)
 
+  def __setitem__(self, idx: View[T,N], val):
+    self.base.__setitem__(idx.base, val)
+
+  def __setitem__(self, idx: Block[T,N], val):
+    self.base.__setitem__(idx.base, val)    
+
   def __iter__(self):
     for it in iter(self.base):
       yield View(it)
@@ -676,6 +694,13 @@ class View[T,N:int]:
 
   def __setitem__(self, idx, val):
     self.base.__setitem__(idx, val)
+
+  def __setitem__(self, idx: View[T,N], val):
+    self.base.__setitem__(idx.base, val)
+
+  def __setitem__(self, idx: Block[T,N], val):
+    self.base.__setitem__(idx.base, val)    
+    
   
   def __call__(self, *idxs):
     return self.base.__call__(*idxs)

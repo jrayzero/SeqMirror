@@ -1,0 +1,16 @@
+from cola.block import *
+
+# min_cost allows for an early exit if you exceed it
+def sad(real, pred) -> int:
+  cost = 0
+  # no early exit
+  for r,p in scan(real, pred):
+    cost += abs(r() - p())
+  return cost
+
+def sse(real, pred) -> int:    
+  cost = 0
+  # no early exit
+  for r,p in scan(real, pred):
+    cost += (r() - p()) ** 2
+  return cost

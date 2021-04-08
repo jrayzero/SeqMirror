@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+int qp_per_matrix[51] = {0,0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,7,7,7,7,7,7,8,8,8};
 /*int quant_ac4x4_normal(int **input_block, int **output_block, int **pos_scan, int block_x_pos) {
   int i,j, coeff_ctr;
 
@@ -44,7 +45,7 @@
   }*/
 
 
-int qp_per_matrix[51] = {0,0,0,0,0,0,1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,7,7,7,7,7,7,8,8,8};
+
 int scale_comp_DC[16] = {8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192,8192};
 // Takes in a 4x4 block of DC coefficients, which represents one MB worth of DCs used with a 4x4 transform
 bool quant_dc4x4_normal(int *block, int qp) {
@@ -68,4 +69,43 @@ bool quant_dc4x4_normal(int *block, int qp) {
     } 
   }
   return nonzero;
+}
+#define iscale 256
+#define rshift_rnd_sf(x,a) ((x) + (1 << ((a)-1) )) >> (a)
+int inv_scale_comp_AC[16] = {256, 320, 256, 320, 320, 400, 320, 400, 256, 320, 256, 320, 320, 400, 320, 400};
+int scale_comp_AC[16] = {8192, 5243, 8192, 5243, 5243, 3355, 5243, 3355, 8192, 5243, 8192, 5243, 5243, 3355, 5243, 3355};
+
+bool quant_ac4x4_normal(int *block, int qp, int r, int c) {
+  int   nonzero = false;  
+  int   qp_per = qp_per_matrix[qp];
+  int   q_bits = Q_BITS + qp_per;
+  bool first = true;
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      if (first) {
+	first = false;
+	continue;
+      }
+      int coeff = block[(r+i) * 16 + j + c];
+      int scaled = abs(coeff) * scale_comp_AC[i * 4 + j];
+      int level = (scaled + offset_comp) >> q_bits;
+      if (level != 0) {
+	level = coeff < 0 ? abs(level) * -1 : abs(level);
+	block[(r+i) * 16 + j + c] = rshift_rnd_sf(((level * inv_scale_comp_AC[i*4+j]) << qp_per), 4);
+	nonzero = true;
+      } else {
+	block[(r+i) * 16 + j + c] = 0;
+      }
+    } 
+  }
+  return nonzero;
+}
+
+void inverse_quant_DCs(int *recons, int qp) {
+  for (int i = 0; i < 16; i+=4) {
+    for (int j = 0; j < 16; j+=4) {
+      int r = recons[i * 16 + j];
+      recons[i * 16 + j] = rshift_rnd_sf((r * iscale) << qp_per_matrix[QP],6);;
+    }
+  }    
 }

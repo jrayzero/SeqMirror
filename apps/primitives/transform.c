@@ -77,6 +77,81 @@ void hadamard4x4_DCs(int *block, int *out_block) {
   }
 }
 
+void ihadamard4x4_DCs(int *block, int *reconstruction) {
+  for (int i = 0; i < BLOCK_SIZE; i++) {
+    int *row = &block[i*4];
+    int *row_out = &reconstruction[(i*4) * MB_BLOCK_SIZE];
+    int t0 = row[0];
+    int t1 = row[1];
+    int t2 = row[2];
+    int t3 = row[3];
+
+    int p0 = t0 + t2;
+    int p1 = t0 - t2;
+    int p2 = t1 - t3;
+    int p3 = t1 + t3;
+
+    row_out[0] = p0 + p3;
+    row_out[4] = p1 + p2;    
+    row_out[8] = p1 - p2;
+    row_out[12] = p0 - p3;
+  }
+
+  //  Vertical 
+  for (int i = 0; i < MB_BLOCK_SIZE; i+=4) {
+    int p0 = reconstruction[i];
+    int p1 = reconstruction[i+4*MB_BLOCK_SIZE];
+    int p2 = reconstruction[i+8*MB_BLOCK_SIZE];
+    int p3 = reconstruction[i+12*MB_BLOCK_SIZE];
+
+    int t0 = p0 + p2;
+    int t1 = p0 - p2;
+    int t2 = p1 - p3;
+    int t3 = p1 + p3;
+
+    reconstruction[i] = t0 + t3;
+    reconstruction[i+4*MB_BLOCK_SIZE] = t1 + t2;
+    reconstruction[i+8*MB_BLOCK_SIZE] = t1 - t2;
+    reconstruction[i+12*MB_BLOCK_SIZE] = t0 - t3;
+  }
+}
+
+void inverse4x4(int *in, int *out, int pos_y, int pos_x) {
+  for (int i = pos_y; i < pos_y + 4; i++) {
+    int *row = &in[i * MB_BLOCK_SIZE + pos_x];
+    int *row_out = &out[i * MB_BLOCK_SIZE + pos_x];
+    int p0 = row[0];
+    int p1 = row[1];
+    int p2 = row[2];
+    int p3 = row[3];
+    int t0 = p0 + p2;
+    int t1 = p0 - p2;
+    int t2 = (p1 >> 1) - p3;
+    int t3 = p1 + (p3 >> 1);
+    *row_out = t0 + t3;
+    row_out++;
+    *row_out = t1 + t2;
+    row_out++;
+    *row_out = t1 - t2;
+    row_out++;
+    *row_out = t0 - t3;
+    
+  }
+  for (int i = pos_x; i < pos_x + 4; i++) {
+    int p0 = out[pos_y * MB_BLOCK_SIZE + i];
+    int p1 = out[(pos_y+1) * MB_BLOCK_SIZE + i];
+    int p2 = out[(pos_y+2) * MB_BLOCK_SIZE + i];
+    int p3 = out[(pos_y+3) * MB_BLOCK_SIZE + i];
+    int t0 = p0 + p2;
+    int t1 = p0 - p2;
+    int t2 = (p1 >> 1) - p3;
+    int t3 = p1 + (p3 >> 1);
+    out[pos_y * MB_BLOCK_SIZE + i] = t0 + t3;
+    out[(pos_y+1) * MB_BLOCK_SIZE + i] = t1 + t2;
+    out[(pos_y+2) * MB_BLOCK_SIZE + i] = t1 - t2;
+    out[(pos_y+3) * MB_BLOCK_SIZE + i] = t0 - t3;
+  }
+}
 
 
 /*void _forward4x4(int **block, int **tblock, int pos_y, int pos_x)
@@ -129,55 +204,6 @@ void hadamard4x4_DCs(int *block, int *out_block) {
   }
 }
 
-void inverse4x4(int **tblock, int **block, int pos_y, int pos_x)
-{
-  int i, ii;  
-  int tmp[16];
-  int *pTmp = tmp, *pblock;
-  int p0,p1,p2,p3;
-  int t0,t1,t2,t3;
-
-  // Horizontal
-  for (i = pos_y; i < pos_y + BLOCK_SIZE; i++)
-  {
-    pblock = &tblock[i][pos_x];
-    t0 = *(pblock++);
-    t1 = *(pblock++);
-    t2 = *(pblock++);
-    t3 = *(pblock  );
-
-    p0 =  t0 + t2;
-    p1 =  t0 - t2;
-    p2 = (t1 >> 1) - t3;
-    p3 =  t1 + (t3 >> 1);
-
-    *(pTmp++) = p0 + p3;
-    *(pTmp++) = p1 + p2;
-    *(pTmp++) = p1 - p2;
-    *(pTmp++) = p0 - p3;
-  }
-
-  //  Vertical 
-  for (i = 0; i < BLOCK_SIZE; i++)
-  {
-    pTmp = tmp + i;
-    t0 = *pTmp;
-    t1 = *(pTmp += BLOCK_SIZE);
-    t2 = *(pTmp += BLOCK_SIZE);
-    t3 = *(pTmp += BLOCK_SIZE);
-
-    p0 = t0 + t2;
-    p1 = t0 - t2;
-    p2 =(t1 >> 1) - t3;
-    p3 = t1 + (t3 >> 1);
-
-    ii = i + pos_x;
-    block[pos_y    ][ii] = p0 + p3;
-    block[pos_y + 1][ii] = p1 + p2;
-    block[pos_y + 2][ii] = p1 - p2;
-    block[pos_y + 3][ii] = p0 - p3;
-  }
-}
 
 void hadamard4x4(int **block, int **tblock)
 {
@@ -228,54 +254,6 @@ void hadamard4x4(int **block, int **tblock)
   }
 }
 
-void ihadamard4x4(int **tblock, int **block)
-{
-  int i;  
-  int tmp[16];
-  int *pTmp = tmp, *pblock;
-  int p0,p1,p2,p3;
-  int t0,t1,t2,t3;
-
-  // Horizontal
-  for (i = 0; i < BLOCK_SIZE; i++)
-  {
-    pblock = tblock[i];
-    t0 = *(pblock++);
-    t1 = *(pblock++);
-    t2 = *(pblock++);
-    t3 = *(pblock  );
-
-    p0 = t0 + t2;
-    p1 = t0 - t2;
-    p2 = t1 - t3;
-    p3 = t1 + t3;
-
-    *(pTmp++) = p0 + p3;
-    *(pTmp++) = p1 + p2;
-    *(pTmp++) = p1 - p2;
-    *(pTmp++) = p0 - p3;
-  }
-
-  //  Vertical 
-  for (i = 0; i < BLOCK_SIZE; i++)
-  {
-    pTmp = tmp + i;
-    t0 = *pTmp;
-    t1 = *(pTmp += BLOCK_SIZE);
-    t2 = *(pTmp += BLOCK_SIZE);
-    t3 = *(pTmp += BLOCK_SIZE);
-
-    p0 = t0 + t2;
-    p1 = t0 - t2;
-    p2 = t1 - t3;
-    p3 = t1 + t3;
-    
-    block[0][i] = p0 + p3;
-    block[1][i] = p1 + p2;
-    block[2][i] = p1 - p2;
-    block[3][i] = p0 - p3;
-  }
-}
 
 void hadamard4x2(int **block, int **tblock)
 {

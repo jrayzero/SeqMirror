@@ -26,9 +26,9 @@ void registerStandardPasses(seq::ir::transform::PassManager &pm, bool debug) {
   }
   pm.registerAnalysis("cola-cfg", std::make_unique<seq::ir::analyze::dataflow::CFAnalysis>());
   pm.registerAnalysis("cola-reaching", std::make_unique<seq::ir::analyze::dataflow::RDAnalysis>("cola-cfg"), {"cola-cfg"});
-  pm.registerPass(
-      		  "modify-unit-writes",
-      		  std::make_unique<seq::ir::transform::cola::ModifyUnitWrites>(), {});
+//  pm.registerPass(
+  //    		  "modify-unit-writes",
+    //  		  std::make_unique<seq::ir::transform::cola::ModifyUnitWrites>(), {});
 }
 
 bool hasExtension(const std::string &filename, const std::string &extension) {

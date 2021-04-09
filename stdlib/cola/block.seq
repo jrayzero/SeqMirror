@@ -551,6 +551,36 @@ class Multidim[T,N:int]:
     return s
 
   # SETITEM
+
+  def __setitem__(self, idx: _UNIT, val: T):
+    if N == 1:
+      raise NotImplementedError()
+    elif N == 2:
+      raise NotImplementedError()
+    elif N == 3:
+      idx2 = self.buffer_mapping[0].start * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + self.buffer_mapping[1].start * self.buffer_parent.dims[2] + self.buffer_mapping[2].start
+      self.buffer[idx2] = val
+
+  def __setitem__(self, idx: int, val: T):
+    raise NotImplementedError()
+
+  def __setitem__(self, idx: Tuple[int], val: T):
+    raise NotImplementedError()
+
+  def __setitem__(self, idx: Tuple[int,int], val: T):
+    if self.front_fixed == 1:
+      self.__setitem__((0,idx[0],idx[1]), val)
+    else:
+      raise NotImplementedError()
+
+  def __setitem__(self, idx: Tuple[int,int,int], val: T):
+    i0 = idx[0]*self.buffer_mapping[0].step + self.buffer_mapping[0].start
+    j0 = idx[1]*self.buffer_mapping[1].step + self.buffer_mapping[1].start
+    k0 = idx[2]*self.buffer_mapping[2].step + self.buffer_mapping[2].start
+    d1 = self.buffer_parent.dims[1]
+    d2 = self.buffer_parent.dims[2]
+    self.buffer[i0*d1*d2 + j0*d2 + k0] = val
+    
   def __setitem__(self, idx, val: T):
     sliced = self.__getitem__(idx)
     # broadcast this idx

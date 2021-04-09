@@ -73,7 +73,7 @@ void ModifyUnitWrites::handle(CallInstr *instr) {
         return; // some type of access I don't support
       }
     }
-    // check that i,j,k (or however many items there are) are all ints
+    // check that i,j,k (or hdifowever many items there are) are all ints
     if (int_args.empty()) {
       for (auto it = tuple->begin(); it < tuple->end(); it++) {
         if ((*it)->getType()->is(M->getIntType())) {

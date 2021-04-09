@@ -271,7 +271,7 @@ auto getTypeTests(const vector<string> &files) {
 //    ),
 //    getTestNameFromParam);
 
-INSTANTIATE_TEST_SUITE_P(
+/*INSTANTIATE_TEST_SUITE_P(
     ColaTests, SeqTest,
     testing::Combine(
       testing::Values(
@@ -286,7 +286,7 @@ INSTANTIATE_TEST_SUITE_P(
       testing::Values(0),
       testing::Values(false)
     ),
-    getTestNameFromParam);
+    getTestNameFromParam);*/
 
 //INSTANTIATE_TEST_SUITE_P(
 //    StdlibTests, SeqTest,

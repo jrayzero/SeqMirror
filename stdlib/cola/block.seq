@@ -808,3 +808,11 @@ def do_min(*args):
       if i < m:
         m = i
     return m
+
+def foozle(i0:int,j0:int,k0:int,d1:int,d2:int):
+#  cola_debug(i0)
+#  cola_debug(j0)
+#  cola_debug(k0)
+#  cola_debug(d1)
+#  cola_debug(d2)
+  return i0*d1*d2 + j0*d2 + k0

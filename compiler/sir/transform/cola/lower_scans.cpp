@@ -61,16 +61,15 @@ void ModifyUnitWrites::handle(CallInstr *instr) {
     auto args = instr->begin();
     bool all_int = true;
     std::vector<Value*> int_args;
-    auto tuple = args + 1;
-    int ntup_generics = (*tuple)->getType()->getGenerics().size();
+    auto _tuple = args + 1;//(*(args + 1))->as<CallInstr>()->begin();// this a __new__ call
+    auto tuple = (*_tuple)->as<CallInstr>();
     // check that i,j,k (or however many items there are) are all ints
-    for (int i = 0; i < ntup_generics; i++) {
-      if (!(*tuple)->getType()->getGenerics()[i].getTypeValue()->is(M->getIntType())) {
-        all_int = false;
-        break;
+    for (auto it = tuple->begin(); it < tuple->end(); it++) {
+      if ((*it)->getType()->is(M->getIntType())) {
+        int_args.push_back(*it);	
       } else {
-        auto *get_int = M->Nr<ExtractInstr>(*tuple, std::to_string(i));
-        int_args.push_back(get_int);
+	all_int = false;
+	break;
       }
     }
     if (!all_int) {
@@ -82,49 +81,40 @@ void ModifyUnitWrites::handle(CallInstr *instr) {
     // k0 = k + Y.base.buffer_mapping[2].start
     // at this point, we have all of the integer values, so we can manually compute the index updates
     auto *bm = M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(self, "base"), "buffer_mapping");
-    auto *flow = M->Nr<SeriesFlow>();
-    std::vector<VarValue*> mapped_starts;
+    std::vector<Value*> mapped_starts;
     for (int i = 0; i < int_args.size(); i++) {
-      Value *r = M->Nr<ExtractInstr>(bm, std::to_string(i));
+      Value *r = M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(bm, "item" + std::to_string(i+1)), "start");
       auto *adder = M->getOrRealizeMethod(M->getIntType(), Module::ADD_MAGIC_NAME, {M->getIntType(), M->getIntType()});
       assert(adder);
       auto *sum = util::call(adder, {r,int_args[i]});
-      assert(sum);
-      std::cerr << *sum << std::endl;
-      auto *v = util::makeVar(sum, flow, cast<BodiedFunc>(getParentFunc()));
-      mapped_starts.push_back(v);
+      std::cerr << "sum " << *sum << std::endl;
+      mapped_starts.push_back(sum);
     }
     // compute the linearization. just manually do it for the number of indices
     if (mapped_starts.size() == 3) {
       // idx = i0*d1*d2 + j0*d2 + k0
       auto *parent_dims =
         M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(self, "base"), "buffer_parent"), "dims");
-      auto *d1 =  M->Nr<ExtractInstr>(parent_dims, "1");
-      auto *d2 =  M->Nr<ExtractInstr>(parent_dims, "2");
-      assert(d1);
-      assert(d2);
-      auto *adder = M->getOrRealizeMethod(M->getIntType(), Module::ADD_MAGIC_NAME, {M->getIntType(), M->getIntType()});
-      auto *mult = M->getOrRealizeMethod(M->getIntType(), Module::MUL_MAGIC_NAME, {M->getIntType(), M->getIntType()});
-      auto *c0 = util::makeVar(util::call(mult, {d2, mapped_starts[1]}), flow, cast<BodiedFunc>(getParentFunc()));
-      std::cerr << "c0 " << *c0 << std::endl;
-      auto *c1 = util::makeVar(util::call(adder, {c0, mapped_starts[2]}), flow, cast<BodiedFunc>(getParentFunc()));
-      std::cerr << "c1 " << *c1 << std::endl;
-      auto *c2 = util::makeVar(util::call(mult, {mapped_starts[0], d1}), flow, cast<BodiedFunc>(getParentFunc()));
-      std::cerr << "c2 " << *c2 << std::endl;
-      auto *c3 = util::makeVar(util::call(mult, {c2, d2}), flow, cast<BodiedFunc>(getParentFunc()));
-      std::cerr << "c3 " << *c3 << std::endl;
-      auto *idx = util::makeVar(util::call(adder, {c3, c2}), flow, cast<BodiedFunc>(getParentFunc()));
-      std::cerr << "idx " << *idx << std::endl;
-      auto *vidx = util::makeVar(idx, flow, cast<BodiedFunc>(getParentFunc()));
+      //      auto *d1 =  M->Nr<ExtractInstr>(parent_dims, "item2");
+      //      auto *d2 =  M->Nr<ExtractInstr>(parent_dims, "item3");
+      auto *foozle = M->getOrRealizeFunc("foozle",
+					 {M->getIntType(),M->getIntType(),M->getIntType(),M->getIntType(),M->getIntType()}, {}, "std.cola.block");
+      assert(foozle);
       // now get the buffer and write to that
       // Y.base.buffer[idx]
+      auto *idx = util::call(foozle, {
+	  mapped_starts[0],
+	  mapped_starts[1], mapped_starts[2], 
+	    M->Nr<ExtractInstr>(parent_dims, "item2"), M->Nr<ExtractInstr>(parent_dims, "item3")});//mapped_starts[0],mapped_starts[1],mapped_starts[2],d1,d2});
+      std::cerr << "idx " << *idx << std::endl;
       auto *buffer = M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(self, "base"), "buffer");
       // and use this buffer instead of the origin lhs
-      std::cerr << "my flow " << *flow << std::endl;
       // make a __setitem__ intstruction
       auto *new_assign = M->getOrRealizeMethod(buffer->getType(), "__setitem__",
                                                {buffer->getType(), M->getIntType(), (*(args+2))->getType()});
-      instr->replaceAll(util::call(new_assign, {buffer, vidx, *(args+2)}));
+      auto *do_setitem = util::call(new_assign, {buffer, idx, *(args+2)});
+      
+      instr->replaceAll(do_setitem);//*(args+2)}));
       std::cerr << "instr " << *instr << std::endl;
       // instr->replaceAll(flow)
     } else {

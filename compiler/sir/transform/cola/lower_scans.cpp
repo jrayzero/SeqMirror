@@ -48,33 +48,45 @@ void ModifyUnitWrites::handle(CallInstr *instr) {
     util::CloneVisitor cv(M);
     auto self = cv.clone(_self);
     COLA_TYPE ctype = get_cola_type(self->getType());
-    types::Type *type;
-    if (ctype == BLOCK) {
-      type = M->getOrRealizeType("Block",
-                                 {self->getType()->getGenerics()[0], self->getType()->getGenerics()[1]}, "std.cola.block");
-    } else if (ctype == VIEW) {
-      type = M->getOrRealizeType("View",
-                                 {self->getType()->getGenerics()[0], self->getType()->getGenerics()[1]}, "std.cola.block");
+    int ndims = 0;
+    if (ctype == BLOCK || ctype == VIEW) {
+      ndims = self->getType()->getGenerics()[1].getStaticValue();
     } else {
       return;
     }
+// TODO for 1d access, it won't be a tuple, just a single int
     auto args = instr->begin();
     bool all_int = true;
     std::vector<Value*> int_args;
-    auto _tuple = args + 1;//(*(args + 1))->as<CallInstr>()->begin();// this a __new__ call
+    auto _tuple = args + 1;
     auto tuple = (*_tuple)->as<CallInstr>();
-    // check that i,j,k (or however many items there are) are all ints
-    for (auto it = tuple->begin(); it < tuple->end(); it++) {
-      if ((*it)->getType()->is(M->getIntType())) {
-        int_args.push_back(*it);	
+    if (!tuple) {
+      // see if the type is UNIT, which implies an all 0 tuple
+      auto *unit = M->getOrRealizeType("_UNIT", {}, "std.cola.block");
+      seqassert(unit, "unit not found");
+      if ((*_tuple)->getType()->is(unit)) {
+        seqassert(ndims == 3, "only 3 dims supported currently");
+        for (int i = 0; i < ndims; i++) {
+          int_args.push_back(M->getInt(0));
+        }
       } else {
-	all_int = false;
-	break;
+        return; // some type of access I don't support
       }
     }
-    if (!all_int) {
-      return;
-    }
+    // check that i,j,k (or however many items there are) are all ints
+    if (int_args.empty()) {
+      for (auto it = tuple->begin(); it < tuple->end(); it++) {
+        if ((*it)->getType()->is(M->getIntType())) {
+          int_args.push_back(*it);
+        } else {
+          all_int = false;
+          break;
+        }
+      }
+      if (!all_int) {
+        return;
+      }
+    } // else we filled it from the UNIT
     // compute:
     // i0 = i + Y.base.buffer_mapping[0].start
     // j0 = j + Y.base.buffer_mapping[1].start
@@ -87,7 +99,6 @@ void ModifyUnitWrites::handle(CallInstr *instr) {
       auto *adder = M->getOrRealizeMethod(M->getIntType(), Module::ADD_MAGIC_NAME, {M->getIntType(), M->getIntType()});
       assert(adder);
       auto *sum = util::call(adder, {r,int_args[i]});
-      std::cerr << "sum " << *sum << std::endl;
       mapped_starts.push_back(sum);
     }
     // compute the linearization. just manually do it for the number of indices
@@ -95,30 +106,29 @@ void ModifyUnitWrites::handle(CallInstr *instr) {
       // idx = i0*d1*d2 + j0*d2 + k0
       auto *parent_dims =
         M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(self, "base"), "buffer_parent"), "dims");
-      //      auto *d1 =  M->Nr<ExtractInstr>(parent_dims, "item2");
-      //      auto *d2 =  M->Nr<ExtractInstr>(parent_dims, "item3");
       auto *foozle = M->getOrRealizeFunc("foozle",
-					 {M->getIntType(),M->getIntType(),M->getIntType(),M->getIntType(),M->getIntType()}, {}, "std.cola.block");
+                                         {M->getIntType(),M->getIntType(),M->getIntType(),
+                                          M->getIntType(),M->getIntType()},{},"std.cola.block");
       assert(foozle);
       // now get the buffer and write to that
       // Y.base.buffer[idx]
       auto *idx = util::call(foozle, {
-	  mapped_starts[0],
-	  mapped_starts[1], mapped_starts[2], 
-	    M->Nr<ExtractInstr>(parent_dims, "item2"), M->Nr<ExtractInstr>(parent_dims, "item3")});//mapped_starts[0],mapped_starts[1],mapped_starts[2],d1,d2});
-      std::cerr << "idx " << *idx << std::endl;
+        mapped_starts[0],
+        mapped_starts[1], mapped_starts[2],
+        M->Nr<ExtractInstr>(parent_dims, "item2"), M->Nr<ExtractInstr>(parent_dims, "item3")});
       auto *buffer = M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(self, "base"), "buffer");
       // and use this buffer instead of the origin lhs
       // make a __setitem__ intstruction
       auto *new_assign = M->getOrRealizeMethod(buffer->getType(), "__setitem__",
                                                {buffer->getType(), M->getIntType(), (*(args+2))->getType()});
       auto *do_setitem = util::call(new_assign, {buffer, idx, *(args+2)});
-      
-      instr->replaceAll(do_setitem);//*(args+2)}));
-      std::cerr << "instr " << *instr << std::endl;
-      // instr->replaceAll(flow)
+
+      instr->replaceAll(do_setitem);
     } else {
-      seqassert(false, "not implemented yet");
+//      seqassert(false, "not implemented yet");
+// If the number of access dims does not equal the ndims in the generics, there are fixed dims. I can add on the zeros
+// automatically, but I need to preserve the check in the runtime code that the fixed dims + naccess dims matches
+// the generic
     }
 
   }

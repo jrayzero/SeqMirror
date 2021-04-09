@@ -13,7 +13,7 @@ namespace cola {
 
   // look for calls of the form:
   // ingest[B](__getitem__(block, Tuple[int*]), fd)
-  struct ModifySlicedIngests : public OperatorPass {
+  struct ModifyUnitWrites : public OperatorPass {
     void handle(CallInstr*) override;
   };
   

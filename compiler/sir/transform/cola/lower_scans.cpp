@@ -12,19 +12,131 @@ namespace seq {
 namespace ir {
 namespace transform {
 namespace cola {
-  // TODO change name. No longer for ingests
-  void ModifySlicedIngests::handle(CallInstr *instr) {
-    auto M = instr->getModule();
-    auto *f = util::getFunc(instr->getCallee());
-    string fname = f->getUnmangledName();
-    if (fname == "__setitem__") {
-      auto *self = instr->front();
-      // LEFT off: trying to replace unit writes 
+
+enum COLA_TYPE {
+  BLOCK,
+  VIEW,
+  MULTIDIM,
+  CNONE,
+};
+
+
+COLA_TYPE get_cola_type(types::Type *type) {
+  // remove qualified path
+  string stype = ast::split(type->getName(), '.').back();
+  // remove any generics
+  stype = ast::split(stype, '[')[0];
+  if (stype == "Block") {
+    return BLOCK;
+  } else if (stype == "View") {
+    return VIEW;
+  } else if (stype == "Multidim") {
+    return MULTIDIM;
+  } else {
+    return CNONE;
+  }
+}
+
+void ModifyUnitWrites::handle(CallInstr *instr) {
+  auto M = instr->getModule();
+
+// Ex: Y[i,j,k] = rhs
+  auto *f = util::getFunc(instr->getCallee());
+  string fname = f->getUnmangledName();
+  if (fname == "__setitem__") {
+    auto *_self = instr->front();
+    util::CloneVisitor cv(M);
+    auto self = cv.clone(_self);
+    COLA_TYPE ctype = get_cola_type(self->getType());
+    types::Type *type;
+    if (ctype == BLOCK) {
+      type = M->getOrRealizeType("Block",
+                                 {self->getType()->getGenerics()[0], self->getType()->getGenerics()[1]}, "std.cola.block");
+    } else if (ctype == VIEW) {
+      type = M->getOrRealizeType("View",
+                                 {self->getType()->getGenerics()[0], self->getType()->getGenerics()[1]}, "std.cola.block");
+    } else {
+      return;
     }
+    auto args = instr->begin();
+    bool all_int = true;
+    std::vector<Value*> int_args;
+    auto tuple = args + 1;
+    int ntup_generics = (*tuple)->getType()->getGenerics().size();
+    // check that i,j,k (or however many items there are) are all ints
+    for (int i = 0; i < ntup_generics; i++) {
+      if (!(*tuple)->getType()->getGenerics()[i].getTypeValue()->is(M->getIntType())) {
+        all_int = false;
+        break;
+      } else {
+        auto *get_int = M->Nr<ExtractInstr>(*tuple, std::to_string(i));
+        int_args.push_back(get_int);
+      }
+    }
+    if (!all_int) {
+      return;
+    }
+    // compute:
+    // i0 = i + Y.base.buffer_mapping[0].start
+    // j0 = j + Y.base.buffer_mapping[1].start
+    // k0 = k + Y.base.buffer_mapping[2].start
+    // at this point, we have all of the integer values, so we can manually compute the index updates
+    auto *bm = M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(self, "base"), "buffer_mapping");
+    auto *flow = M->Nr<SeriesFlow>();
+    std::vector<VarValue*> mapped_starts;
+    for (int i = 0; i < int_args.size(); i++) {
+      Value *r = M->Nr<ExtractInstr>(bm, std::to_string(i));
+      auto *adder = M->getOrRealizeMethod(M->getIntType(), Module::ADD_MAGIC_NAME, {M->getIntType(), M->getIntType()});
+      assert(adder);
+      auto *sum = util::call(adder, {r,int_args[i]});
+      assert(sum);
+      std::cerr << *sum << std::endl;
+      auto *v = util::makeVar(sum, flow, cast<BodiedFunc>(getParentFunc()));
+      mapped_starts.push_back(v);
+    }
+    // compute the linearization. just manually do it for the number of indices
+    if (mapped_starts.size() == 3) {
+      // idx = i0*d1*d2 + j0*d2 + k0
+      auto *parent_dims =
+        M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(self, "base"), "buffer_parent"), "dims");
+      auto *d1 =  M->Nr<ExtractInstr>(parent_dims, "1");
+      auto *d2 =  M->Nr<ExtractInstr>(parent_dims, "2");
+      assert(d1);
+      assert(d2);
+      auto *adder = M->getOrRealizeMethod(M->getIntType(), Module::ADD_MAGIC_NAME, {M->getIntType(), M->getIntType()});
+      auto *mult = M->getOrRealizeMethod(M->getIntType(), Module::MUL_MAGIC_NAME, {M->getIntType(), M->getIntType()});
+      auto *c0 = util::makeVar(util::call(mult, {d2, mapped_starts[1]}), flow, cast<BodiedFunc>(getParentFunc()));
+      std::cerr << "c0 " << *c0 << std::endl;
+      auto *c1 = util::makeVar(util::call(adder, {c0, mapped_starts[2]}), flow, cast<BodiedFunc>(getParentFunc()));
+      std::cerr << "c1 " << *c1 << std::endl;
+      auto *c2 = util::makeVar(util::call(mult, {mapped_starts[0], d1}), flow, cast<BodiedFunc>(getParentFunc()));
+      std::cerr << "c2 " << *c2 << std::endl;
+      auto *c3 = util::makeVar(util::call(mult, {c2, d2}), flow, cast<BodiedFunc>(getParentFunc()));
+      std::cerr << "c3 " << *c3 << std::endl;
+      auto *idx = util::makeVar(util::call(adder, {c3, c2}), flow, cast<BodiedFunc>(getParentFunc()));
+      std::cerr << "idx " << *idx << std::endl;
+      auto *vidx = util::makeVar(idx, flow, cast<BodiedFunc>(getParentFunc()));
+      // now get the buffer and write to that
+      // Y.base.buffer[idx]
+      auto *buffer = M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(self, "base"), "buffer");
+      // and use this buffer instead of the origin lhs
+      std::cerr << "my flow " << *flow << std::endl;
+      // make a __setitem__ intstruction
+      auto *new_assign = M->getOrRealizeMethod(buffer->getType(), "__setitem__",
+                                               {buffer->getType(), M->getIntType(), (*(args+2))->getType()});
+      instr->replaceAll(util::call(new_assign, {buffer, vidx, *(args+2)}));
+      std::cerr << "instr " << *instr << std::endl;
+      // instr->replaceAll(flow)
+    } else {
+      seqassert(false, "not implemented yet");
+    }
+
   }
 
+}
 
-  
+
+
 // attribute storing possible dimensionalities
 
 struct DimensionAttribute : public Attribute {
@@ -71,28 +183,6 @@ private:
 
 LowerScans::LowerScans(string key) : key(move(key)) { }
 
-enum COLA_TYPE {
-  BLOCK,
-  VIEW,
-  MULTIDIM,
-  CNONE,
-};
-
-COLA_TYPE get_cola_type(types::Type *type) {
-  // remove qualified path
-  string stype = ast::split(type->getName(), '.').back();
-  // remove any generics
-  stype = ast::split(stype, '[')[0];
-  if (stype == "Block") {
-    return BLOCK;
-  } else if (stype == "View") {
-    return VIEW;
-  } else if (stype == "Multidim") {
-    return MULTIDIM;
-  } else {
-    return CNONE;
-  }
-}
 
 const std::string DimensionAttribute::AttributeName = "DimensionAttribute";
 

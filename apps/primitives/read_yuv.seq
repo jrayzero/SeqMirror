@@ -17,10 +17,10 @@ def ingest(fn, height, width, nframes):
         Y[i,j,k] = int(fd.read_u[1]())
         # Y[i,j,k], where i,j,k are constants
       # pad right
-      Y[0,j,width:] = Y(i,j,width-1)
+      Y[i,j,width:] = Y(i,j,width-1)
     # pad below
     for r in range(height, padded_height):
-      Y[0,r,:] = Y[0,height,:]
+      Y[i,r,:] = Y[i,height,:]
     # u
     for j in range(height//2):
       for k in range(width//2):

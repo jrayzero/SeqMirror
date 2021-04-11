@@ -5,11 +5,10 @@ from common import *
 def intra_16x16_luma_vertical[T,N:int](mb: View[T,N], pred: Block[T,N]) -> bool:
   f,h,w = mb.origin()
   if h > 0:
-    row = mb[0,-1,:]
     i = 0
-    # CANDIDATE FOR MEMCPY
-    for r in scan(row):
-      pred[0,:,i] = r()
+    # CANDIDATE FOR MEMSET
+    for i in range(16):
+      pred[0,:,i] = mb(0,-1,i)
       i += 1
     return True
   return False
@@ -17,11 +16,10 @@ def intra_16x16_luma_vertical[T,N:int](mb: View[T,N], pred: Block[T,N]) -> bool:
 def intra_16x16_luma_horizontal[T,N:int](mb: View[T,N], pred: Block[T,N]) -> bool:
   f,h,w = mb.origin()
   if w > 0:
-    col = mb[0,:,-1]
     i = 0
-    # CANDIDATE FOR BROADCAST OP
-    for c in scan(col):
-      pred[0,i,:] = c()
+    # CANDIDATE FOR BROADCAST (not memset cause not linear in the row dim)
+    for i in range(16):
+      pred[0,i,:] = mb(0,i,-1)
       i += 1
     return True
   return False
@@ -30,23 +28,19 @@ def intra_16x16_luma_DC[T,N:int](mb: View[T,N], pred: Block[T,N]):
   f,h,w = mb.origin()
   s = 0
   if h > 0 and w > 0:
-    row = mb[0,-1,:]
-    col = mb[0,:,-1]
     s = 16
-    for r,c in scan(row,col):
-      s += r() + c()
-    s >>= 5
+    for i in range(16):
+      s += mb(0, -1, i) + mb(0,i,-1)
+    s >>= 5    
   elif w > 0:
-    col = mb[0,:,-1]
     s = 8
-    for c in scan(col):
-      s += c()
+    for i in range(16):
+      s += mb(0,i,-1)
     s >>= 4
   elif h > 0:
-    row = mb[0,-1,:]
     s = 8
-    for r in scan(row):
-      s += r()
+    for i in range(16):
+      s += mb(0,-1,i)
     s >>= 4
   else:
     s = 1 << (bit_depth_y - 1)
@@ -55,25 +49,16 @@ def intra_16x16_luma_DC[T,N:int](mb: View[T,N], pred: Block[T,N]):
 def intra_16x16_luma_planar[T,N:int](mb: View[T,N], pred: Block[T,N]) -> bool:
   f,h,w = mb.origin()
   if h > 0 and w > 0:
-    row = mb[0,-1,:]
-    col = mb[0,:,-1]
     # pull out the pieces to compute H    
     H = 0
-    pH1 = row[0,:,8:]
-    pH2 = row[0,:,:8]   
-    r = 0
-    for h1,h2 in scan(pH1, pH2):
-      H += (r+1)*(h1()-h2())      
-      r += 1
+    for i in range(8):
+      H += (i+1) * (mb(0,-1,8+i)-mb(0,-1,i))    
     # and the pieces for V
     V = 0
-    pV1 = col[0,8:,:]
-    pV2 = col[0,:8,:]
     r = 0
-    for v1,v2 in scan(pV1, pV2):
-      V += (r+1)*(v1()-v2())          
-      r += 1
-    a = 16 * (col(0,15,0)+row(0,0,15))
+    for i in range(8):
+      V += (i+1) * (mb(0,8+i,-1)-mb(0,i,-1))
+    a = 16 * (mb(0,15,-1)+mb(0,-1,15))
     b = (5 * H + 32) >> 6
     c = (5 * V + 32) >> 6
     for y in range(16):

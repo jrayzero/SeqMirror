@@ -591,9 +591,24 @@ class Multidim[T,N:int]:
     
   def __setitem__(self, idx, val: T):
     sliced = self.__getitem__(idx)
+    sliced.broadcast_write(val)
     # broadcast this idx
-    for i in sliced.linear_iter():
-      sliced.buffer[i] = val
+#    for i in sliced.linear_iter():
+#      sliced.buffer[i] = val
+
+  def broadcast_write(self, val: T):
+    if N == 1:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        self.buffer[i] = val
+    elif N == 2:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        for j in range(self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):
+          self.buffer[i * self.buffer_parent.dims[1] + j] = val
+    else:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        for j in range(self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):          
+          for k in range(self.buffer_mapping[2].start, self.buffer_mapping[2].stop, self.buffer_mapping[2].step):
+            self.buffer[i * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + j * self.buffer_parent.dims[2] + k] = val            
 
   def __setitem__(self, idx, item: View[T,N]):
     self.__setitem__(idx, item.base)
@@ -822,13 +837,13 @@ class View[T,N:int]:
   def ingest[B:int](self, fd):
     self.base.ingest[B](fd)  
 
-def scan(*args):
-  if staticlen(args) == 0:
-    raise ColaError()
-  elif staticlen(args) == 1:
-    return iter(args[0])
-  else:
-    return zip(*args)
+#def scan(*args):
+#  if staticlen(args) == 0:
+#    raise ColaError()
+#  elif staticlen(args) == 1:
+#    return iter(args[0])
+#  else:
+#    return zip(*args)
   
 # for the compiler
 def do_range(start: int, stop: int, step: int):
@@ -846,11 +861,3 @@ def do_min(*args):
       if i < m:
         m = i
     return m
-
-def foozle(i0:int,j0:int,k0:int,d1:int,d2:int):
-#  cola_debug(i0)
-#  cola_debug(j0)
-#  cola_debug(k0)
-#  cola_debug(d1)
-#  cola_debug(d2)
-  return i0*d1*d2 + j0*d2 + k0

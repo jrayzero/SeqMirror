@@ -6,4 +6,4 @@ def ctick():
 def ctock(ticky, niters: int = 1, msg=""):
   tocky = _C.seq_ctime_monotonic()
   print(msg + " Elapsed: " + str((tocky-ticky)//niters) + "ns\n")
-  return tocky
+  return tocky-ticky

@@ -48,7 +48,7 @@ const char ExtractInstr::NodeId = 0;
 
 types::Type *ExtractInstr::doGetType() const {
   auto *memberedType = cast<types::MemberedType>(val->getType());
-  seqassert(memberedType, "{} is not a membered type", *val->getType());
+  seqassert(memberedType, "{} is not a membered type {}", *val->getType(), *val);
   return memberedType->getMemberType(field);
 }
 

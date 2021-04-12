@@ -42,7 +42,7 @@ namespace cola {
       vector<int> cola_loop_idxs;
       vector<Var*> all_original_loop_vars;
       int body_skip = 0;
-      if (fname == "iter") {
+      if (fname == Module::ITER_MAGIC_NAME) {
 	auto *arg = call->front();
 	if (is_block_type(arg->getType(),M)) {	  
 	  cola_loop_vars.push_back(cloned_flow->getVar());
@@ -87,6 +87,7 @@ namespace cola {
       } else {
 	return;
       }
+      
       if (cola_loop_vars.empty()) {
 	return; // no cola things in loop
       }
@@ -98,7 +99,7 @@ namespace cola {
 	  (*it)->accept(evv);
 	}
 	idx++;
-      }														     
+      }
       vector<VarValue*> used = evv.get_used();
       vector<Value*> used_ctx = evv.get_used_ctx();
       vector<VarValue*> my_used;
@@ -163,7 +164,7 @@ namespace cola {
       }
       auto *outer_flow = M->Nr<SeriesFlow>();
       // Let's transform the valid uses.
-      if (fname == "iter" || fname == "enumerate") {
+      if (fname == Module::ITER_MAGIC_NAME || fname == "enumerate") {
 	// get a reference to the buffer
 	auto *base = M->Nr<ExtractInstr>(cv.clone(cola_loop_iters[0]), "base"); // clone so doesn't get messed up when we replace loop iter
 	auto *_buffer = M->Nr<ExtractInstr>(base, "buffer");
@@ -174,7 +175,7 @@ namespace cola {
 	auto *do_iter = util::call(fiter, {base});
 	Value *full_iter;
 	// create the new overall loop iter
-	if (fname == "iter") {
+	if (fname == Module::ITER_MAGIC_NAME) {
 	  full_iter = do_iter;
 	} else {	  
 	  auto *enumer = M->getOrRealizeFunc("enumerate", {do_iter->getType(), M->getIntType()}, {}, "std.internal.builtin");
@@ -185,7 +186,7 @@ namespace cola {
 	auto *new_loop_var = util::makeVar(M->getInt(0), outer_flow, cast<BodiedFunc>(getParentFunc()));
 	// create the new overall loop var
 	VarValue *full_var;
-	if (fname == "iter") {
+	if (fname == Module::ITER_MAGIC_NAME) {      
 	  full_var = M->Nr<VarValue>(new_loop_var->getVar());
 	} else {
 	  auto *tup = util::makeTuple({util::makeVar(M->getInt(0), outer_flow, cast<BodiedFunc>(getParentFunc())), new_loop_var}, M);
@@ -208,6 +209,9 @@ namespace cola {
 	  auto *new_cola_assign = util::makeVar(M->Nr<ExtractInstr>(full_var, "item2"), new_body, cast<BodiedFunc>(getParentFunc()));
 	  new_cola_loop_var_assigns.push_back(new_cola_assign);
 	  assign_cola->replaceAll(new_cola_assign);	  
+	} else {
+	  // regular iter just has the one var
+	  new_cola_loop_var_assigns.push_back(full_var);
 	}
 	// add the original body
 	int idx = 0;
@@ -223,6 +227,7 @@ namespace cola {
 	    auto *ctx = my_used_ctx[i];
 	    auto *cctx = ctx->as<CallInstr>();
 	    // figure out which new loop var this is
+	    std::cerr << my_used_idxs.size() << std::endl;
 	    auto *new_loop_var = new_cola_loop_var_assigns[my_used_idxs[i]];
 	    auto *f = util::getFunc(cctx->getCallee());	    
 	    string fname = f->getUnmangledName();

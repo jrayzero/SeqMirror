@@ -515,7 +515,36 @@ class Multidim[T,N:int]:
         for j in range(self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):          
           for k in range(self.buffer_mapping[2].start, self.buffer_mapping[2].stop, self.buffer_mapping[2].step):
             yield i * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + j * self.buffer_parent.dims[2] + k
-    
+
+  def _do_linear_iteration2(self):
+    raise ColaError()
+    if N == 1:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        yield i
+    elif N == 2:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        for j in range(self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):
+          yield i * self.buffer_parent.dims[1] + j
+    else:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        for j in range(self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):          
+          for k in range(self.buffer_mapping[2].start, self.buffer_mapping[2].stop, self.buffer_mapping[2].step):
+            yield i * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + j * self.buffer_parent.dims[2] + k
+
+  def _do_linear_iteration3(self):
+    if N == 1:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        yield i
+    elif N == 2:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        for j in range(self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):
+          yield i * self.buffer_parent.dims[1] + j
+    else:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        for j in range(self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):          
+          for k in range(self.buffer_mapping[2].start, self.buffer_mapping[2].stop, self.buffer_mapping[2].step):
+            yield i * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + j * self.buffer_parent.dims[2] + k            
+                
   # similar to _do_linear_iteration, but doesn't actually linearize and returns a Multidim
   # We iterate over straight ranges (instead of using the buffer mapping) because getitem does the mapping for us, 
   # so we don't want to map twice
@@ -538,6 +567,13 @@ class Multidim[T,N:int]:
 
   def linear_iter(self):
     return self._do_linear_iteration()
+
+  # this is different so I can figure out if i'm using a linear_iter from the compiler transforms or not
+  def linear_iter2(self):
+    return self._do_linear_iteration2()
+
+  def linear_iter3(self):
+    return self._do_linear_iteration3()    
 
   def __str__(self):
     s = ''
@@ -592,9 +628,6 @@ class Multidim[T,N:int]:
   def __setitem__(self, idx, val: T):
     sliced = self.__getitem__(idx)
     sliced.broadcast_write(val)
-    # broadcast this idx
-#    for i in sliced.linear_iter():
-#      sliced.buffer[i] = val
 
   def broadcast_write(self, val: T):
     if N == 1:
@@ -619,26 +652,77 @@ class Multidim[T,N:int]:
   def __setitem__(self, idx, item: Multidim[T,N]):
     sliced = self.__getitem__(idx)
     if sliced.nunits() != item.nunits():
-      raise ColaError("different size writing regions")
+      raise ColaError("different size writing regions")    
     item_buffer = item.buffer
-    for l1,l2 in zip(sliced.linear_iter(),item.linear_iter()):
-      sliced.buffer[l1] = item_buffer[l2]
+    if N == 1:
+      raise NotImplementedError()
+    elif N == 2:
+      raise NotImplementedError()
+    elif N == 3:
+      if sliced.dims[0] == item.dims[0] and sliced.dims[1] == item.dims[1] and sliced.dims[2] == item.dims[2]:
+        # can do a direct loop nest
+        for i in range(sliced.dims[0]):
+          for j in range(sliced.dims[1]):
+            for k in range(sliced.dims[2]):
+              self_i = i*sliced.buffer_mapping[0].step + sliced.buffer_mapping[0].start
+              item_i = i*item.buffer_mapping[0].step + item.buffer_mapping[0].start
+              self_j = j*sliced.buffer_mapping[1].step + sliced.buffer_mapping[1].start
+              item_j = j*item.buffer_mapping[1].step + item.buffer_mapping[1].start
+              self_k = k*sliced.buffer_mapping[2].step + sliced.buffer_mapping[2].start
+              item_k = k*item.buffer_mapping[2].step + item.buffer_mapping[2].start
+              sliced.buffer[self_i * sliced.buffer_parent.dims[1] * sliced.buffer_parent.dims[2] + self_j * sliced.buffer_parent.dims[2] + self_k] = item_buffer[item_i * item.buffer_parent.dims[1] * item.buffer_parent.dims[2] + item_j * item.buffer_parent.dims[2] + item_k]
+      else:
+        for l1,l2 in zip(sliced.linear_iter2(),item.linear_iter2()):
+          sliced.buffer[l1] = item_buffer[l2]
+    else:
+      for l1,l2 in zip(sliced.linear_iter2(),item.linear_iter2()):
+        sliced.buffer[l1] = item_buffer[l2]
 
   # MATH
   def __sub__(self, other: Multidim[T,N]):
     if self.nunits() != other.nunits():
       raise ColaError()
     md = Multidim(self, True)
-    idx = 0 
-    for i,j in zip(self.linear_iter(),other.linear_iter()):
-      md.buffer[idx] = self.buffer[i] - other.buffer[j]
-      idx += 1
+    other_buffer = other.buffer
+    if N == 1:
+      raise NotImplementedError()
+    elif N == 2:
+      raise NotImplementedError()
+    elif N == 3:
+      if self.dims[0] == other.dims[0] and self.dims[1] == other.dims[1] and self.dims[2] == other.dims[2]:
+        # can do a direct loop nest
+        for i in range(self.dims[0]):
+          for j in range(self.dims[1]):
+            for k in range(self.dims[2]):
+              self_i = i*self.buffer_mapping[0].step + self.buffer_mapping[0].start
+              other_i = i*other.buffer_mapping[0].step + other.buffer_mapping[0].start
+              self_j = j*self.buffer_mapping[1].step + self.buffer_mapping[1].start
+              other_j = j*other.buffer_mapping[1].step + other.buffer_mapping[1].start
+              self_k = k*self.buffer_mapping[2].step + self.buffer_mapping[2].start
+              other_k = k*other.buffer_mapping[2].step + other.buffer_mapping[2].start
+              md.buffer[i*md.dims[1]*md.dims[2]+j*md.dims[2]+k] = self.buffer[self_i * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + self_j * self.buffer_parent.dims[2] + self_k] - other_buffer[other_i * other.buffer_parent.dims[1] * other.buffer_parent.dims[2] + other_j * other.buffer_parent.dims[2] + other_k]
+      else:
+        idx = 0
+        for l1,l2 in zip(self.linear_iter2(),other.linear_iter2()):
+          md.buffer[idx] = self.buffer[l1] - other_buffer[l2]
+          idx += 1
+    else:
+      idx = 0
+      for l1,l2 in zip(self.linear_iter2(),other.linear_iter2()):
+        self.buffer[l1] - other_buffer[l2]
+        md.buffer[idx] = self.buffer[l1] - other_buffer[l2]
+        idx += 1
     return md
+#    idx = 0 
+#    for i,j in zip(self.linear_iter3(),other.linear_iter3()):
+#      md.buffer[idx] = self.buffer[i] - other.buffer[j]
+#      idx += 1
+#    return md
 
   def __sub__(self, other: T):
     md = Multidim(self, True)
     idx = 0
-    for i in self.linear_iter():
+    for i in self.linear_iter3():
       md.buffer[idx] = self.buffer[i] - other
       idx +=1 
     return md
@@ -646,7 +730,7 @@ class Multidim[T,N:int]:
   def __rsub__(self, other: T):
     md = Multidim(self, True)
     idx = 0
-    for i in self.linear_iter():
+    for i in self.linear_iter3():
       md.buffer[idx] = other - self.buffer[i]
       idx += 1
     return md

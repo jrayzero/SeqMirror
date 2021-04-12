@@ -12,16 +12,6 @@ namespace ir {
 namespace transform {
 namespace cola {
 
-  // look for calls of the form:
-  // ingest[B](__getitem__(block, Tuple[int*]), fd)
-  struct ModifyUnitWrites : public OperatorPass {
-    void handle(CallInstr*) override;
-  };
-
-  struct LowerScans2 : public OperatorPass {
-    void handle(ForFlow*) override;
-  };
-
   // if you use a loop var outside of () or [int*],
   // then this will not transform the loop (so even
   // if you just copy, that is invalid).
@@ -30,23 +20,11 @@ namespace cola {
 
   // THIS WILL GIVE INCORRECT RESULTS IF YOU PASS AN ITERATOR THAT HAS ALREADY
   // HAD NEXT CALLED ON IT
-  struct MarkCandidateLoops : public OperatorPass {
+  struct TransformBlockIters : public OperatorPass {
     void handle(ForFlow*) override;
   };
   
-struct LowerScans : public OperatorPass {
 
-  std::map<int, Var*> lhs;
-
-  const analyze::dataflow::RDResult *reaching = nullptr;
-
-  string key;
-
-  explicit LowerScans(string key);
-
-  void handle(ForFlow *) override;
-
-};
 // recursively get all used values
  class ExtractVarVal : public util::Visitor {
  private:

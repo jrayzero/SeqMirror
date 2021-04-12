@@ -2,7 +2,7 @@
 // Created by Jessica Ray on 2021-03-16.
 //
 
-#include "lower_scans.h"
+#include "transform_block_iters.h"
 #include "sir/util/cloning.h"
 #include "sir/util/irtools.h"
 #include "sir/util/matching.h"
@@ -26,7 +26,7 @@ namespace cola {
 
   
   // only works for flat loop iterators (like, you can't have Generator[Generator[Block]]
-  void MarkCandidateLoops::handle(ForFlow *flow) {
+  void TransformBlockIters::handle(ForFlow *flow) {
     // start by cloning so we don't affect anything outside of the loop when we replace loop iters
     util::CloneVisitor cv(flow->getModule());
     auto *cloned_flow = cast<ForFlow>(cv.clone(flow));
@@ -332,25 +332,24 @@ namespace cola {
 	    auto *cctx = ctx->as<CallInstr>();
 	    int cola_idx = my_used_idxs[i];
 	    // figure out which new loop var this is
-	    auto *new_loop_var = new_cola_loop_var_assigns[cola_idx];//my_used_idxs[i]];
+	    auto *new_loop_var = new_cola_loop_var_assigns[cola_idx];
 	    auto *f = util::getFunc(cctx->getCallee());	    
 	    string fname = f->getUnmangledName();
 	    if (fname == Module::SETITEM_MAGIC_NAME) {
-	      std::cerr << "Found setitem " << buffers.size() << std::endl;
-	      auto *setitem = M->getOrRealizeMethod(buffers[/*idx*/cola_idx]->getType(),Module::SETITEM_MAGIC_NAME,{buffers[/*idx*/cola_idx]->getType(),M->getIntType(),cctx->back()->getType()});	      
+	      auto *setitem = M->getOrRealizeMethod(buffers[cola_idx]->getType(),Module::SETITEM_MAGIC_NAME,{buffers[cola_idx]->getType(),M->getIntType(),cctx->back()->getType()});	      
 	      seqassert(setitem, "couldn't find setitem");
 	      vector<Value*> args;
-	      args.push_back(buffers[/*idx*/cola_idx]);
+	      args.push_back(buffers[cola_idx]);
 	      args.push_back(new_loop_var);
 	      args.push_back(cctx->back());
 	      auto *call = util::call(setitem, args);
 	      ctx->replaceAll(call);
 	    } else {
 	      // call
-	      auto *getitem = M->getOrRealizeMethod(buffers[/*idx*/cola_idx]->getType(),Module::GETITEM_MAGIC_NAME,{buffers[/*idx*/cola_idx]->getType(),M->getIntType()});
+	      auto *getitem = M->getOrRealizeMethod(buffers[cola_idx]->getType(),Module::GETITEM_MAGIC_NAME,{buffers[cola_idx]->getType(),M->getIntType()});
 	      seqassert(getitem, "couldn't find getitem");
 	      vector<Value*> args;
-	      args.push_back(buffers[/*idx*/cola_idx]);
+	      args.push_back(buffers[cola_idx]);
 	      args.push_back(new_loop_var);
 	      auto *call = util::call(getitem, args);
 	      ctx->replaceAll(call);

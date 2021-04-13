@@ -488,8 +488,16 @@ class Multidim[T,N:int]:
   def __call__(self, idx0, idx1) -> T:
     return self.__getitem__((idx0, idx1))()
 
+  def __call__(self, idx0: int, idx1: int, idx2: int) -> T:
+    i0 = idx0*self.buffer_mapping[0].step + self.buffer_mapping[0].start
+    j0 = idx1*self.buffer_mapping[1].step + self.buffer_mapping[1].start
+    k0 = idx2*self.buffer_mapping[2].step + self.buffer_mapping[2].start
+    d1 = self.buffer_parent.dims[1]
+    d2 = self.buffer_parent.dims[2]
+    return self.buffer[i0*d1*d2 + j0*d2 + k0]
+
   def __call__(self, idx0, idx1, idx2) -> T:
-    return self.__getitem__((idx0, idx1, idx2))()
+    return self.__getitem__((idx0, idx1, idx2))()  
 
   # ITERATION
 
@@ -513,16 +521,16 @@ class Multidim[T,N:int]:
   # so we don't want to map twice
   def _do_slice_iteration(self):
     if N == 1:
-      for i in range(self.dims[0]):#self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+      for i in range(self.dims[0]):
         yield self.__getitem__((i,))
     elif N == 2:
-      for i in range(self.dims[0]):#self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
-        for j in range(self.dims[1]):#self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):
+      for i in range(self.dims[0]):
+        for j in range(self.dims[1]):
           yield self.__getitem__((i,j))
     else:
-      for i in range(self.dims[0]):#self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
-        for j in range(self.dims[1]):#self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):          
-          for k in range(self.dims[2]):#self.buffer_mapping[2].start, self.buffer_mapping[2].stop, self.buffer_mapping[2].step):
+      for i in range(self.dims[0]):
+        for j in range(self.dims[1]):
+          for k in range(self.dims[2]):
             yield self.__getitem__((i,j,k))
       
   def __iter__(self):
@@ -583,17 +591,32 @@ class Multidim[T,N:int]:
     
   def __setitem__(self, idx, val: T):
     sliced = self.__getitem__(idx)
+    sliced.broadcast_write(val)
     # broadcast this idx
-    for i in sliced.linear_iter():
-      sliced.buffer[i] = val
+#    for i in sliced.linear_iter():
+#      sliced.buffer[i] = val
 
-  def __setitem__[P:int](self, idx, item: View[T,P]):
+  def broadcast_write(self, val: T):
+    if N == 1:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        self.buffer[i] = val
+    elif N == 2:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        for j in range(self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):
+          self.buffer[i * self.buffer_parent.dims[1] + j] = val
+    else:
+      for i in range(self.buffer_mapping[0].start, self.buffer_mapping[0].stop, self.buffer_mapping[0].step):
+        for j in range(self.buffer_mapping[1].start, self.buffer_mapping[1].stop, self.buffer_mapping[1].step):          
+          for k in range(self.buffer_mapping[2].start, self.buffer_mapping[2].stop, self.buffer_mapping[2].step):
+            self.buffer[i * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + j * self.buffer_parent.dims[2] + k] = val            
+
+  def __setitem__(self, idx, item: View[T,N]):
     self.__setitem__(idx, item.base)
 
-  def __setitem__[P:int](self, idx, item: Block[T,P]):
+  def __setitem__(self, idx, item: Block[T,N]):
     self.__setitem__(idx, item.base)
       
-  def __setitem__[P:int](self, idx, item: Multidim[T,P]):
+  def __setitem__(self, idx, item: Multidim[T,N]):
     sliced = self.__getitem__(idx)
     if sliced.nunits() != item.nunits():
       raise ColaError("different size writing regions")
@@ -838,11 +861,3 @@ def do_min(*args):
       if i < m:
         m = i
     return m
-
-def foozle(i0:int,j0:int,k0:int,d1:int,d2:int):
-#  cola_debug(i0)
-#  cola_debug(j0)
-#  cola_debug(k0)
-#  cola_debug(d1)
-#  cola_debug(d2)
-  return i0*d1*d2 + j0*d2 + k0

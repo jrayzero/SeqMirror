@@ -6,8 +6,8 @@ from intra import *
 
 print('starting')
 input_file = "foreman_part_qcif_x1000.yuv"
-niters = 1
-nframes = 4
+niters = 10
+nframes = 100
 height = 144
 width = 176
 total_time = 0
@@ -22,5 +22,5 @@ for n in range(niters):
         pred_luma_16x16(mb)
   total_time += ctock(tick, 1, "Iter " + str(n))
 print(total_time/1e9/niters)
-print(Y)
+#print(Y)
 

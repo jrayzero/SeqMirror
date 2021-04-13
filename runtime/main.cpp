@@ -11,6 +11,7 @@
 #include <vector>
 #include "compiler/sir/transform/cola/print_func_ir.h"
 #include "compiler/sir/transform/cola/transform_block_iters.h"
+#include "compiler/sir/transform/cola/lower_traversals.h"
 #include "compiler/sir/analyze/dataflow/cfg.h"
 #include "compiler/sir/analyze/dataflow/reaching.h"
 
@@ -27,8 +28,11 @@ void registerStandardPasses(seq::ir::transform::PassManager &pm, bool debug) {
   pm.registerAnalysis("cola-cfg", std::make_unique<seq::ir::analyze::dataflow::CFAnalysis>());
   pm.registerAnalysis("cola-reaching", std::make_unique<seq::ir::analyze::dataflow::RDAnalysis>("cola-cfg"), {"cola-cfg"});
   pm.registerPass(
-		  "cola-transform-block-iters",
+  		  "cola-transform-block-iters",
 		  std::make_unique<seq::ir::transform::cola::TransformBlockIters>(), {});
+  //  pm.registerPass(
+  //		  "cola-lower-traversals",
+  //		  std::make_unique<seq::ir::transform::cola::LowerTraversals>(), {});  
 }
 
 bool hasExtension(const std::string &filename, const std::string &extension) {

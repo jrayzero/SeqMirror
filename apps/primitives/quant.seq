@@ -11,7 +11,8 @@ def quant_dc4x4_normal(blk, qp) -> bool:
   is_nonzero = False
   qp_per = qp_per_matrix[qp]
   q_bits = Q_BITS + qp_per + 1
-  for idx,_coeff in enumerate(blk):
+  idx = 0
+  for _coeff in scan(blk):
     coeff = _coeff()
     if coeff != 0:
       scaled = abs(coeff) * scale_comp_DC[idx]
@@ -23,13 +24,16 @@ def quant_dc4x4_normal(blk, qp) -> bool:
         is_nonzero = True
       else:
         _coeff[UNIT] = 0
+    idx+=1
   return is_nonzero
 
 def rshift_rnd_sf(x,a):
   return (x + (1 << (a-1) )) >> a
 
 def inverse_quant(recons, qp):
-  for i in recons:
+#  for i in recons.base.linear_iter():
+#    recons.base.buffer[i] = rshift_rnd_sf((recons.base.buffer[i] * iscale) << qp_per_matrix[QP], 6)
+  for i in scan(recons):
     i[UNIT] = rshift_rnd_sf((i() * iscale) << qp_per_matrix[QP], 6)
 
 def quant_ac4x4_normal(blk, qp) -> bool:
@@ -39,7 +43,8 @@ def quant_ac4x4_normal(blk, qp) -> bool:
   # skip DC
   first = True
   # TODO scan(blk,1) to skip
-  for idx,_coeff in enumerate(blk):
+  idx = 0
+  for _coeff in scan(blk):
     if first:
       first = False
       continue
@@ -52,4 +57,5 @@ def quant_ac4x4_normal(blk, qp) -> bool:
       is_nonzero = True
     else:
       _coeff[UNIT] = 0
+    idx += 1
   return is_nonzero      

@@ -5,6 +5,7 @@
 #include "sir/attribute.h"
 #include "sir/sir.h"
 #include "sir/util/visitor.h"
+#include "sir/util/irtools.h"
 #include <stack>
 
 namespace seq {
@@ -52,11 +53,13 @@ namespace cola {
 
    virtual ~ExtractVarVal() noexcept = default;
 
-   void visit(Var *v) override { }
+   void visit(Var *v) override { throw std::runtime_error("cannot visit var"); }
 
    void visit(VarValue *v) override {
-     used.push_back(v);
-     used_ctx.push_back(temp_ctx.top());
+     if (util::getVar(v)) {
+	 used.push_back(v);
+	 used_ctx.push_back(temp_ctx.top());
+       }
    }
    void visit(PointerValue *v) override { throw std::runtime_error("cannot visit pointervalue"); }
 

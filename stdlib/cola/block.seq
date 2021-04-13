@@ -945,3 +945,10 @@ def do_min(*args):
       if i < m:
         m = i
     return m
+
+def scan(*args):
+  if staticlen(args) == 1:
+    for i in args[0]:
+      yield i
+  else:
+    return zip(*args);

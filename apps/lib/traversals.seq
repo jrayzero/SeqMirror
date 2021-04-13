@@ -1,20 +1,25 @@
 from cola.traversal import *
 
 @traversal
-def _zigzag(N: int, i: int = 1, upper: bool = True):
+def zigzag(N: int, i: int = -1, upper: bool = True):
   tparams 2
-  if i > 0 and upper:
+  if i == -1:
+    astep (0,1)
+    link zigzag(N,1)
+    astep (1,-1)
+    astep (0,1))    
+  elif i > 0 and upper:
     # upper triangle
     astep (1,-1) by 2*i-1, (1,0), (-1,1) by 2*i, (0,1)
-    link _zigzag(N, i+1, i+1 != N//2)
+    link zigzag(N, i+1, i+1 != N//2)
   elif i > 1:
     # lower triangle
     j = i-1
     astep (1,-1) by 2*j+1, (0,1), (-1,1) by 2*j, (1,0)
-    link _zigzag(N, j, upper)    
+    link zigzag(N, j, upper)    
 
-def zigzag(N: int):
-  return AStep((0,1)) + _zigzag(N) + AStep((1,-1)) + AStep((0,1))
+#def zigzag(N: int):
+#  return AStep((0,1)) + _zigzag(N) + AStep((1,-1)) + AStep((0,1))
 
 # 2 is number of dimensions
 @traversal

@@ -18,7 +18,6 @@ void pred_luma_16x16(struct macroblock *mb) {
   bool did_horizontal = intra16x16_luma_horizontal(mb);
   intra16x16_luma_DC(mb);
   bool did_planar = intra16x16_luma_planar(mb);
-  
   int min_cost = INT_MAX;
   int *best = NULL;
   int midx = 0;

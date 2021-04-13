@@ -7,21 +7,20 @@ from intra import *
 print('starting')
 input_file = "foreman_part_qcif_x1000.yuv"
 niters = 1
-nframes = 3
+nframes = 4
 height = 144
 width = 176
-tick = ctick()
+total_time = 0
+Y,U,V = ingest(input_file, height, width, nframes)
 for n in range(niters):
-  print("Iter " + str(n))
-  Y,U,V = ingest(input_file, height, width, nframes)
+  tick = ctick()
   for f in range(nframes):
     Y_frame = Y[f,:,:]
     for r in range(0,Y.dims()[1],16):
       for c in range(0,Y.dims()[2],16):
         mb = Y_frame[0,r:r+16,c:c+16]
         pred_luma_16x16(mb)
-  print(Y)
-  print(U)
-  print(V)
+  total_time += ctock(tick, 1, "Iter " + str(n))
+print(total_time/1e9/niters)
+print(Y)
 
-ctock(tick, niters)

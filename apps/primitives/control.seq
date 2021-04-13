@@ -36,14 +36,13 @@ def xform_quant_luma_16x16(mb, pred):
       inverse4x4(coded_4x4, recons_4x4)
   # now do the final reconstruction
   transformed[0,::4,::4] = transformed_DCs
-  for r,p in zip(reconstruction, pred):
+  for r,p in scan(reconstruction, pred):
     val = rshift_rnd_sf(r(), 6) + p()
     val = max(0, val)
     val = min(255, val)
     r[UNIT] = val        
   return reconstruction,transformed
   
-
 # do prediction, call the transform loop, get the costs
 def pred_luma_16x16(mb):
   pred_16x16_vertical = Block(mb)

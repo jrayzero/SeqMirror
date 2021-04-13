@@ -46,6 +46,7 @@ def quant_ac4x4_normal(blk, qp) -> bool:
   idx = 0
   for _coeff in scan(blk):
     if first:
+      idx += 1
       first = False
       continue
     coeff = _coeff()

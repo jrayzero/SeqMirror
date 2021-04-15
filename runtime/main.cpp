@@ -30,6 +30,9 @@ void registerStandardPasses(seq::ir::transform::PassManager &pm, bool debug) {
   pm.registerPass(
   		  "cola-transform-block-iters",
 		  std::make_unique<seq::ir::transform::cola::TransformBlockIters>(), {});
+  pm.registerPass(
+    "cola-fast-path-scans",
+    std::make_unique<seq::ir::transform::cola::FastPathScans>(), {});
   //  pm.registerPass(
   //		  "cola-lower-traversals",
   //		  std::make_unique<seq::ir::transform::cola::LowerTraversals>(), {});  
@@ -111,10 +114,6 @@ int runMode(const std::vector<const char *> &args) {
 
   auto *module = seq::parse(args[0], input.c_str(), /*code=*/"", /*isCode=*/false,
                             /*isTest=*/false, /*startLine=*/0, defmap);
-
-//  std::cerr << *module << std::endl;
-//  std::cerr << "DONE PRINTING MODULE" << std::endl;
-//  exit(48);
 
   if (!module)
     return EXIT_FAILURE;

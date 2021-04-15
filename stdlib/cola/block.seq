@@ -98,6 +98,7 @@ class View[T,N:int]:
 class Block[T,N:int]:
   base: Multidim[T,N]
 
+# TODO this doesn't seem to get statically evaluated
 def compareN[N:int,T:int]():
   if N != T:
     raise ColaError()
@@ -680,24 +681,15 @@ class Multidim[T,N:int]:
   def has_unit_stride(self):
     return self.buffer_mapping[0].step == 1 and self.buffer_mapping[1].step == 1 and self.buffer_mapping[2].step == 1
   
-  def ingest[B:int](self, fd):
+  def ingest(self, fd, nelems):
     # currently, need a stride of 1 otherwise you might as well call ingest over and over again
-    if B < 1:
+    if nelems < 1:
       raise ColaError()
-    if B > 1 and not self.has_unit_stride():
+    if nelems > 1 and not self.has_unit_stride():
       raise ColaError()
     # get the starting location in the buffer
     offset = self.buffer_mapping[0].start * self.buffer_parent.dims[1] * self.buffer_parent.dims[2] + self.buffer_mapping[1].start * self.buffer_parent.dims[2] + self.buffer_mapping[2].start
-    fd.read_into(self.buffer.ptr, 1, B, offset)
-
-  def ingest[B:int](self, fd, offset):
-    # currently, need a stride of 1 otherwise you might as well call ingest over and over again
-    if B < 1:
-      raise ColaError()
-    if B > 1 and not self.has_unit_stride():
-      raise ColaError()
-    # get the starting location in the buffer
-    fd.read_into(self.buffer.ptr, 1, B, offset)
+    fd.read_into(self.buffer.ptr, 1, nelems, offset)
 
 @extend
 class Block[T,N:int]:
@@ -772,8 +764,8 @@ class Block[T,N:int]:
   def __rsub__(self, other: T):
     return Block(self.base.__rsub__(other))
 
-  def ingest[B:int](self, fd):
-    self.base.ingest[B](fd)
+  def ingest(self, fd, nelems):
+    self.base.ingest(fd, nelems)
 
 @extend
 class View[T,N:int]:  
@@ -858,8 +850,8 @@ class View[T,N:int]:
   def __rsub__(self, other: T) -> Block[T,N]:
     return Block(self.base.__rsub__(other))
 
-  def ingest[B:int](self, fd):
-    self.base.ingest[B](fd)  
+  def ingest(self, fd, nelems):
+    self.base.ingest(fd, nelems)
 
 def scan(*args):
   if staticlen(args) == 0:

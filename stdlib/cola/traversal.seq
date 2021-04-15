@@ -90,6 +90,11 @@ class Traversal:
     self.origin = origin
     return self
 
+  def add_aseek(self, coord):
+    movement = Movement(0)
+    movement.set_step(coord, 1)
+    self.add_movement(movement)
+
   def add_seek(self, coord):
     movement = Movement(0)
     movement.set_step(coord, 1)

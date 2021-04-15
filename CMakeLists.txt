@@ -151,7 +151,6 @@ set(SEQ_HPPFILES
         compiler/sir/transform/pass.h
         compiler/sir/transform/pipeline.h
         compiler/sir/transform/cola/transform_block_iters.h
-	compiler/sir/transform/cola/lower_traversals.h
         compiler/sir/transform/cola/print_func_ir.h
         compiler/sir/types/types.h
         compiler/sir/util/cloning.h
@@ -217,7 +216,6 @@ set(SEQ_CPPFILES
         compiler/sir/transform/pass.cpp
         compiler/sir/transform/pipeline.cpp
         compiler/sir/transform/cola/transform_block_iters.cpp
-	compiler/sir/transform/cola/lower_traversals.cpp
         compiler/sir/transform/cola/print_func_ir.cpp
         compiler/sir/types/types.cpp
         compiler/sir/util/cloning.cpp

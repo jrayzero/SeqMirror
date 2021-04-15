@@ -22,6 +22,10 @@ struct CanonicalizeLoops : public OperatorPass {
   void handle(ForFlow*) override;
 };
 
+struct Unroll : public OperatorPass {
+  void handle(ForFlow*) override;
+};
+
 // if you use a loop var outside of () or [int*],
 // then this will not transform the loop (so even
 // if you just copy, that is invalid).

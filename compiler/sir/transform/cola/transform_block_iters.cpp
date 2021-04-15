@@ -32,6 +32,100 @@ Value *extract_all(Module *M, Value *base, std::vector<string> fields) {
   return extracted;
 }
 
+void Unroll::handle(seq::ir::ForFlow *flow) {
+  auto *cloned_flow = util::CloneVisitor(flow->getModule()).clone(flow)->as<ForFlow>();
+  auto M = cloned_flow->getModule();
+  auto iter = cloned_flow->getIter();
+  if (iter->is<CallInstr>()) {
+    auto *call = iter->as<CallInstr>();
+    auto *call_func = util::getFunc(call->getCallee());
+    auto fname = call_func->getUnmangledName();
+    if (fname == Module::ITER_MAGIC_NAME) {
+      // check if this is a range type
+      auto *range_ty = M->getOrRealizeType("range", {}, "std.internal.types.range");
+      seqassert(range_ty, "");
+      if (!call->front()->getType()->is(range_ty)) {
+        return;
+      }
+      auto *range_new = call->front()->as<CallInstr>();
+      if (!range_new) {
+        return;
+      }
+      int64_t start = 0;
+      int64_t stop = 0;
+      int64_t step = 0;
+      bool is_unrollable = false;
+      if (range_new->numArgs() == 1) {
+        // stop only
+        if (range_new->front()->is<IntConst>()) {
+          start = 0;
+          stop = range_new->front()->as<IntConst>()->getVal();
+          step = 1;
+          is_unrollable = true;
+        }
+      } else if (range_new->numArgs() == 2) {
+        // start + stop
+        auto it = range_new->begin();
+        auto *_start = *it;
+        it++;
+        auto *_stop = *it;
+        if (_start->is<IntConst>() && _stop->is<IntConst>()) {
+          start = _start->as<IntConst>()->getVal();
+          stop = _stop->as<IntConst>()->getVal();
+          step = 1;
+          is_unrollable = true;
+        }
+      } else {
+        // start + stop + step
+        auto it = range_new->begin();
+        auto *_start = *it;
+        it++;
+        auto *_stop = *it;
+        it++;
+        auto *_step = *it;
+        if (_start->is<IntConst>() && _stop->is<IntConst>() && _step->is<IntConst>()) {
+          start = _start->as<IntConst>()->getVal();
+          stop = _stop->as<IntConst>()->getVal();
+          step = _step->as<IntConst>()->getVal();
+          is_unrollable = true;
+        }
+      }
+      if (!is_unrollable) {
+        return;
+      }
+
+      auto *unrolled = M->Nr<SeriesFlow>();
+      // for now, unroll the whole thing
+      for (int64_t i = start; i < stop; i+=step) {
+        std::cerr << "ITERATION " << i << std::endl;
+        auto *idx = M->getInt(i);
+        unrolled->push_back(M->Nr<AssignInstr>(flow->getVar(), idx));
+//        auto *var_idx = util::makeVar(idx, unrolled, cast<BodiedFunc>(getParentFunc()));
+        auto *cloned = cast<ForFlow>(util::CloneVisitor(M).clone(flow));
+//        ExtractVarVal evv;
+//        for (auto it = cloned->getBody()->as<SeriesFlow>()->begin(); it != cloned->getBody()->as<SeriesFlow>()->end(); it++) {
+//          (*it)->accept(evv);
+//        }
+//        vector<VarValue*> used = evv.get_used();
+//        for (int i = 0; i < used.size(); i++) {
+//          auto *var = util::getVar(used[i]); // when is it not a valid varval?
+//          seqassert(var, "not a varval??");
+//          if (var->getId() == cloned->getVar()->getId()) {
+//            var->replaceAll(var_idx->getVar());
+//          }
+//        }
+//        auto *cloned_var = cloned->getVar();
+//        cloned_var->replaceAll(var_idx->getVar());
+        unrolled->push_back(cloned->getBody());
+      }
+
+      flow->replaceAll(unrolled);
+      std::cerr << *flow << std::endl;
+
+    }
+  }
+}
+
 // only supports scan and range. If you make this general, it fails on things like iterating through lists which can return a tuple
 // when iterating over one list since the list could contain tuple's itself
 void CanonicalizeLoops::handle(seq::ir::ForFlow *flow) {

@@ -26,7 +26,7 @@ void registerStandardPasses(seq::ir::transform::PassManager &pm, bool debug) {
   }
   pm.registerAnalysis("cola-cfg", std::make_unique<seq::ir::analyze::dataflow::CFAnalysis>());
   pm.registerAnalysis("cola-reaching", std::make_unique<seq::ir::analyze::dataflow::RDAnalysis>("cola-cfg"), {"cola-cfg"});
-  pm.registerPass("cola-canonicalize", std::make_unique<seq::ir::transform::cola::CanonicalizeLoops>());
+  pm.registerPass("cola-unroll", std::make_unique<seq::ir::transform::cola::Unroll>());
 //  pm.registerPass(
 //  		  "cola-transform-block-iters",
 //		  std::make_unique<seq::ir::transform::cola::TransformBlockIters>(), {});

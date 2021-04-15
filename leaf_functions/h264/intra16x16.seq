@@ -39,8 +39,7 @@ def intra_16x16_luma_DC_c(ref_frame, pred):
   s >>= 4
   pred[:,:] = s
 
-def intra_16x16_luma_DC_d(ref_frame, pred, bit_depth_y):
-  s = 0
+def intra_16x16_luma_DC_d(pred, bit_depth_y):
   pred[:,:] = 1 << (bit_depth_y - 1)
 
 def intra_16x16_luma_planar(ref_frame, pred):

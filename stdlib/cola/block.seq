@@ -592,9 +592,6 @@ class Multidim[T,N:int]:
   def __setitem__(self, idx, val: T):
     sliced = self.__getitem__(idx)
     sliced.broadcast_write(val)
-    # broadcast this idx
-#    for i in sliced.linear_iter():
-#      sliced.buffer[i] = val
 
   def broadcast_write(self, val: T):
     if N == 1:
@@ -619,10 +616,37 @@ class Multidim[T,N:int]:
   def __setitem__(self, idx, item: Multidim[T,N]):
     sliced = self.__getitem__(idx)
     if sliced.nunits() != item.nunits():
-      raise ColaError("different size writing regions")
+      raise ColaError("different size writing regions")    
     item_buffer = item.buffer
-    for l1,l2 in zip(sliced.linear_iter(),item.linear_iter()):
-      sliced.buffer[l1] = item_buffer[l2]
+    if N == 1:
+      raise NotImplementedError()
+    elif N == 2:
+      raise NotImplementedError()
+    elif N == 3:
+      if sliced.dims[0] == item.dims[0] and sliced.dims[1] == item.dims[1] and sliced.dims[2] == item.dims[2]:
+        # can do a direct loop nest
+        for i in range(sliced.dims[0]):
+          for j in range(sliced.dims[1]):
+            for k in range(sliced.dims[2]):
+              self_i = i*sliced.buffer_mapping[0].step + sliced.buffer_mapping[0].start
+              item_i = i*item.buffer_mapping[0].step + item.buffer_mapping[0].start
+              self_j = j*sliced.buffer_mapping[1].step + sliced.buffer_mapping[1].start
+              item_j = j*item.buffer_mapping[1].step + item.buffer_mapping[1].start
+              self_k = k*sliced.buffer_mapping[2].step + sliced.buffer_mapping[2].start
+              item_k = k*item.buffer_mapping[2].step + item.buffer_mapping[2].start
+              sliced.buffer[self_i * sliced.buffer_parent.dims[1] * sliced.buffer_parent.dims[2] + self_j * sliced.buffer_parent.dims[2] + self_k] = item_buffer[item_i * item.buffer_parent.dims[1] * item.buffer_parent.dims[2] + item_j * item.buffer_parent.dims[2] + item_k]
+      else:
+        for l1,l2 in zip(sliced.linear_iter(),item.linear_iter()):
+          sliced.buffer[l1] = item_buffer[l2]
+    else:
+      for l1,l2 in zip(sliced.linear_iter(),item.linear_iter()):
+        sliced.buffer[l1] = item_buffer[l2]    
+#    sliced = self.__getitem__(idx)
+#    if sliced.nunits() != item.nunits():
+#      raise ColaError("different size writing regions")
+#    item_buffer = item.buffer
+#    for l1,l2 in zip(sliced.linear_iter(),item.linear_iter()):
+#      sliced.buffer[l1] = item_buffer[l2]
 
   # MATH
   def __sub__(self, other: Multidim[T,N]):

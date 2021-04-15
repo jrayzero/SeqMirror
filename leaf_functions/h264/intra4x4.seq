@@ -42,8 +42,7 @@ def intra_4x4_DC_c(ref_frame, pred):
     s += ref_row(0,0) + ref_row(0,1) + ref_row(0,2) + ref_row(0,3)
   pred[:,:] = s >> 2
 
-def intra_16x16_luma_DC_d(ref_frame, pred, bit_depth_y):
-  s = 0
+def intra_4x4_luma_DC_d(ref_frame, pred, bit_depth_y):
   pred[:,:] = 1 << (bit_depth_y - 1)
   
 def intra_4x4_diag_down_left(ref_frame, pred):
@@ -51,9 +50,21 @@ def intra_4x4_diag_down_left(ref_frame, pred):
   for y in range(4):
     for x in range(4):
       if y == 3 and x == 3:
-        pred[3,3] = (ref_row(-1,6) + 3 * ref_row(-1,7) + 2) >> 2
+        pred[3,3] = (ref_row(0,6) + 3 * ref_row(0,7) + 2) >> 2
       else:
-        pred[y,x] = (ref_row(-1,x+y) + 2 * ref_row(-1, x + y + 1) + ref_row(-1, x + y + 2) + 2) >> 2
+        pred[y,x] = (ref_row(0,x+y) + 2 * ref_row(0,x+y+1) + ref_row(0,x+y+2) + 2) >> 2
 
 def intra_4x4_diag_down_right(ref_frame, pred):
-  
+  ref_row = ref_frame[pred][-1,:]
+  ref_col = ref_frame[pred][:,-1]
+  for y in range(4):
+    for x in range(4):
+      if x > y:
+        pred[y,x] = (ref_row(0,x-y-2) + 2*ref_row(0,x-y-1) + ref_row(0,x-y) + 2) >> 2
+      elif x < y:
+        pred[y,x] = (ref_col(y-x-2,0) + 2*ref_col(y-x-1,0) + ref_col(y-x,0) + 2) >> 2
+      else:
+        pred[y,x] = (ref_row(0,0) + 2 * ref_row(0,-1) + ref_col(0,0) + 2) >> 2
+
+
+      

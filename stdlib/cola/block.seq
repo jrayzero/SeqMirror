@@ -1,4 +1,5 @@
 from cola.cola_error import ColaError
+from cola.compiler import *
 import random,string
 import math
 

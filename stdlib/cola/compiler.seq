@@ -1,0 +1,29 @@
+# converts to tuples, takes in generators, so don't want to wrap in other iter
+# all scans become this after the canonicalization pass
+def _compiler_scan(*iters):
+  done = False
+  while not done:
+    for i in iters:
+      if i.done():
+        done = True
+    if not done:
+      yield tuple(i.next() for i in iters)
+  for i in iters:
+    i.destroy()
+
+def cola_range(rng: range):
+  for r in rng:
+    yield (r,)
+
+def foo():
+  pass
+
+# give this generator
+def _compiler_iter_tuplefy[G](arg: Generator[G]):
+  for a in arg:
+    yield (a,)
+
+# same as _compiler_iter_tuplefy, but let's us recognize that this used to be a regular "scan"
+# def _compiler_scan_tuplefy[G](arg: Generator[G]):
+#   for a in arg:
+#     yield (a,)

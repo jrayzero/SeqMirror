@@ -32,6 +32,125 @@ Value *extract_all(Module *M, Value *base, std::vector<string> fields) {
   return extracted;
 }
 
+// only supports scan and range. If you make this general, it fails on things like iterating through lists which can return a tuple
+// when iterating over one list since the list could contain tuple's itself
+void CanonicalizeLoops::handle(seq::ir::ForFlow *flow) {
+  auto *cloned_flow = util::CloneVisitor(flow->getModule()).clone(flow)->as<ForFlow>();
+  auto M = cloned_flow->getModule();
+  auto iter = cloned_flow->getIter();
+  if (iter->is<CallInstr>()) {
+    auto *call = iter->as<CallInstr>();
+    auto *call_func = util::getFunc(call->getCallee());
+    auto fname = call_func->getUnmangledName();
+    auto *outer_flow = M->Nr<SeriesFlow>();
+    if (fname == "scan") {
+      // convert each object within the scan to a generator and store outside the loop
+      vector<VarValue *> generators;
+      vector<types::Type *> gen_types;
+      auto *tuple = call->front();
+      auto *tuple_new = tuple->as<CallInstr>();
+      seqassert(tuple_new,"");
+      for (auto it = tuple_new->begin(); it != tuple_new->end(); it++) {
+        auto *stdlib_iter = M->getOrRealizeFunc("iter", {(*it)->getType()}, {}, "std.internal.builtin");
+        seqassert(stdlib_iter, "");
+        // wrap it in a generator that gets assigned outside the body
+        generators.push_back(util::makeVar(util::call(stdlib_iter, {*it}), outer_flow, cast<BodiedFunc>(getParentFunc())));
+        gen_types.push_back(generators.back()->getType());
+      }
+      // now we have all of our new generators. let's see if we need to tuplefy the object.
+      // we tuplefy if the original loop var type is not a record
+      auto *gen_type = cloned_flow->getVar()->getType();
+      bool converted_to_tuple = false;
+      Value *tuplefied_iter = nullptr;
+      if (!gen_type->as<types::RecordType>()) {
+        // not a tuple. let's make it a tuple by passing it to _compiler_scan
+        seqassert(generators.size() == 1, ""); // sanity check
+        auto *tuplefy = M->getOrRealizeFunc("_compiler_scan", {M->getTupleType({generators[0]->getType()})},
+                                            {}, "std.cola.compiler");
+        seqassert(tuplefy, "");
+        converted_to_tuple = true;
+        tuplefied_iter = util::call(tuplefy, {util::makeTuple({generators[0]}, M)});
+      } else {
+        // still wrap it in _compiler_scan so we have a more unified interface
+        auto *tuplefy = M->getOrRealizeFunc("_compiler_scan", {M->getTupleType(gen_types)},
+                                            {}, "std.cola.compiler");
+        seqassert(tuplefy, "");
+        converted_to_tuple = true;
+        vector<Value*> _gens; // need generators as Values not VarValues
+        for (auto g : generators) {
+          _gens.push_back(g);
+        }
+        tuplefied_iter = util::call(tuplefy, {util::makeTuple(_gens, M)});
+      }
+      // TODO refactor cause all this stuff below here is the same as for non-scan-generators
+      Var *new_loop_var = nullptr;
+      auto *body = M->Nr<SeriesFlow>();
+      if (converted_to_tuple) {
+        // not using util::makeVar here because I have no assignment to make to this
+        new_loop_var = M->Nr<Var>(M->getTupleType({cloned_flow->getVar()->getType()}));
+        cast<BodiedFunc>(getParentFunc())->push_back(new_loop_var);
+        auto *extractor = util::makeVar(extract_all(M, M->Nr<VarValue>(new_loop_var), {"item1"}), body, cast<BodiedFunc>(getParentFunc()));
+        // since we created a tuple where there wasn't one before, everything in the loop body should point to the extracted
+        // var. // we will use "new_loop_var" as the thing we actually pass to the new forflow
+        cloned_flow->getVar()->replaceAll(extractor->getVar());
+      } else {
+        new_loop_var = cloned_flow->getVar();
+      }
+      // recreate the loop now
+      auto *fflow = M->Nr<ForFlow>(converted_to_tuple ? tuplefied_iter : iter, body, new_loop_var);
+      // shove in the rest of the body
+      for (auto it = cloned_flow->getBody()->as<SeriesFlow>()->begin(); it != cloned_flow->getBody()->as<SeriesFlow>()->end(); it++) {
+        body->push_back(*it);
+      }
+      outer_flow->push_back(fflow);
+    } else if (fname == Module::ITER_MAGIC_NAME) {
+      // check if this is a range type
+      auto *range_ty = M->getOrRealizeType("range", {}, "std.internal.types.range");
+      seqassert(range_ty, "");
+      if (!call->front()->getType()->is(range_ty)) {
+        return;
+      }
+      bool converted_to_tuple = false;
+      Value *tuplefied_iter = nullptr;
+      // store this iterator in a variable outside of the loop so we can have access to it explicitly within the loop
+      auto *gen_iterator = util::makeVar(iter, outer_flow,  cast<BodiedFunc>(getParentFunc()));
+      // see if the loop produces a tuple, which means the return type of the thing iterated over is a tuple. if not, make it a tuple
+      auto *gen_type = cloned_flow->getVar()->getType();
+      if (!gen_type->as<types::RecordType>()) {
+        auto generic = cast<types::GeneratorType>(iter->getType())->getGenerics()[0];
+        auto *tuplefy = M->getOrRealizeFunc("_compiler_iter_tuplefy", {iter->getType()}, {generic}, "std.cola.compiler");
+        seqassert(tuplefy, "{}\n{}", *cloned_flow, *iter->getType());
+        converted_to_tuple = true;
+        tuplefied_iter = util::call(tuplefy, {gen_iterator});
+      }
+
+      Var *new_loop_var = nullptr;
+      auto *body = M->Nr<SeriesFlow>();
+      if (converted_to_tuple) {
+        // not using util::makeVar here because I have no assignment to make to this
+        new_loop_var = M->Nr<Var>(M->getTupleType({cloned_flow->getVar()->getType()}));
+        cast<BodiedFunc>(getParentFunc())->push_back(new_loop_var);
+        auto *extractor = util::makeVar(extract_all(M, M->Nr<VarValue>(new_loop_var), {"item1"}), body, cast<BodiedFunc>(getParentFunc()));
+        // since we created a tuple where there wasn't one before, everything in the loop body should point to the extracted
+        // var. // we will use "new_loop_var" as the thing we actually pass to the new forflow
+        cloned_flow->getVar()->replaceAll(extractor->getVar());
+      } else {
+        new_loop_var = cloned_flow->getVar();
+      }
+      // recreate the loop now
+      auto *fflow = M->Nr<ForFlow>(converted_to_tuple ? tuplefied_iter : iter, body, new_loop_var);
+      // shove in the rest of the body
+      for (auto it = cloned_flow->getBody()->as<SeriesFlow>()->begin(); it != cloned_flow->getBody()->as<SeriesFlow>()->end(); it++) {
+        body->push_back(*it);
+      }
+      outer_flow->push_back(fflow);
+    } else {
+      return;
+    }
+    flow->replaceAll(outer_flow);
+  }
+}
+
 void FastPathScans::handle(ForFlow *flow) {
   util::CloneVisitor cv(flow->getModule());
   auto *cloned_flow = cv.clone(flow)->as<ForFlow>();
@@ -77,7 +196,6 @@ void FastPathScans::handle(ForFlow *flow) {
     if (nscan_args == 1) {
       return; // this isn't really useful for single argument scans (at least I don't think it is)
     }
-    // TODO REPLACE THIS WITH A SEQ FUNCTION CALL SO IT IS CLEANER
     // alright, we have a loop to add the fastpath to
     // create the conditions checking if the fastpath is valid
     Value *cond;// = M->getBool(true);
@@ -87,43 +205,17 @@ void FastPathScans::handle(ForFlow *flow) {
       return; // TODO
     } else if (ndims == 3) {
       auto *same_shape = M->getOrRealizeFunc("is_same_shape3", {cola_iters[0]->getType(), cola_iters[1]->getType()},
-					     {}, "std.cola.block");
+                                             {}, "std.cola.block");
       std::cerr << *cola_iters[0]->getType() << std::endl;
       std::cerr << *cola_iters[1]->getType() << std::endl;
       seqassert(same_shape, "");
       cond = util::call(same_shape, {cola_iters[0], cola_iters[1]});
       for (auto it = cola_iters.begin()+2; it != cola_iters.end(); it++) {
-	auto *same_shape = M->getOrRealizeFunc("is_same_shape3", {cola_iters[0]->getType(), (*it)->getType()}, {}, "std.cola.block");
-	seqassert(same_shape, "");
-	Value *cond2 = util::call(same_shape, {cola_iters[0], (*it)});
-	cond = *cond && *cond2;
+        auto *same_shape = M->getOrRealizeFunc("is_same_shape3", {cola_iters[0]->getType(), (*it)->getType()}, {}, "std.cola.block");
+        seqassert(same_shape, "");
+        Value *cond2 = util::call(same_shape, {cola_iters[0], (*it)});
+        cond = *cond && *cond2;
       }
-      /* 
-      auto *citer = cola_iters[0];
-      auto *dc0 = extract_all(M, citer, {"dims", "item1"});
-      seqassert(dc0, "");
-      auto *dc1 = extract_all(M, citer, {"dims", "item2"});
-      seqassert(dc1, "");
-      auto *dc2 = extract_all(M, citer, {"dims", "item3"});
-      seqassert(dc1, "");
-      for (auto it = cola_iters.begin()+1; it != cola_iters.end(); it++) {
-        auto *d0 = extract_all(M, *it, {"dims", "item1"});
-        seqassert(d0, "");
-        auto *d1 = extract_all(M, *it, {"dims", "item2"});
-        seqassert(d1, "");
-        auto *d2 = extract_all(M, *it, {"dims", "item3"});
-        seqassert(d2, "");
-        auto c0 = (*dc0 == *d0);
-        seqassert(c0,"");
-        auto c1 = (*dc1 == *d1);
-        seqassert(c1,"");
-        auto c2 = (*dc2 == *d2);
-        seqassert(c2,"");
-        auto cc0 = *c0 && *c1;
-        auto cc1 = *cc0 && *c2;
-        auto cc2 = *cond == *M->getBool(true);
-        cond = *cc2 && *cc1;
-	}*/
     } else {
       return;
     }
@@ -184,14 +276,14 @@ void FastPathScans::handle(ForFlow *flow) {
         auto *j_map = *(*j * *extract_all(M, bmap, {"item2","step"})) + *extract_all(M, bmap, {"item2", "start"});
         auto *k_map = *(*k * *extract_all(M, bmap, {"item3","step"})) + *extract_all(M, bmap, {"item3", "start"});
         // now factor in the dims and other iterators
-	auto *bdim_j = extract_all(M, dims, {"item2"});
-	auto *bdim_k = extract_all(M, dims, {"item3"});
-	auto *_term1 = *i_map * *bdim_j; 
-	auto *term1 = *_term1 * *bdim_k;
-	auto *_term2 = *j_map * *bdim_k;
-	auto *term2 = *_term2 + *k_map;
-	auto *lin = *term1 + *term2;
-	lin_idxs.push_back(lin);
+        auto *bdim_j = extract_all(M, dims, {"item2"});
+        auto *bdim_k = extract_all(M, dims, {"item3"});
+        auto *_term1 = *i_map * *bdim_j;
+        auto *term1 = *_term1 * *bdim_k;
+        auto *_term2 = *j_map * *bdim_k;
+        auto *term2 = *_term2 + *k_map;
+        auto *lin = *term1 + *term2;
+        lin_idxs.push_back(lin);
       }
       // now go through and copy over the body, but replace the assigns at the beginning of the body to point to our idxs we just computed
       cv = util::CloneVisitor(M);
@@ -208,7 +300,7 @@ void FastPathScans::handle(ForFlow *flow) {
       for (auto bit = body_it; bit != clone->as<ForFlow>()->getBody()->as<SeriesFlow>()->end(); bit++) {
         k_body->push_back(*bit);
       }
-      }
+    }
     //    true_flow->push_back(util::CloneVisitor(M).clone(flow));
     flow->replaceAll(outer_flow);
     std::cerr << "Applied fast path " << *flow << std::endl;
@@ -257,7 +349,7 @@ if (is_block_type(arg->getType(),M)) {
       }
     } else if (fname == "scan") {
       auto body_it = cloned_flow->getBody()->as<SeriesFlow>()->begin();
-      // zip gets a tuple, so should be a call to tuple new
+      // scan gets a tuple, so should be a call to tuple new
       auto *tuple = call->front();
       auto *tuple_new = tuple->as<CallInstr>();
       seqassert(tuple_new,"");

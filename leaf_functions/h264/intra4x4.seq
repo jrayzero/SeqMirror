@@ -1,0 +1,59 @@
+def check_4x4_availability(blk_4x4, slice_info: Block[int,2]):
+  r,c = blk_4x4.origin()
+  my_slice = slice_info(r,c)
+  up_available = r > 0 and my_slice == slice_info(r-1,c)
+  left_available = c > 0 and my_slice == slice_info[blk_4x4[0,-1]]()
+  up_right_available = blk_4x4[-1,:8].is_in_bounds() and \
+                       my_slice == slice_info[blk_4x4[-1,0]]() and \
+                       my_slice == slice_info[blk_4x4[-1,5]]()
+  up_left_available = blk_4x4[-1,-1].is_in_bounds() and \]
+  return up_available,left_available,up_right_available
+
+def intra_4x4_luma_vertical(ref_frame, pred):
+  ref_row = ref_frame[pred][-1,:]
+  for i in range(4):
+    pred[:,i] = ref_row(0,i)
+
+def intra_4x4_luma_horizontal(ref_frame, pred):
+  ref_col = ref_frame[pred][:,-1]
+  for i in range(4):
+    pred[i,:] = ref_col(i,0)
+
+def intra_4x4_DC_a(ref_frame, pred):
+  s = 4
+  ref_row = ref_frame[pred][-1,:]
+  ref_col = ref_frame[pred][:,-1]
+  for i in range(4):
+    s += ref_row(0,0) + ref_row(0,1) + ref_row(0,2) + ref_row(0,3)
+    s += ref_col(0,0) + ref_col(1,0) + ref_col(2,0) + ref_col(3,0)
+  pred[:,:] = s >> 3
+
+def intra_4x4_DC_b(ref_frame, pred):
+  s = 2
+  ref_col = ref_frame[pred][:,-1]
+  for i in range(4):
+    s += ref_col(0,0) + ref_col(1,0) + ref_col(2,0) + ref_col(3,0)
+  pred[:,:] = s >> 2
+    
+def intra_4x4_DC_c(ref_frame, pred):
+  s = 2
+  ref_row = ref_frame[pred][-1,:]
+  for i in range(4):
+    s += ref_row(0,0) + ref_row(0,1) + ref_row(0,2) + ref_row(0,3)
+  pred[:,:] = s >> 2
+
+def intra_16x16_luma_DC_d(ref_frame, pred, bit_depth_y):
+  s = 0
+  pred[:,:] = 1 << (bit_depth_y - 1)
+  
+def intra_4x4_diag_down_left(ref_frame, pred):
+  ref_row = ref_frame[pred][-1,:8]
+  for y in range(4):
+    for x in range(4):
+      if y == 3 and x == 3:
+        pred[3,3] = (ref_row(-1,6) + 3 * ref_row(-1,7) + 2) >> 2
+      else:
+        pred[y,x] = (ref_row(-1,x+y) + 2 * ref_row(-1, x + y + 1) + ref_row(-1, x + y + 2) + 2) >> 2
+
+def intra_4x4_diag_down_right(ref_frame, pred):
+  

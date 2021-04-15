@@ -1,0 +1,65 @@
+def check_16x16_availability(blk_16x16, slice_info):
+  r,c = blk_16x16.origin()
+  my_slice = slice_info(r,c)
+  up_available = r > 0 and my_slice == slice_info[blk_16x16[-1,0]]()
+  left_available = c > 0 and my_slice == slice_info[blk_16x16[0,-1]]()
+  return up_available,left_available
+
+def intra_16x16_luma_vertical(ref_frame, pred):
+  ref_row = ref_frame[pred][-1,:]
+  for i in range(16):
+    pred[:,i] = ref_row(0,i)       
+  
+def intra_16x16_luma_horizontal(ref_frame, pred):
+  ref_col = ref_frame[pred][:,-1]
+  for i in range(16):
+    pred[i,:] = ref_col(i,0)
+
+def intra_16x16_luma_DC_a(ref_frame, pred):
+  s = 16
+  ref_row = ref_frame[pred][-1,:]
+  ref_col = ref_frame[pred][:,-1]
+  for i in range(16):
+    s += ref_row(-1,0) + ref_frame(0,-1)
+  s >>= 5    
+  pred[:,:] = s
+
+def intra_16x16_luma_DC_b(ref_frame, pred):
+  s = 8
+  ref_col = ref_frame[pred][:,-1]
+  for i in range(16):
+    s += ref_col(i,0)
+  s >>= 4
+  pred[:,:] = s
+
+def intra_16x16_luma_DC_c(ref_frame, pred):
+  s = 8
+  ref_row = ref_frame[pred][-1,:]
+  for i in range(16):
+    s += ref_row(0,i)
+  s >>= 4
+  pred[:,:] = s
+
+def intra_16x16_luma_DC_d(ref_frame, pred, bit_depth_y):
+  s = 0
+  pred[:,:] = 1 << (bit_depth_y - 1)
+
+def intra_16x16_luma_planar(ref_frame, pred):
+  ref_row = ref_frame[pred][-1,:]
+  ref_col = ref_frame[pred][:,-1]
+  # pull out the pieces to compute H    
+  H = 0
+  for i in range(8):
+    H += (i+1) * (ref_frame(0,8+i)-ref_frame(0,i))    
+  # and the pieces for V
+  V = 0
+  r = 0
+  for i in range(8):
+    V += (i+1) * (ref_col(8+i,0)-ref_col(i,0))
+  a = 16 * (ref_frame(0,15,-1)+ref_frame(0,-1,15))
+  b = (5 * H + 32) >> 6
+  c = (5 * V + 32) >> 6
+  for y in range(16):
+    for x in range(16):
+      clip_val = (a + b * (x - 7) + c * (y - 7) + 16) >> 5
+      pred[y,x] = (clip1y(clip_val))

@@ -1,0 +1,5 @@
+from cola.block import *
+
+def intra_vertical(mb, frame, pred, slice_info):
+    
+    

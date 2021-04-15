@@ -108,6 +108,9 @@ class Multidim[T,N:int]:
 
   # INIT
 
+  def get_dims(self):
+    return self.dims
+
   def __init__(self, other: Multidim[T,N], make_buffer: bool):
     self.dims = other.dims
     self.coord_mapping = other.coord_mapping
@@ -741,7 +744,15 @@ class Block[T,N:int]:
     elif N == 2:
       return (self.base.dims[0],self.base.dims[1])
     else:
-      return self.base.dims  
+      return self.base.dims
+
+  def get_dims(self):
+    if N == 1:
+      return (self.base.dims[0],)
+    elif N == 2:
+      return (self.base.dims[0],self.base.dims[1])
+    else:
+      return self.base.dims      
 
   def fix_front[F:int](self):
     return View(self.base.fix_front[F]())
@@ -784,6 +795,14 @@ class View[T,N:int]:
 
   def __getitem__(self, other: Block[T,N]):
     return View(self.base.__getitem__(other.base))
+
+  def get_dims(self):
+    if N == 1:
+      return (self.base.dims[0],)
+    elif N == 2:
+      return (self.base.dims[0],self.base.dims[1])
+    else:
+      return self.base.dims    
 
   def __getitem__(self, idx):
     return View(self.base.__getitem__(idx))
@@ -877,3 +896,7 @@ def do_min(*args):
       if i < m:
         m = i
     return m
+
+
+def is_same_shape3(a,b):
+  return a.get_dims()[0] == b.get_dims()[0] and a.get_dims()[1] == b.get_dims()[1] and a.get_dims()[2] == b.get_dims()[2]

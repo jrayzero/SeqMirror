@@ -80,26 +80,25 @@ void FastPathScans::handle(ForFlow *flow) {
     // TODO REPLACE THIS WITH A SEQ FUNCTION CALL SO IT IS CLEANER
     // alright, we have a loop to add the fastpath to
     // create the conditions checking if the fastpath is valid
-    Value *cond = M->getBool(true);
+    Value *cond;// = M->getBool(true);
     if (ndims == 1) {
       return; // TODO
-      auto *citer = cola_iters[0];
-      auto *dc = extract_all(M, citer, {"dims", "item1"});//M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(citer, "base"), "dims"), "item1");
-      for (auto it = cola_iters.begin()+1; it != cola_iters.end(); it++) {
-        auto *d0 = extract_all(M, *it, {"dims", "item1"});//M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(*it, "base"), "dims"), "item1");
-        cond = *(*cond == *M->getBool(true)) && *(*dc == *d0);
-      }
     } else if (ndims == 2) {
       return; // TODO
-      auto *citer = cola_iters[0];
-      auto *dc0 = M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(citer, "base"), "dims"), "item1");
-      auto *dc1 = M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(citer, "base"), "dims"), "item2");
-      for (auto it = cola_iters.begin()+1; it != cola_iters.end(); it++) {
-        auto *d0 = M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(*it, "base"), "dims"), "item1");
-        auto *d1 = M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(M->Nr<ExtractInstr>(*it, "base"), "dims"), "item2");
-        cond = *(*(*cond == *M->getBool(true)) && *(*dc0 == *d0)) && *(*dc1 == *d1);
-      }
     } else if (ndims == 3) {
+      auto *same_shape = M->getOrRealizeFunc("is_same_shape3", {cola_iters[0]->getType(), cola_iters[1]->getType()},
+					     {}, "std.cola.block");
+      std::cerr << *cola_iters[0]->getType() << std::endl;
+      std::cerr << *cola_iters[1]->getType() << std::endl;
+      seqassert(same_shape, "");
+      cond = util::call(same_shape, {cola_iters[0], cola_iters[1]});
+      for (auto it = cola_iters.begin()+2; it != cola_iters.end(); it++) {
+	auto *same_shape = M->getOrRealizeFunc("is_same_shape3", {cola_iters[0]->getType(), (*it)->getType()}, {}, "std.cola.block");
+	seqassert(same_shape, "");
+	Value *cond2 = util::call(same_shape, {cola_iters[0], (*it)});
+	cond = *cond && *cond2;
+      }
+      /* 
       auto *citer = cola_iters[0];
       auto *dc0 = extract_all(M, citer, {"dims", "item1"});
       seqassert(dc0, "");
@@ -124,7 +123,7 @@ void FastPathScans::handle(ForFlow *flow) {
         auto cc1 = *cc0 && *c2;
         auto cc2 = *cond == *M->getBool(true);
         cond = *cc2 && *cc1;
-      }
+	}*/
     } else {
       return;
     }
@@ -147,7 +146,7 @@ void FastPathScans::handle(ForFlow *flow) {
       return; // TODO implement
     } else {
       // get the dims
-      auto *citer = cola_iters[0];
+      auto *citer = cola_iters[0]; // dims should be the same at this point, so just take one
       auto *dc0 = extract_all(M, citer, {"dims", "item1"});
       auto *dc1 = extract_all(M, citer, {"dims", "item2"});
       auto *dc2 = extract_all(M, citer, {"dims", "item3"});
@@ -172,21 +171,27 @@ void FastPathScans::handle(ForFlow *flow) {
       auto *i_loop = M->Nr<ForFlow>(i_iter, i_body, i->getVar());
       auto *j_loop = M->Nr<ForFlow>(j_iter, j_body, j->getVar());
       auto *k_loop = M->Nr<ForFlow>(k_iter, k_body, k->getVar());
+      true_flow->push_back(i_loop);
       i_body->push_back(j_loop);
       j_body->push_back(k_loop);
-      true_flow->push_back(i_loop);
       // compute the linear index for each thing we zip through
       vector<Value *> lin_idxs;
       for (auto it = cola_iters.begin(); it != cola_iters.end(); it++) {
         auto *dims = extract_all(M, *it, {"buffer_parent", "dims"});
         auto *bmap = extract_all(M, *it, {"buffer_mapping"});
         // do the base mapping
-        auto *i_map = *(*i * *extract_all(M,bmap, {"item1","step"})) + *extract_all(M,bmap, {"item1", "start"});
-        auto *j_map = *(*j * *extract_all(M,bmap, {"item2","step"})) + *extract_all(M,bmap, {"item2", "start"});
-        auto *k_map = *(*k * *extract_all(M,bmap, {"item3","step"})) + *extract_all(M,bmap, {"item3", "start"});
+        auto *i_map = *(*i * *extract_all(M, bmap, {"item1","step"})) + *extract_all(M, bmap, {"item1", "start"});
+        auto *j_map = *(*j * *extract_all(M, bmap, {"item2","step"})) + *extract_all(M, bmap, {"item2", "start"});
+        auto *k_map = *(*k * *extract_all(M, bmap, {"item3","step"})) + *extract_all(M, bmap, {"item3", "start"});
         // now factor in the dims and other iterators
-        auto *linear = *(*(*(*(*i_map * *extract_all(M,dims, {"item1"})) * *extract_all(M,dims, {"item2"})) + *j_map) * *extract_all(M,dims, {"item2"})) + *k_map;
-        lin_idxs.push_back(linear);
+	auto *bdim_j = extract_all(M, dims, {"item2"});
+	auto *bdim_k = extract_all(M, dims, {"item3"});
+	auto *_term1 = *i_map * *bdim_j; 
+	auto *term1 = *_term1 * *bdim_k;
+	auto *_term2 = *j_map * *bdim_k;
+	auto *term2 = *_term2 + *k_map;
+	auto *lin = *term1 + *term2;
+	lin_idxs.push_back(lin);
       }
       // now go through and copy over the body, but replace the assigns at the beginning of the body to point to our idxs we just computed
       cv = util::CloneVisitor(M);
@@ -203,10 +208,10 @@ void FastPathScans::handle(ForFlow *flow) {
       for (auto bit = body_it; bit != clone->as<ForFlow>()->getBody()->as<SeriesFlow>()->end(); bit++) {
         k_body->push_back(*bit);
       }
-    }
-    std::cerr << "FLOW BEFORE " << *flow << std::endl;
+      }
+    //    true_flow->push_back(util::CloneVisitor(M).clone(flow));
     flow->replaceAll(outer_flow);
-    std::cerr << "FLOW AFTER " << *flow << std::endl;
+    std::cerr << "Applied fast path " << *flow << std::endl;
   }
 }
 

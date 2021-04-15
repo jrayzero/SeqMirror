@@ -383,7 +383,7 @@ class File:
 
   def read_into[T](self, buf: Ptr[T], sz: int=1, nelems:int=1, offset:int = 0):
     self._ensure_open()
-    assert _C.fread((buf+offset).as_byte(), sz, nelems, self.fp) == 1
+    assert _C.fread((buf+offset).as_byte(), sz, nelems, self.fp) == nelems
     self._errcheck("error in read")        
   
 

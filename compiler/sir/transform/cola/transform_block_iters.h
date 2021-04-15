@@ -24,6 +24,10 @@ namespace cola {
   struct TransformBlockIters : public OperatorPass {
     void handle(ForFlow*) override;
   };
+
+  struct FastPathScans : public OperatorPass {
+    void handle(ForFlow*) override;
+  };
   
 
 // recursively get all used values

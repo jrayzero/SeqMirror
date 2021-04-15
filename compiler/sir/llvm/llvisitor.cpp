@@ -1627,14 +1627,97 @@ void LLVMVisitor::visit(const ForFlow *x) {
   llvm::Type *loopVarType = getLLVMType(x->getVar()->getType());
   llvm::Value *loopVar = vars[x->getVar()];
   seqassert(loopVar, "{} loop variable not found", *x);
-  if (x->hasAttribute<KeyValueAttribute>()) {
+ if (x->hasAttribute<KeyValueAttribute>()) {
     string attr = x->getAttribute<KeyValueAttribute>()->get("is_parallel");
     if (attr == "true") {
       std::cerr << "Found parallel" << std::endl;
       /* do stuff here*/
+
+      llvm::Value *syncReg = nullptr;
+      llvm::Function *syncStart = llvm::Intrinsic::getDeclaration(
+      module.get(), llvm::Intrinsic::syncregion_start);
+      builder.SetInsertPoint(block);
+      syncReg = builder.CreateCall(syncStart);
+
+      llvm::AllocaInst* allocaLoopVar = dyn_cast<llvm::AllocaInst>(loopVar);
+      allocaLoopVar->removeFromParent();
+
+      auto *condBlock = llvm::BasicBlock::Create(context, "pfor.cond", func);
+      auto *bodyBlock = llvm::BasicBlock::Create(context, "pfor.body", func);
+      auto *cleanupBlock = llvm::BasicBlock::Create(context, "pfor.cleanup", func);
+      auto *exitBlock = llvm::BasicBlock::Create(context, "pfor.exit", func);
+
+      // LLVM coroutine intrinsics
+      // https://prereleases.llvm.org/6.0.0/rc3/docs/Coroutines.html
+      llvm::Function *coroResume =
+          llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::coro_resume);
+      llvm::Function *coroDone =
+          llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::coro_done);
+      llvm::Function *coroPromise =
+          llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::coro_promise);
+      llvm::Function *coroDestroy =
+          llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::coro_destroy);
+
+      process(x->getIter());
+      llvm::Value *iter = value;
+      builder.SetInsertPoint(block);
+      builder.CreateBr(condBlock);
+
+      block = condBlock;
+      call(coroResume, {iter});
+      builder.SetInsertPoint(block);
+      llvm::Value *done = builder.CreateCall(coroDone, iter);
+      builder.CreateCondBr(done, cleanupBlock, bodyBlock);
+
+      builder.SetInsertPoint(block);
+      llvm::Value *generatedValue;
+      
+      builder.SetInsertPoint(bodyBlock);
+
+      block = bodyBlock;
+
+      llvm::Value *alignment =
+      builder.getInt32(module->getDataLayout().getPrefTypeAlignment(loopVarType));
+      llvm::Value *from = builder.getFalse();
+      llvm::Value *promise = builder.CreateCall(coroPromise, {iter, alignment, from});
+      promise = builder.CreateBitCast(promise, loopVarType->getPointerTo());
+      generatedValue = builder.CreateLoad(promise);
+
+      auto *detachBlock = llvm::BasicBlock::Create(context, "pfor.detach", func);
+      builder.SetInsertPoint(block);
+      if (trycatch.empty()) {
+        builder.CreateDetach(detachBlock, condBlock, syncReg);
+      } else {
+        auto *unwindBlock = trycatch.back().exceptionBlock;
+        builder.CreateDetach(detachBlock, condBlock, unwindBlock, syncReg);
+      }
+      block = detachBlock;
+
+      builder.SetInsertPoint(block);
+
+      builder.Insert(allocaLoopVar);
+      builder.CreateStore(generatedValue, loopVar);
+      
+      enterLoop({/*breakBlock=*/exitBlock, /*continueBlock=*/condBlock});
+      process(x->getBody());
+      exitLoop();
+      
+      builder.SetInsertPoint(block);
+
+      builder.CreateReattach(condBlock, syncReg);
+
+      builder.SetInsertPoint(cleanupBlock);
+      builder.CreateCall(coroDestroy, iter);
+      builder.CreateBr(exitBlock);
+
+      block = exitBlock;
+      builder.SetInsertPoint(exitBlock);
+      auto *exitBlockSync = llvm::BasicBlock::Create(context, "pfor.exitSync", func);
+      builder.CreateSync(exitBlockSync, syncReg);
+      block = exitBlockSync;
       return;
     }
-  }
+  }  
 
   auto *condBlock = llvm::BasicBlock::Create(context, "for.cond", func);
   auto *bodyBlock = llvm::BasicBlock::Create(context, "for.body", func);

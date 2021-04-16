@@ -1,0 +1,54 @@
+from cola.block import *
+from cola.traversal import *
+
+# the patterns
+@traversal
+def diamond(radius:int):
+  tparams 2
+  astep (-radius,0)
+  astep (1,-1) by radius
+  astep (1,1) by radius
+  astep (-1,1) by radius
+  astep (-1,-1) by radius - 1
+
+@traversal
+def hexagon(radius:int):
+  tparams 2
+  if radius == 1:
+    # this isn't really a hexagon, so 
+    # that's why it is a base case
+    link diamond(1)
+  else:
+    astep (-radius,-(radius-1))
+    astep (radius,-(radius-1))
+    astep (radius,radius-1)
+    astep (0,radius*2-2)
+    astep (-radius,radius-1)
+    astep (-radius,-(radius-1))
+    
+# stuff to run a search
+def search(search_center, pix_center, distortion_func, traversal, radius, max_iters=50, cur_iters=0):
+  min_cost = _C.get_int_max()
+  min_pos = search_center
+  trav = traversal(radius)
+  for pos,pos2 in scan(trav(search_center), trav(pix_center)):
+    pos = pos.clamp()
+    pos2 = pos2.clamp()
+    cost = distortion_func(pos,pos2)
+    if cost < min_cost:
+      min_cost = cost
+      min_pos = pos
+  if min_pos.id == search_center.id or cur_iters == max_iters: # or some termination function
+    return min_pos
+  else:
+    return search(min_pos, pix_center, distortion_func, traversal, radius, max_iters, cur_iters+1)
+
+# applies a big search pattern then little search pattern using the 
+# specified traversal. Returns the motion vector
+def search_2_level(search_center, pix_center, distortion_func, traversal, radius, radius2, max_iters=50):
+  new_center = search(search_center, pix_center, distortion_func, traversal, radius, max_iters, 0)
+  min_pos = search(new_center, pix_center, distortion_func, traversal, radius2, 1, 0)
+  # compute the motion vector
+  # get both of their origins. Using abs_origin in case we have different buffers per frame or something. 
+  # want relative to the whole video cgrid
+  return pix_center.abs_origin() - min_pos.abs_origin()

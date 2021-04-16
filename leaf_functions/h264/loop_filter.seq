@@ -1,2 +1,0 @@
-def apply_loop_filter(mb, slice_info):
-  

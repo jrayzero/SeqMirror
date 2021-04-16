@@ -1,0 +1,76 @@
+def six_tap_filter(a,b,c,d,e,f):
+  return (a + f - 5*(d+e) + 20*(c+d))//32
+
+def bilinear_filter(a,b):
+  return (a+b)//2
+
+# use a 6 tap filter for the half pels, and a bilinear filter for the quarter pels
+def interpolate_to_quarter_pel_6tap(mb):
+  quarter = mb.set_density(4,4);
+  # copy over original values
+  quarter[::4,::4] = mb
+  # HALF PEL
+  # horizontal 
+  for hpel in quarter[::4 ,2::4]:
+    # clamp returns a 0 if you access out of bounds
+    # this is basically like a stencil operation in halide
+    hpel[0,0] = six_tap_filter(hpel.clamp(0,-10), hpel.clamp(0,-6), hpel.clamp(0,-2), 
+                                   hpel.clamp(0,2), hpel.clamp(0,6), hpel.clamp(0,10))
+  # vertical 
+  for hpel in quarter[2::4,::4]:
+    hpel[0,0] = six_tap_filter(hpel.clamp(-10,0), hpel.clamp(-6,0), hpel.clamp(-2,0), 
+                                   hpel.clamp(2,0), hpel.clamp(6,0), hpel.clamp(10,0))
+
+  # half pels from the half pels
+  for hpel in quarter[2::4,2::4]:
+    hpel[0,0] = six_tap_filter(hpel.clamp(0,-10), hpel.clamp(0,-6), hpel.clamp(0,-2), 
+                                   hpel.clamp(0,2), hpel.clamp(0,6), hpel.clamp(0,10))
+
+  # QUARTER PEL
+  # horizontal
+  for qpel in quarter[::2,1::2]:
+    qpel[0,0] = bilinear_filter(qpel(0,-1),qpel(0,1))
+
+  # vertical 
+  for qpel in quarter[1::2,::2]:
+    qpel[0,0] = bilinear_filter(qpel(-1,0),qpel(1,0))
+
+  # quarter pels from diagonal half pels
+  for qpel in quarter[1::2,1::2]:
+    qpel[0,0] = bilinear_filter(qpel.clamp(1,-1), qpel.clamp(-1,1))
+
+  return quarter
+    
+# use a bilinear filter for the half and quarter pels
+def interpolate_to_quarter_pel_bilinear(mb):
+  quarter = mb.set_density(4,4);
+  # copy over original values
+  quarter[::4,::4] = mb
+  # HALF PEL
+  # horizontal 
+  for hpel in quarter[::4 ,2::4]:
+    # clamp returns a 0 if you access out of bounds
+    # this is basically like a stencil operation in halide
+    hpel[0,0] = bilinear_filter(hpel.clamp(0,-2), hpel.clamp(0,2))
+  # vertical 
+  for hpel in quarter[2::4,::4]:
+    hpel[0,0] = bilinear_filter(hpel.clamp(-2,0), hpel.clamp(2,0))
+
+  # half pels from the half pels
+  for hpel in quarter[2::4,2::4]:
+    hpel[0,0] = bilinear_filter(hpel.clamp(0,-2), hpel.clamp(0,2))
+
+  # QUARTER PEL
+  # horizontal
+  for qpel in quarter[::2,1::2]:
+    qpel[0,0] = bilinear_filter(qpel(0,-1),qpel(0,1))
+
+  # vertical 
+  for qpel in quarter[1::2,::2]:
+    qpel[0,0] = bilinear_filter(qpel(-1,0),qpel(1,0))
+
+  # quarter pels from diagonal half pels
+  for qpel in quarter[1::2,1::2]:
+    qpel[0,0] = bilinear_filter(qpel.clamp(1,-1), qpel.clamp(-1,1))
+
+  return quarter

@@ -1,0 +1,15 @@
+Interpolation
+- cola: 39
+- JM: 388
+
+Intra 4x4 prediction
+- cola: 106
+- JM: 248
+
+Intra 8x8 prediction
+- cola: 108
+- JM: 362
+
+Intra 16x16 prediction
+- cola: 52
+- JM: 138

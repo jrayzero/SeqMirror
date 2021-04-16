@@ -1,38 +1,90 @@
 from cola.block import *
 
-# TODO availability
+# TODO availability, substitution
+def check_availability(log2_width, blk, slice_info: Block[int,2]):
+  r,c = blk.origin()
+  width = 1 << log2_width 
+  my_slice = slice_info(r,c)
+  up_available = r > 0 and my_slice == slice_info(r-1,c)
+  left_available = c > 0 and my_slice == slice_info[blk[0,-1]]()
+  up_right_available = blk[-1,:2*width].is_in_bounds() and \
+                       my_slice == slice_info[blk[-1,0]]() and \
+                       my_slice == slice_info[blk[-1,width]]()
+  up_left_available = blk_8x8[-1,-1].is_in_bounds() and \
+                      my_slice == slice_info[blk[-1,-1]]
+  bottom_left_available = blk[:2*width,-1].is_in_bounds() and \
+                       my_slice == slice_info[blk[0,-1]]() and \
+                       my_slice == slice_info[blk[width,-1]]()
+
+  return up_available,left_available,up_right_available, up_left_available, bottom_left_available
+
+
+def get_top_ref(log2_width: int, blk, slice_info: Block[int,2]):
+  r,c = blk.origin()
+  my_slice = slice_info(r,c)
+  # need 2 * log2_width + 1 (+ 1 is for the negative element)
+  up_available, _, up_right_available, up_left_available, _ = check_availability(log2_width, blk, slice_info)
+  width = 1 << log2_width
+
+  ref_above = Block[int](width * 2 + 1)
+
+  if up_left_available:
+    # copy ref(-1, -1) into ref_above
+  if up_available:
+    # copy ref[-1,:] into front of reb_above
+  if up_right_available:
+    # copy starting at ref[-1,width]
+
+  # otherwise substitute
+
+  return ref_above
+
+def get_left_ref(log2_width: int, blk, slice_info: Block[int,2]):
+  r,c = blk.origin()
+  my_slice = slice_info(r,c)
+  # need 2 * log2_width + 1 (+ 1 is for the negative element)
+  _, left_available, _, up_left_available, bottom_left_available = check_availability(log2_width, blk, slice_info)
+  width = 1 << log2_width
+
+  ref_left = Block[int](width * 2 + 1)
+
+  if up_left_available:
+    # copy ref(-1, -1) into ref_above
+  if up_available:
+    # copy ref[:,-1] into front of reb_above
+  if up_right_available:
+    # copy starting at ref[width, -1]
+
+  # otherwise substitute
+
+  return ref_left
 
 # intra prediction mode 0
 # there is a hand optimized version in kvazaar
-def intra_luma_planar[T,N:int](log2_width: int, mb: View[T,N]) -> Optional[Block[T,N]]:
+def intra_luma_planar(log2_width, ref_above, ref_left, mb):
   width = 1 << log2_width
   pred = Block(mb)
 
-  row = mb[0,-1,:]
-  col = mb[0,:,-1]
-
-  top_right = row(0, 0,width - 1)
-  bottom_left = col(0, width - 1,0)
+  # can actually work with just blk[-1,:] and blk[:,-1]
+  top_right = ref_above[width + 1]
+  bottom_left = ref_left[width + 1]
 
   # unoptimized version - similar to the code in Sze's book
   for y in range(width):
     for x in range(width):
-      hor = (width - 1 - x) * col(0, y) + (x + 1) * top_right
-      ver = (width - 1 - y) * row(x, 0) + (y + 1) * bottom_left
+      hor = (width - 1 - x) * ref_left[y + 1] + (x + 1) * top_right
+      ver = (width - 1 - y) * ref_above[x + 1] + (y + 1) * bottom_left
       pred[0, y, x] = (hor + ver + width) >> (log2_width + 1)
 
   return pred
   
 # intra prediction mode 1
-def intra_luma_dc[T,N:int](log2_width: int, mb: View[T,N]) -> Optional[Block[T,N]]:
-  f,h,w = mb.origin()
+def intra_luma_dc(log2_width, ref_above, ref_left, mb):
   width = 1 << log2_width
-  row = mb[0,-1,:]
-  col = mb[0,:,-1]
 
   s = 0
-  for r,c in scan(row, col):
-    s += r() + c()
+  for i in range(width):
+    s += ref_above[i] + ref_left[i]
 
   pred = Block(mb)
   pred[:,:,:] = (s + width) >> log2_width
@@ -40,128 +92,15 @@ def intra_luma_dc[T,N:int](log2_width: int, mb: View[T,N]) -> Optional[Block[T,N
   return pred
 
 # transpose a block
-def transpose[T,N:int](b: Block[T,N], width: int) -> Optional[Block[T,N]]:
+def transpose(blk, width):
   pass
 
-
-
-# intra prediction mode 2-34
-'''
-static void kvz_angular_pred_generic(
-  const int_fast8_t log2_width,
-  const int_fast8_t intra_mode,
-  const kvz_pixel *const in_ref_above,
-  const kvz_pixel *const in_ref_left,
-  kvz_pixel *const dst)
-{
-  assert(log2_width >= 2 && log2_width <= 5);
-  assert(intra_mode >= 2 && intra_mode <= 34);
-
-  static const int8_t modedisp2sampledisp[9] = { 0, 2, 5, 9, 13, 17, 21, 26, 32 };
-  static const int16_t modedisp2invsampledisp[9] = { 0, 4096, 1638, 910, 630, 482, 390, 315, 256 }; // (256 * 32) / sampledisp
-
-                                                    // Temporary buffer for modes 11-25.
-                                                    // It only needs to be big enough to hold indices from -width to width-1.
-  kvz_pixel tmp_ref[2 * 32];
-  const int_fast8_t width = 1 << log2_width;
-
-  // Whether to swap references to always project on the left reference row.
-  const bool vertical_mode = intra_mode >= 18;
-  // Modes distance to horizontal or vertical mode.
-  const int_fast8_t mode_disp = vertical_mode ? intra_mode - 26 : 10 - intra_mode;
-  // Sample displacement per column in fractions of 32.
-  const int_fast8_t sample_disp = (mode_disp < 0 ? -1 : 1) * modedisp2sampledisp[abs(mode_disp)];
-
-  // Pointer for the reference we are interpolating from.
-  const kvz_pixel *ref_main;
-  // Pointer for the other reference.
-  const kvz_pixel *ref_side;
-
-  // Set ref_main and ref_side such that, when indexed with 0, they point to
-  // index 0 in block coordinates.
-  if (sample_disp < 0) {
-    // Negative sample_disp means, we need to use both references.
-
-    ref_side = (vertical_mode ? in_ref_left : in_ref_above) + 1;
-    ref_main = (vertical_mode ? in_ref_above : in_ref_left) + 1;
-
-    // Move the reference pixels to start from the middle to the later half of
-    // the tmp_ref, so there is room for negative indices.
-    for (int_fast8_t x = -1; x < width; ++x) {
-      tmp_ref[x + width] = ref_main[x];
-    }
-    // Get a pointer to block index 0 in tmp_ref.
-    ref_main = &tmp_ref[width];
-
-    // Extend the side reference to the negative indices of main reference.
-    int_fast32_t col_sample_disp = 128; // rounding for the ">> 8"
-    int_fast16_t inv_abs_sample_disp = modedisp2invsampledisp[abs(mode_disp)];
-    int_fast8_t most_negative_index = (width * sample_disp) >> 5;
-    for (int_fast8_t x = -2; x >= most_negative_index; --x) {
-      col_sample_disp += inv_abs_sample_disp;
-      int_fast8_t side_index = col_sample_disp >> 8;
-      tmp_ref[x + width] = ref_side[side_index - 1];
-    }
-  }
-  else {
-    // sample_disp >= 0 means we don't need to refer to negative indices,
-    // which means we can just use the references as is.
-    ref_main = (vertical_mode ? in_ref_above : in_ref_left) + 1;
-    ref_side = (vertical_mode ? in_ref_left : in_ref_above) + 1;
-  }
-
-  if (sample_disp != 0) {
-    // The mode is not horizontal or vertical, we have to do interpolation.
-
-    int_fast16_t delta_pos = 0;
-    for (int_fast8_t y = 0; y < width; ++y) {
-      delta_pos += sample_disp;
-      int_fast8_t delta_int = delta_pos >> 5;
-      int_fast8_t delta_fract = delta_pos & (32 - 1);
-
-      if (delta_fract) {
-        // Do linear filtering
-        for (int_fast8_t x = 0; x < width; ++x) {
-          kvz_pixel ref1 = ref_main[x + delta_int];
-          kvz_pixel ref2 = ref_main[x + delta_int + 1];
-          dst[y * width + x] = ((32 - delta_fract) * ref1 + delta_fract * ref2 + 16) >> 5;
-        }
-      }
-      else {
-        // Just copy the integer samples
-        for (int_fast8_t x = 0; x < width; x++) {
-          dst[y * width + x] = ref_main[x + delta_int];
-        }
-      }
-    }
-  }
-  else {
-    // Mode is horizontal or vertical, just copy the pixels.
-
-    for (int_fast8_t y = 0; y < width; ++y) {
-      for (int_fast8_t x = 0; x < width; ++x) {
-        dst[y * width + x] = ref_main[x];
-      }
-    }
-  }
-
-  // Flip the block if this is was a horizontal mode.
-  if (!vertical_mode) {
-    for (int_fast8_t y = 0; y < width - 1; ++y) {
-      for (int_fast8_t x = y + 1; x < width; ++x) {
-        SWAP(dst[y * width + x], dst[x * width + y], kvz_pixel);
-      }
-    }
-  }
-}
-'''
-def _im_intra_luma_angular[T,N:int](log2_width: int, mode: int, mb: View[T,N]) -> Optional[Block[T,N]]:
+def intra_luma_angular(mode, log2_width, ref_above, ref_left, mb):
   # symmetric
   abs_angle_param_A = [0, 2, 5, 9, 13, 17, 21, 26, 32]
   abs_angle_param_B = [0, 4096, 1638, 910, 630, 482, 390, 315, 256]
 
   width = 1 << log2_width
-  tmp_ref = Block[int](2 * width - 1)
   pred = Block(mb)
 
   vertical = mode >= 18
@@ -178,52 +117,48 @@ def _im_intra_luma_angular[T,N:int](log2_width: int, mode: int, mb: View[T,N]) -
   else:
     angle_param_A = abs_angle_param_A[abs(mode_disp)]
 
-  ref_x = mb[0,-1,:]
-  ref_y = mb[0,:,-1]
+  ref_main = Block[int](2 * width + 1)
+  # just instantiate
+  ref_side = Block[int](2 * width + 1)
 
-  ref_main = tmp_ref
+  if (vertical):
+    ref_main = ref_above
+    ref_side = ref_left
+  else:
+    ref_main = ref_left
+    ref_side = ref_above
 
-  if (angle_param_A >= 0):
-    if (vertical):
-      ref_main = ref_x
-    else:
-      ref_main = ref_y
-  else:  
+  if (angle_param_A < 0):
     # TODO: copy starting at an index?
-    if (vertical):
-      for i in range(width):
-        tmp_ref[width + i] = ref_x(i, 0)
-    else:
-      for i in range(width):
-        tmp_ref[width + i] = ref_x(0, i)
+    for i in range(-1, width):
+      tmp_ref[width + i] = ref_main[i]
 
     # set values from 0 to width - 1
     angle_param_B = abs_angle_param_B[abs(mode_disp)]
-    for i in range(width):
-      if (vertical):
-        tmp_ref[width - i] = ref_x(0, -1 + ((i * angle_param_B) + 128) >> 8)
-      else:
-        tmp_ref[width - i] = ref_y(-1 + ((i * angle_param_B) + 128) >> 8, 0)
+    most_negative_index = (width * angle_param_A) >> 5
+    for i in range(-2, most_negative_index, -1):
+        tmp_ref[width + i] = ref_side[-1 + ((i * angle_param_B) + 128) >> 8]
 
     ref_main = tmp_ref # TODO: start in the middle of the array
 
-
-  if (angle_param_A != 0):
+  if (angle_param_A != 0): #interpolation needed/not vertical or horizontal
     i = 0
-    for x in range(width):
-      int_disp = (x + 1) * angle_param_A >> 5
-      frac_disp = ((x + 1) * angle_param_A) & 31
+    for y in range(width):
+      int_disp = (y + 1) * angle_param_A >> 5
+      frac_disp = ((y + 1) * angle_param_A) & 31
 
-      if frac_disp: # interpolate to 1/32 (linear filtering)
-        for y in range(width):
-          ref_1 = ref_main[y + int_disp]
-          ref_2 = ref_main[y + int_disp + 1]
+      if frac_disp: # 1/32 (linear filtering)
+        for x in range(width):
+          ref_1 = ref_main[x + int_disp]
+          ref_2 = ref_main[x + int_disp + 1]
           pred[0, y, x] = ((32 - frac_disp) * ref_1 + frac_disp * ref_2 + 16) >> 5
       else: # copy if reference exists
-        for y in range(width):
-          pred[0, y, x] = ref_main[y + int_disp]
+        for x in range(width):
+          pred[0, y, x] = ref_main[x + int_disp]
   else:
-    pred[:,:,:] = ref_main[:] # Change this to copy sequentially
+    for y in range(width):
+      for x in range(width):
+        pred[0, y, x] = ref_main[x] 
 
   if (not vertical):
     transpose(pred, width)
@@ -250,8 +185,8 @@ static void intra_post_process_angular(
 def intra_post_process_angular(width: int, stride: int, ref, block):
   pass #TODO
 
-# imaginary way to do angular intra prediction:
-def _im_intra_luma_angular[T,N:int](log2_width: int, mode: int, mb: View[T,N]) -> Optional[Block[T,N]]:
+# maybe more ideal way to do angular intra prediction:
+def _im_intra_luma_angular(mode, log2_width, ref_above, ref_left, mb):
   # useful functions?
   # get ref_main function would be helpful (an array with the pixels along the path)
   pass

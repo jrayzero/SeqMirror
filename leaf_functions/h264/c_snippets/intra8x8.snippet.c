@@ -506,3 +506,59 @@ void set_intrapred_8x8(Macroblock *currMB, ColorPlane pl, int img_x,int img_y, i
 
   LowPassForIntra8x8Pred(PredPel, block_available_up_left, block_available_up, block_available_left);
 }
+void LowPassForIntra8x8Pred(imgpel *PredPel, int block_up_left, int block_up, int block_left)
+{
+  int i;
+  imgpel LoopArray[25];
+
+  memcpy(LoopArray,PredPel, 25 * sizeof(imgpel));
+
+  if(block_up)
+  {
+    if(block_up_left)
+    {
+      LoopArray[1] = (imgpel) ((PredPel[0] + (PredPel[1]<<1) + PredPel[2] + 2) >> 2);
+    }
+    else
+      LoopArray[1] = (imgpel) ((PredPel[1] + (PredPel[1]<<1) + PredPel[2] + 2) >> 2);
+
+
+    for(i = 2; i <16; i++)
+    {
+      LoopArray[i] = (imgpel) ((PredPel[i-1] + (PredPel[i]<<1) + PredPel[i+1] + 2) >> 2);
+    }
+    LoopArray[16] = (imgpel) ((PredPel[15] + PredPel[16] + (PredPel[16]<<1) + 2) >> 2);
+  }
+
+  if(block_up_left)
+  {
+    if(block_up && block_left)
+    {
+      LoopArray[0] = (imgpel) (((PredPel[0] << 1) + PredPel[1] + PredPel[17] + 2) >> 2);
+    }
+    else
+    {
+      if(block_up)
+        LoopArray[0] = (imgpel) ((PredPel[0] + (PredPel[0] << 1) + PredPel[1] + 2) >> 2);
+      else
+        if(block_left)
+          LoopArray[0] = (imgpel) ((PredPel[0] + (PredPel[0] << 1) + PredPel[17] + 2) >> 2);
+    }
+  }
+
+  if(block_left)
+  {
+    if(block_up_left)
+      LoopArray[17] = (imgpel) ((PredPel[0] + (PredPel[17] << 1) + PredPel[18] + 2) >> 2);
+    else
+      LoopArray[17] = (imgpel) ((PredPel[17] + (PredPel[17] << 1) + PredPel[18] + 2) >> 2);
+
+    for(i = 18; i <24; i++)
+    {
+      LoopArray[i] = (imgpel) ((PredPel[i-1] + (PredPel[i]<<1) + PredPel[i+1] + 2) >> 2);
+    }
+    LoopArray[24] = (imgpel) ((PredPel[23] + (PredPel[24] << 1) + PredPel[24] + 2) >> 2);
+  }
+
+  memcpy(PredPel, LoopArray, 25 * sizeof(imgpel));
+}

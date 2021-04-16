@@ -7,8 +7,8 @@ Intra 4x4 prediction
 - JM: 248
 
 Intra 8x8 prediction
-- cola: 108
-- JM: 362
+- cola: 127
+- JM: 410
 
 Intra 16x16 prediction
 - cola: 52

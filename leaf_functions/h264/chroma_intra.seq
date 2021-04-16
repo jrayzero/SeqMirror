@@ -1,0 +1,3 @@
+def intra_4x4_chroma_vertical(ref_frame, pred):
+  ref = ref_frame[pred]
+  

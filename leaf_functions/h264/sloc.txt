@@ -16,6 +16,10 @@ Intra 16x16 prediction
 - cola: 52
 - JM: 138
 
+chroma prediction:
+- cola: 69
+- JM: 213
+
 EZPS motion estimation
 Big readability point here, heavily utilize colocation tools to pick out the appropriate search location
 - cola: 119

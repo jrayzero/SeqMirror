@@ -27,7 +27,7 @@ def hexagon(radius:int):
     astep (-radius,-(radius-1))
     
 # stuff to run a search
-def search(search_center, pix_center, distortion_func, traversal, radius, max_iters=50, cur_iters=0):
+def search(search_center, pix_center, distortion_func, traversal, max_iters=50, cur_iters=0):
   min_cost = _C.get_int_max()
   min_pos = search_center
   trav = traversal(radius)
@@ -41,14 +41,140 @@ def search(search_center, pix_center, distortion_func, traversal, radius, max_it
   if min_pos.id == search_center.id or cur_iters == max_iters: # or some termination function
     return min_pos
   else:
-    return search(min_pos, pix_center, distortion_func, traversal, radius, max_iters, cur_iters+1)
+    return search(min_pos, pix_center, distortion_func, traversal, max_iters, cur_iters+1)
 
 # applies a big search pattern then little search pattern using the 
 # specified traversal. Returns the motion vector
-def search_2_level(search_center, pix_center, distortion_func, traversal, radius, radius2, max_iters=50):
-  new_center = search(search_center, pix_center, distortion_func, traversal, radius, max_iters, 0)
-  min_pos = search(new_center, pix_center, distortion_func, traversal, radius2, 1, 0)
+def search_2_level(search_center, pix_center, distortion_func, traversal, traversal2, max_iters=50):
+  new_center = search(search_center, pix_center, distortion_func, traversal, max_iters, 0)
+  min_pos = search(new_center, pix_center, distortion_func, traversal2, 1, 0)
   # compute the motion vector
   # get both of their origins. Using abs_origin in case we have different buffers per frame or something. 
   # want relative to the whole video cgrid
   return pix_center.abs_origin() - min_pos.abs_origin()
+
+# okay, so here's the deal. I have the wrong logic for picking out the surrounding blocks (cur_blk should represent the 
+# location that we want to co-locate based on the current location of the refined motion vector. so it's not just
+# the initial blk we are trying to predict)
+@traversal
+def square(radius:int):
+  tparams 2
+  astep (-radius,0)
+  astep (0,-1) by radius
+  astep (1,0) by radius*2
+  astep (0,1) by radius*2
+  astep (-1,0) by radius*2
+  astep (0,-1) by radius-1
+
+def get_cur_surround(cur_blk, ref_frame):
+  blk_in_frame = ref_frame[cur_blk]
+  # get the partition index of the surrounding blocks
+  cost_up = _C.get_int_max()
+  mv_up = (_C.get_int_max(),_C.get_int_max())
+  cost_up_right = _C.get_int_max()
+  mv_up_right = (_C.get_int_max(),_C.get_int_max())
+  cost_left = _C.get_int_max()
+  mv_left = (_C.get_int_max(),_C.get_int_max())
+  # used in set C
+  cost_down = _C.get_int_max()
+  mv_down = (_C.get_int_max(),_C.get_int_max())
+  # up
+  if blk_in_frame[-1,0].in_bounds():
+    idx = partition_idxs[blk_in_frame[-1,0]]()
+    mv = ref_frame_mvs[idx]
+    # compute the distortion (or w/e) of the cur_blk 
+    # using this motion vector
+    cost_up = cost_function(cur_blk, ref_frame, mv)
+    mv_up = mv
+  # up right
+  if blk_in_frame[-1,cur_blk.dims()[1]].in_bounds():
+    idx = blk_in_frame[-1,cur_blk.dims()[1]].in_bounds()
+    mv = ref_frame_mvs[idx]
+    cost_up_right = cost_function(cur_blk, ref_frame, mv)
+    mv_up_right = mv
+  # left
+  if blk_in_frame[0,-1].in_bounds():
+    idx = partition_idxs[blk_in_frame[-1,]]()
+    mv = ref_frame_mvs[idx]
+    cost_left = cost_function(cur_blk, ref_frame, mv)
+    mv_left = mv
+  # down
+  if blk_in_frame[1,0].in_bounds():
+    idx = partition_idxs[blk_in_frame[1,0]]()
+    mv = ref_frame_mvs[idx]
+    cost_up = cost_function(cur_blk, ref_frame, mv)
+    mv_up = mv
+  return cost_up,mv_up,cost_left,mv_left,cost_up_right,mv_up_right,cost_down,mv_down
+
+def get_median(cost_up,cost_left,cost_up_right,mv_up,mv_left,mv_up_right):
+  if cost_up < cost_left < cost_up_right or cost_up_right < cost_left < cost_up:
+    return mv_left,cost_left
+  elif cost_left < cost_up < cost_up_right or cost_up_right < cost_up < cost_left:
+    return mv_up,cost_up
+  else:
+    return mv_up_right,cost_up_right
+
+def select_predictors(search_location,cur_ref_frame,prev_ref_frame,cost_function):
+  # get a reference to the block at the search location
+  cost_up,mv_up,cost_left,mv_left,cost_up_right,mv_up_right,cost_down,mv_down = get_cur_surround(cur_blk,cur_ref_frame)  
+  # A
+  A_mv,A_cost = get_median(cost_up,cost_left,cost_up_right,mv_up,mv_left,mv_up_right)
+  A = ((A_mv,),(A_cost,))
+  # B
+  # this represents using the exact co-located frame
+  mv00 = (0,0)
+  cost00 = cost_function(cur_blk, ref_frame[cur_blk])
+  B = ((mv_up,mv_left,mv_up_right,mv00), (cost_up,cost_left,cost_up_right,cost00))
+  # C
+  cost_up,mv_up,cost_left,mv_left,cost_up_right,mv_up_right,cost_down,mv_down = get_cur_surround(cur_blk,prev_ref_frame)
+  C = ((mv_up,mv_left,mv_up_right,mv_down), (cost_up,cost_left,cost_up_right,cost_down))
+  return A,B,C
+
+def try_early_termination(mv_pred_set,thresh):
+  min_mv_pred = mv_pred_set[0][0]
+  min_cost = mv_pred_set[0][1]
+  # TODO can we skip start of tuple iter? otherwise we process the first one twice
+  for pred,cost in mv_pred_set:
+    if cost < min_cost:
+      min_cost = cost
+      min_mv_pred = pred
+  if min_cost < thresh:
+    return True,min_mv_pred,min_cost
+  else:
+    return False,min_mv_pred,min_cost
+  
+# some of my logic about colocating is kind of off, but the general structure should remain the same
+def epzs(cur_blk,starting_search_location,cur_ref_frame,prev_ref_frame,T1,T2,T3,cost_function,use_diamond:bool=True,max_iters=50,cur_iters=0):
+  A,B,C = select_predictors(starting_search_location,cur_ref_frame,pred_ref_frame,cost_function)
+  can_terminate,A_mv,A_cost = try_early_termination(A,T1)
+  if can_terminate:
+    return A_mv
+  can_terminate,B_mv,B_cost = try_early_termination(B,T2)
+  if can_terminate:
+    return B_mv  
+  can_terminate,C_mv,C_cost = try_early_termination(C,T3)
+  if can_terminate:
+    return C_mv  
+  # can't terminate. do refinement
+  # first, pick the best predictor across the 3 sets
+  best_pred = A_mv
+  min_cost = A_cost
+  if B_cost < min_cost:
+    best_pred = B_mv
+    min_cost = B_cost
+  if C_cost < min_cost:
+    best_pred = C_mv
+  # pick the center of our block that we want to predict
+  h,w = cur_blk.dims()
+  center = cur_blk[h//2,w//2]
+  # get search center for our reference
+  # this part might not be correct--I'm not sure if you just always
+  # use the prev_ref_frame, even if you use set A/set B. Or what.
+  new_search_center = prev_ref_frame[center][best_pred[0],best_pred[1]]
+  mv = search(search_center, center, cost_function, diamond(1) if use_diamond else square(1)) # + any other termination conditions
+  if cur_iters == max_iters:
+    # force terminate
+    return mv
+  else:
+    epzs(cur_blk,search_center,cur_ref_frame,prev_ref_frame,T1,T2,T3,cost_function,use_diamond,max_iters,cur_iters++)
+  

@@ -16,17 +16,17 @@ Intra 16x16 prediction
 - cola: 52
 - JM: 138
 
-# Malleability point
-Motion search, pattern only (hex and diamond, work for any radius)
-- cola: 22
+chroma prediction:
+- cola: 69
+- JM: 213
 
-Motion search, applying a generic two-level pattern
-- cola: 20
+EZPS motion estimation
+Big readability point here, heavily utilize colocation tools to pick out the appropriate search location
+- cola: 119
+- JM: 376
 
-x264 motion search, which mixes everything together. new pattern requires new framework. lots of macros. this is a win for readability
-also only works for one size
-- C: 41
 
-# our encoder
+# our full encoder
 cola: 369
 C: 642
+

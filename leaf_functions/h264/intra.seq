@@ -1,0 +1,390 @@
+from cola.block import *
+
+def check_4x4_availability(blk_4x4, slice_info: Block[int,2]):
+  r,c = blk_4x4.origin()
+  my_slice = slice_info(r,c)
+  up_available = r > 0 and my_slice == slice_info(r-1,c)
+  left_available = c > 0 and my_slice == slice_info[blk_4x4[0,-1]]()
+  up_right_available = blk_4x4[-1,:8].is_in_bounds() and \
+                       my_slice == slice_info[blk_4x4[-1,0]]() and \
+                       my_slice == slice_info[blk_4x4[-1,5]]()
+  up_left_available = blk_4x4[-1,-1].is_in_bounds() and \
+                      my_slice == slice_info[blk_4x4[-1,-1]]
+  return up_available,left_available,up_right_available
+
+def intra_vertical(ref_frame, pred):
+  ref = ref_frame[pred]
+  for i in range(pred.dims(0)):
+    pred[:,i] = ref(-1,i)
+
+def intra_horizontal(ref_frame, pred):
+  ref = ref_frame[pred]
+  for i in range(pred.dims(0)):
+    pred[i,:] = ref(i,-1)
+
+def intra_4x4_DC_a(ref_frame, pred):
+  s = 4
+  ref = ref_frame[pred]
+  for i in range(4):
+    s += ref(-1,0) + ref(-1,1) + ref(-1,2) + ref(-1,3)
+    s += ref(0,-1) + ref(1,-1) + ref(2,-1) + ref(3,-1)
+  pred[:,:] = s >> 3
+
+def intra_4x4_DC_b(ref_frame, pred):
+  s = 2
+  ref = ref_frame[pred]
+  for i in range(4):
+    s += ref(0,-1) + ref(1,-1) + ref(2,-1) + ref(3,-1)
+  pred[:,:] = s >> 2
+    
+def intra_4x4_DC_c(ref_frame, pred):
+  s = 2
+  ref = ref_frame[pred]
+  for i in range(4):
+    s += ref(-1,0) + ref(-1,1) + ref(-1,2) + ref(-1,3)
+  pred[:,:] = s >> 2
+
+def intra_4x4_luma_DC_d(pred, bit_depth_y):
+  pred[:,:] = 1 << (bit_depth_y - 1)
+  
+def intra_4x4_diag_down_left(ref_frame, pred):
+  ref = ref_frame[pred][-1,:8]
+  for y in range(4):
+    for x in range(4):
+      if y == 3 and x == 3:
+        pred[3,3] = (ref(-1,6) + 3 * ref(-1,7) + 2) >> 2
+      else:
+        pred[y,x] = (ref(-1,x+y) + 2 * ref(-1,x+y+1) + ref(-1,x+y+2) + 2) >> 2
+
+def intra_4x4_diag_down_right(ref_frame, pred):
+  ref = ref_frame[pred]
+  for y in range(4):
+    for x in range(4):
+      if x > y:
+        pred[y,x] = (ref(-1,x-y-2) + 2*ref(-2,x-y-1) + ref(-1,x-y) + 2) >> 2
+      elif x < y:
+        pred[y,x] = (ref(y-x-2,-1) + 2*ref(y-x-1,-1) + ref(y-x,-1) + 2) >> 2
+      else:
+        pred[y,x] = (ref(-1,0) + 2 * ref(-1,-1) + ref(0,-1) + 2) >> 2
+
+def intra_4x4_vertical_right(ref_frame, pred):
+  ref = ref_frame[pred]
+  for y in range(4):
+    for x in range(4):
+      zVR = 2 * x - y
+      if zVR == -1:
+        pred[y,x] = (ref(0,-1) + 2 * ref(-1,-1) + ref(-1,0) + 2) >> 2
+      elif zVR == -2 or zVR == -3:
+        pred[y,x] = (ref(y-1,-1) + 2*ref(y-2,-1) + ref(y-3,-1) + 2) >> 2
+      elif zVR % 2 == 0:
+        pred[y,x] = (ref(-1,x-(y>>1)-1) + ref(-1, x-(y>>1)) + 1) >> 1
+      else:
+        pred[y,x] = (ref(-1,x-(y>>1)-2,-1) + 2*ref(-1,x-(y>>1)-1) + ref(-1,x-(y>>1))) >> 2
+
+def intra_4x4_horizontal_down(ref_frame, pred):
+  ref = ref_frame[pred]
+  for y in range(4):
+    for x in range(4):
+      zHD = 2 * y - x
+      if zHD == -1:
+        pred[y,x] = (ref(y-(x>>1),-1) + 2*ref(y-(x>>1),-1) + ref(y-(x>>1),-1) + 1) >> 1
+      elif zHD == -2 or zHD == -3:
+        pred[y,x] = (ref(-1,x-1) + 2 * ref(-1,x-2) + ref(-1,x-3) + 2) >> 2
+      elif zHD % 2 == 0:
+        pred[y,x] = (ref(y-(x>>1),-1) + ref(y-(x>>1),-1) + 1) >> 1
+      else:
+        pred[y,x] = (ref(y-(x>>1)-2,-1) + ref(y-(x>>1)-1,-1) + ref(y-(x>>1),-1) + 2) >> 2
+
+def intra_4x4_vertical_left(ref_frame, pred):
+  ref = ref_frame[pred]
+  for y in range(4):
+    for x in range(4): 
+      if y == 0 or y == 2:
+        pred[y,x] = (ref(-1,x+(y>>1)) + ref(-1,x+(y>>1)+1) + 1) >> 1
+      else:
+        pred[y,x] = (ref(-1,x+(y>>1)) + 2*ref(-1,x+(y>>1)+1) + ref(-1,x+(y>>1)+2) + 2) >> 1
+
+def intra_4x4_horizontal_up(ref_frame, pred):
+  ref = ref_frame[pred]
+  for y in range(4):
+    for x in range(4):
+      zHU = x + 2 * y
+      if zHU > 5:
+        pred[y,x] = ref(3,-1)
+      elif zHU == 5:
+        pred[y,x] = (ref(2,-1) + 3*ref(3,-1) + 2) >> 2
+      elif zHU == 1 or zHU == 3:
+        pred[y,x] = (ref(y+(x>>1),-1) + 2*ref(y+(x>>1)+1,-1) + ref(y+(x>>1)+2,-1) + 2) >> 2
+      else:
+        pred[y,x] = (ref(y+(x>>1),-1) + ref(y+(x>>1)+1,-1) + 1) >> 2
+
+def check_8x8_availability(blk_8x8, slice_info: Block[int,2]):
+  r,c = blk_8x8.origin()
+  my_slice = slice_info(r,c)
+  up_available = r > 0 and my_slice == slice_info(r-1,c)
+  left_available = c > 0 and my_slice == slice_info[blk_8x8[0,-1]]()
+  up_right_available = blk_8x8[-1,:16].is_in_bounds() and \
+                       my_slice == slice_info[blk_8x8[-1,0]]() and \
+                       my_slice == slice_info[blk_8x8[-1,8]]()
+  up_left_available = blk_8x8[-1,-1].is_in_bounds() and \
+                      my_slice == slice_info[blk_8x8[-1,-1]]
+  return up_available,left_available,up_right_available,up_left_available
+
+def intra_8x8_luma_DC_a(ref_row, ref_col, pred):
+  s = 8
+  for i in range(8):
+    s += ref_col(0,i) + ref_col(i,0)
+  s >>= 4
+  pred[:,:] = s
+
+def intra_8x8_luma_DC_b(ref_col, pred):
+  s = 4
+  for i in range(8):
+    s += ref_col(i,0)
+  s >>= 3
+  pred[:,:] = s
+
+def intra_8x8_luma_DC_c(ref_row, pred):
+  s = 4
+  for i in range(8):
+    s += ref_row(0,i)
+  s >>= 3
+  pred[:,:] = s
+
+def intra_8x8_luma_DC_d(pred, bit_depth_y):
+  pred[:,:] = 1 << (bit_depth_y - 1)
+
+def intra_8x8_luma_diag_down_left(ref_row, pred):
+  for y in range(8):
+    for x in range(8):
+      if x == 7 and y == 7:
+        pred[y,x] = (ref_row(0,14) + 3 * ref_row(0,15) + 2) >> 2
+      else:
+        pred[y,x] = (ref_row(0,x+y) + 2*ref_row(0,x+y+1) + ref_row(0,x+y+2) + 2) >> 2
+
+def intra_8x8_luma_diag_down_right(ref_row, ref_col, pred):
+  for y in range(8):
+    for x in range(8):
+      if x > y:
+        pred[y,x] = (ref_row(0, x-y-2) + 2*ref_row(0,x-y-1) + ref_row(0,x-y) + 2) >> 2
+      elif x < y:
+        pred[y,x] = (ref_col(y-x-2,0) + 2*ref_col(y-x-1,0) + ref_col(y-x,0) + 2) >> 2
+      else:
+        pred[y,x] = ref_row(0,0) + 2
+
+def intra_8x8_vertical_right(ref_row, ref_col, pred):
+  for y in range(8):
+    for x in range(8):
+      zVR = 2*x-y
+      if zVR == -1:
+        pred[y,x] = (ref_col(0,0) + 2*ref_row(0,-1) + ref_row(0,0) + 2) >> 2
+      elif zVR < 0:
+        pred[y,x] = (ref_col(y-2*x-1,0) + 2*ref_col(y-2*x-2,0) + ref_col(y-2*x-3,0) + 2) >> 2
+      elif zVR % 2 == 0:
+        pred[y,x] = (ref_row(0,x-(y>>1)-1) + ref_row(0,x-(y>>1)) + 1) >> 1
+      else:
+        pred[y,x] = (ref_row(0,x-(y>>1)-2) + 2*ref_row(0,x-(y>>1)-1) + ref_row(0,x-(y>>1)) + 2) >> 2
+
+def intra_8x8_horizontal_down(ref_row, ref_col, pred):
+  for y in range(8):
+    for x in range(8):
+      zHD = 2*y-x
+      if zHD == -1:
+        pred[y,x] = (ref_col(0,0) + 2*ref_row(0,-1) + ref_row(0,0) + 2) >> 2
+      elif zHD < 0:
+        pred[y,x] = (ref_row(0,x-2*y-1) + 2*ref_row(0,x-2*y-2) + ref_row(0,x-2*y-3) + 2) >> 2
+      elif zHD % 2 == 0:
+        pred[y,x] = (ref_col(y-(x>>1)-1,0) + ref_col(y-(x>>1),0) + 1) >> 1
+      else:
+        pred[y,x] = (ref_col(y-(x>>1)-2,0) + 2*ref_col(y-(x>>1)-1,0) + ref_col(y-(x>>1),0) + 2) >> 2        
+
+def intra_8x8_vertical_left(ref_row, pred):
+  for y in range(8):
+    for x in range(8):
+      if y % 2 == 0:
+        pred[y,x] = (ref_row(0,x+(y>>1)) + ref_row(0,x+(y>>1)+1) + 1) >> 1
+      else:
+        pred[y,x] = (ref_row(0,x+(y>>1)) + 2*ref_row(0,x+(y>>1)+1) + ref_row(0,x+(y>>1)+2) + 2) >> 1
+
+def intra_8x8_horizontal_up(ref_col, pred):
+  for y in range(8):
+    for x in range(8):
+      zHU = x+2*y
+      if zHU == 13:
+        pred[y,x] = (ref_col(6,0) + 3*ref_col(7,0) + 2) >> 2
+      elif zHU > 13:
+        pred[y,x] = ref_col(7,0)
+      elif zHU % 2 == 0:
+        pred[y,x] = (ref_col(y+(x>>1),0) + ref_col(y+(x>>1)+1,0) + 1) >> 1
+      else:
+        pred[y,x] = (ref_col(y+(x>>1),0) + 2*ref_col(y+(x>>1)+1,0) + ref_col(y+(x>>1)+2,0) + 2) >> 2
+        
+# prefiltering pass for 8x8 reference data
+# it's possible that blk_8x8 is a view on ref_frame (which can happen if we just overwrite macroblocks with their
+# reference data)
+def low_pass_filter(ref_frame, blk_8x8, slice_info):
+  up_available,left_available,up_right_available,up_left_available = check_8x8_availability(blk_8x8, slice_info)
+  ref = ref_frame[blk_8x8]
+  filt_row = Block(blk_8x8[-1,0:16])
+  filt_col = Block(blk_8x8[0:8,-1])
+  filt_diag = -1
+  if up_available and up_right_available:
+    if up_left_available:
+      filt_row[0,0] = (ref(-1,-1) + 2*ref(-1,0) + ref(-1,1) + 2) >> 2
+    else:
+      filt_row[0,0] = (3*ref(-1,0) + ref(-1,1) + 2) >> 2
+    for x in range(1,15):
+      filt_row[0,x] = (ref(-1,x-1) + 2*ref(-1,x) + ref(-1,x+1) + 2) >> 2
+    filt_row[0,15] = (ref(-1,14) + 3*ref(-1,15) + 2) >> 2
+  if up_left_available:
+    if up_available:
+      filt_diag = (3*ref(-1,-1) + ref(-1,0) + 2) >> 2
+    elif left_available:
+      filt_diag = (3*ref(-1,-1) + ref(0,-1) + 2) >> 2
+    else:
+      filt_diag = ref(-1,-1)
+  if left_available:
+    if up_left_available:
+      filt_col[0,0] = (ref(-1,1) + 2*ref(0,-1) + ref(1,-1) + 2) >> 2
+    else:
+      filt_col[0,0] = (3*ref(0,-1) + ref(1,-1) + 2) >> 2
+    for y in range(1,7):
+      filt_col[y,0] = (ref(y-1,-1) + 2*ref(y,-1) + ref(y+1,-1) + 2) >> 2
+    filt_col[7,0] = (ref(6,-1) + 3*ref(7,-1) + 2) >> 2
+  return filt_row, filt_col, filt_diag
+
+def check_16x16_availability(blk_16x16, slice_info):
+  r,c = blk_16x16.origin()
+  my_slice = slice_info(r,c)
+  up_available = r > 0 and my_slice == slice_info[blk_16x16[-1,0]]()
+  left_available = c > 0 and my_slice == slice_info[blk_16x16[0,-1]]()
+  return up_available,left_available
+
+def intra_16x16_luma_DC_a(ref_frame, pred):
+  s = 16
+  ref = ref_frame[pred]
+  for i in range(16):
+    s += ref(-1,i) + ref(i,-1)
+  s >>= 5    
+  pred[:,:] = s
+
+def intra_16x16_luma_DC_b(ref_frame, pred):
+  s = 8
+  ref = ref_frame[pred]
+  for i in range(16):
+    s += ref(i,-1)
+  s >>= 4
+  pred[:,:] = s
+
+def intra_16x16_luma_DC_c(ref_frame, pred):
+  s = 8
+  ref = ref_frame[pred]
+  for i in range(16):
+    s += ref(-1,i)
+  s >>= 4
+  pred[:,:] = s
+
+def intra_16x16_luma_DC_d(pred, bit_depth_y):
+  pred[:,:] = 1 << (bit_depth_y - 1)
+
+def intra_16x16_luma_planar(ref_frame, pred):
+  ref = ref_frame[pred]
+  # pull out the pieces to compute H    
+  H = 0
+  for i in range(8):
+    H += (i+1) * (ref(-1,8+i)-ref(-1,i))    
+  # and the pieces for V
+  V = 0
+  r = 0
+  for i in range(8):
+    V += (i+1) * (ref(8+i,-1)-ref(i,-1))
+  a = 16 * (ref(15,-1)+ref(-1,15))
+  b = (5 * H + 32) >> 6
+  c = (5 * V + 32) >> 6
+  for y in range(16):
+    for x in range(16):
+      clip_val = (a + b * (x - 7) + c * (y - 7) + 16) >> 5
+      pred[y,x] = (clip1y(clip_val))
+
+# this is a wicked hack job, so it's actually not as tight as it should be. but good enough for now
+def intra_chroma_420_DC_only[T,N:int](mb: View[T,N]) -> Block[T,N]:
+  f,h,w = mb.origin()
+  pred = Block(mb)
+  # split into 4x4 subblocks
+  mb_split = split_4x4(mb,8)[0]
+
+  smb0 = mb_split[0] # xO == 0 and yO == 0
+  smb1 = mb_split[1] # xO > 0 and yO == 0
+  smb2 = mb_split[2] # xO == 0 and yO > 0
+  smb3 = mb_split[3]
+
+  # h and w are relative to the whole frame, so they 
+  # ultimately determine if their is data (ex: if
+  # we are at the top of the frame, h == 0 so there 
+  # is no row above)
+
+  # smb0/smb3
+  if h > 0 and w > 0:
+    chroma_col_and_row_avail(smb0, mb, pred)
+    chroma_col_and_row_avail(smb3, mb, pred)
+  elif w > 0:
+    chroma_col_avail(smb0, mb, pred)
+    chroma_col_avail(smb3, mb, pred)
+  elif h > 0:
+    chroma_row_avail(smb0, mb, pred)
+    chroma_row_avail(smb3, mb, pred)
+  else:
+    chroma_none_avail(smb0, pred)
+    chroma_none_avail(smb3, pred)
+
+  # NOTE: smb1 and smb2 are processed in different orders
+  # not sure how important that actually is, but
+  # I'm following the standard here
+  # smb1
+  if h > 0:
+    chroma_row_avail(smb1, mb, pred)
+  elif w > 0:
+    chroma_col_avail(smb1, mb, pred)
+  else:
+    chroma_none_avail(smb1, pred)
+
+  # smb2 
+  if w > 0:
+    chroma_col_avail(smb2, mb, pred)
+  elif h > 0:
+    chroma_row_avail(smb2, mb, pred)
+  else:
+    chroma_none_avail(smb2, pred)
+
+  return True
+
+def chroma_col_and_row_avail(smb, mb, pred):
+  _,h,w = smb.origin_within(mb)
+  row = mb[0,-1,w:w+4]
+  col = mb[0,h:h+4,-1]
+  s = 4
+  for r,c in scan(row,col):
+    s += r() + c()
+  s >>= 3
+  pred[smb][:,:,:] = s
+
+def chroma_col_avail(smb, mb, pred):
+  _,h,w = smb.origin_within(mb)
+  col = mb[0,h:h+4,-1]
+  s = 2
+  for c in scan(col):
+    s += c()
+  s >>= 2
+  pred[smb][:,:,:] = s
+
+def chroma_row_avail(smb, mb, pred):
+  _,h,w = smb.origin_within(mb)
+  row = mb[0,-1,w:w+4]
+  s = 2
+  for r in scan(row):
+    s += r()
+  s >>= 2
+  pred[smb][:,:,:] = s
+
+def chroma_none_avail(smb, pred):
+  pred[smb][:,:,:] = 1 << (bit_depth_c - 1)  

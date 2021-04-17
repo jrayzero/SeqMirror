@@ -117,9 +117,9 @@ def intra_luma_angular(mode, log2_width, ref_above, ref_left, mb):
   else:
     angle_param_A = abs_angle_param_A[abs(mode_disp)]
 
-  ref_main = Block[int](2 * width + 1)
+  ref_main = Block[int](2 * width + 1, 1)
   # just instantiate
-  ref_side = Block[int](2 * width + 1)
+  ref_side = Block[int](2 * width + 1, 1)
 
   if (vertical):
     ref_main = ref_above
@@ -129,17 +129,15 @@ def intra_luma_angular(mode, log2_width, ref_above, ref_left, mb):
     ref_side = ref_above
 
   if (angle_param_A < 0):
-    # TODO: copy starting at an index?
-    for i in range(-1, width):
-      tmp_ref[width + i] = ref_main[i]
+    tmp_ref[width,:] = ref_main
 
     # set values from 0 to width - 1
     angle_param_B = abs_angle_param_B[abs(mode_disp)]
     most_negative_index = (width * angle_param_A) >> 5
     for i in range(-2, most_negative_index, -1):
-        tmp_ref[width + i] = ref_side[-1 + ((i * angle_param_B) + 128) >> 8]
+        tmp_ref[width + i, 0] = ref_side[-1 + ((i * angle_param_B) + 128) >> 8, 0]
 
-    ref_main = tmp_ref # TODO: start in the middle of the array
+    ref_main = tmp_ref[width,:]
 
   if (angle_param_A != 0): #interpolation needed/not vertical or horizontal
     i = 0
@@ -149,16 +147,16 @@ def intra_luma_angular(mode, log2_width, ref_above, ref_left, mb):
 
       if frac_disp: # 1/32 (linear filtering)
         for x in range(width):
-          ref_1 = ref_main[x + int_disp]
-          ref_2 = ref_main[x + int_disp + 1]
-          pred[0, y, x] = ((32 - frac_disp) * ref_1 + frac_disp * ref_2 + 16) >> 5
+          ref_1 = ref_main(x + int_disp, 0)
+          ref_2 = ref_main(x + int_disp + 1, 0)
+          pred[y, x] = ((32 - frac_disp) * ref_1 + frac_disp * ref_2 + 16) >> 5
       else: # copy if reference exists
         for x in range(width):
-          pred[0, y, x] = ref_main[x + int_disp]
+          pred[y, x] = ref_main[x + int_disp,:]
   else:
     for y in range(width):
       for x in range(width):
-        pred[0, y, x] = ref_main[x] 
+        pred[y, x] = ref_main(x, 0) 
 
   if (not vertical):
     transpose(pred, width)
